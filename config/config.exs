@@ -20,3 +20,8 @@ use Mix.Config
 # here (which is why it is important to import them last).
 #
 #     import_config "#{Mix.env}.exs"
+
+port = if Mix.env == :prod, do: 80, else: 4000
+
+config :bob,
+  port: port
