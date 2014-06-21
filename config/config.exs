@@ -24,4 +24,5 @@ use Mix.Config
 port = if Mix.env == :prod, do: 80, else: 4000
 
 config :bob,
-  port: port
+  port: port,
+  secret: ""
