@@ -12,7 +12,7 @@ defmodule Bob.Mixfile do
   #
   # Type `mix help compile.app` for more information
   def application do
-    [applications: [],
+    [applications: [:porcelain],
      mod: {Bob, []}]
   end
 
@@ -29,6 +29,7 @@ defmodule Bob.Mixfile do
     [{:plug, "~> 0.5.0"},
      {:cowboy, github: "extend/cowboy"},
      {:jazz, "~> 0.1.2"},
-     {:mini_s3, github: "ericmj/mini_s3", branch: "hex-fixes"}]
+     {:mini_s3, github: "ericmj/mini_s3", branch: "hex-fixes"},
+     {:porcelain, "~> 1.0.0"}]
   end
 end

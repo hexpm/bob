@@ -40,6 +40,10 @@ defmodule Bob.Router do
     end
   end
 
+  defp verify_signature(_body, nil, _signature) do
+    :ok
+  end
+
   defp verify_signature(body, secret, signature) do
     digest = :crypto.hmac(:sha, secret, body) |> Base.encode16(case: :lower)
     digest = "sha1=" <> digest

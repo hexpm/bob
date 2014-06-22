@@ -23,6 +23,16 @@ use Mix.Config
 
 port = if Mix.env == :prod, do: 80, else: 4000
 
+repos = %{
+  "ericmj/elixir" => %{
+     build: ["make"],
+     git_url: "git@github.com:ericmj/elixir.git",
+     zip: ["bin", "CHANGELOG.md", "LEGAL", "lib/*/ebin", "LICENSE",
+           "README.md", "VERSION"]
+   }
+}
+
 config :bob,
   port: port,
-  secret: ""
+  secret: System.get_env("BOB_GITHUB_SECRET"),
+  repos: repos
