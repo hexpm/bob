@@ -12,7 +12,7 @@ defmodule Bob.Mixfile do
   #
   # Type `mix help compile.app` for more information
   def application do
-    [applications: [:porcelain],
+    [applications: [:cowboy, :plug, :jazz, :mini_s3, :porcelain],
      mod: {Bob, []}]
   end
 

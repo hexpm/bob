@@ -2,8 +2,6 @@ defmodule Bob.Builder do
   def build(name, ref, dir) do
     build_dir = Path.join(dir, "clone")
 
-    IO.puts "BUILDING #{name} #{ref} into #{dir}"
-
     repos = Application.get_env(:bob, :repos)
     repo  = repos[name]
 
@@ -23,7 +21,7 @@ defmodule Bob.Builder do
       time
     end)
 
-    IO.puts "COMPLETED #{name} #{ref} in #{dir} (#{time}s)"
+    time
   end
 
   def temp_dir do

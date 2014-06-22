@@ -13,14 +13,9 @@ defmodule Bob.Plugs.Exception do
         stacktrace = System.stacktrace
         status     = Plug.Exception.status(error)
 
-        if status == 500, do: log_error(kind, error, stacktrace)
+        if status == 500, do: Bob.log_error(kind, error, stacktrace)
 
         send_resp(conn, status, "ERROR: #{status}")
     end
-  end
-
-  defp log_error(kind, error, stacktrace) do
-    IO.puts(:stderr, Exception.format_banner(kind, error, stacktrace) <> "\n" <>
-                     Exception.format_stacktrace(stacktrace))
   end
 end

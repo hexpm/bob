@@ -9,17 +9,32 @@ defmodule Bob.Router do
 
   post "github" do
     {request, body, conn} = json_body(conn, [])
-    secret    = Application.get_env(:bob, :secret)
+    secret    = Application.get_env(:bob, :github_secret)
     signature = get_req_header(conn, "x-hub-signature") |> List.first
+    event     = get_req_header(conn, "x-github-event") |> List.first
 
     verify_signature(body, secret, signature)
+    github_request(event, request)
 
-    IO.inspect request
     send_resp(conn, 200, "OK")
   end
 
   match _ do
     send_resp(conn, 404, "ERROR: 404")
+  end
+
+  defp github_request(event, request) do
+    "refs/heads/" <> ref = request["ref"]
+
+    name  = request["repository"]["name"]
+    owner = request["repository"]["owner"]["name"]
+    repo  = "#{owner}/#{name}"
+
+    case event do
+      "push"   -> Bob.Queue.build(repo, ref)
+      "create" -> Bob.Queue.build(repo, ref)
+      "delete" -> Bob.S3.delete(Bob.upload_path(repo, ref))
+    end
   end
 
   defp json_body(conn, opts) do

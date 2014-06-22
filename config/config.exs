@@ -33,6 +33,9 @@ repos = %{
 }
 
 config :bob,
-  port: port,
-  secret: System.get_env("BOB_GITHUB_SECRET"),
-  repos: repos
+  port:          port,
+  repos:         repos,
+  github_secret: System.get_env("BOB_GITHUB_SECRET"),
+  s3_bucket:     System.get_env("BOB_S3_BUCKET"),
+  s3_access_key: System.get_env("BOB_S3_ACCESS_KEY"),
+  s3_secret_key: System.get_env("BOB_S3_SECRET_KEY")
