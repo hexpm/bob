@@ -2,8 +2,11 @@ defmodule Bob do
   use Application
 
   def start(_type, _args) do
-    opts = [port: Application.get_env(:bob, :port),
-            compress: true]
+    opts  = [port: 4000, comress: true]
+
+    if port = System.get_env("PORT") do
+      opts = Keyword.put(opts, :port, String.to_integer(port))
+    end
 
     File.mkdir_p!("tmp")
     Plug.Adapters.Cowboy.http(Bob.Router, [], opts)

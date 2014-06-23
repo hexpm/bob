@@ -21,8 +21,6 @@ use Mix.Config
 #
 #     import_config "#{Mix.env}.exs"
 
-port = if Mix.env == :prod, do: 80, else: 4000
-
 repos = %{
   "ericmj/elixir" => %{
      build: ["make"],
@@ -33,7 +31,6 @@ repos = %{
 }
 
 config :bob,
-  port:          port,
   repos:         repos,
   github_secret: System.get_env("BOB_GITHUB_SECRET"),
   s3_bucket:     System.get_env("BOB_S3_BUCKET"),
