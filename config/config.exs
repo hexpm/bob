@@ -22,9 +22,9 @@ use Mix.Config
 #     import_config "#{Mix.env}.exs"
 
 repos = %{
-  "ericmj/elixir" => %{
+  "elixir-lang/elixir" => %{
      build: ["make"],
-     git_url: "git@github.com:ericmj/elixir.git",
+     git_url: "git@github.com:elixir-lang/elixir.git",
      zip: ["bin", "CHANGELOG.md", "LEGAL", "lib/*/ebin", "LICENSE",
            "README.md", "VERSION"]
    }
