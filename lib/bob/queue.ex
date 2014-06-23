@@ -10,20 +10,9 @@ defmodule Bob.Queue do
   end
 
   def handle_call({:build, repo, ref}, _from, state) do
-    temp_dir = Bob.Builder.temp_dir
-    IO.puts "BUILDING #{repo} #{ref} (#{temp_dir})"
+    state = update_in(state.queue, &:queue.in({repo, ref}, &1))
+    state = dequeue(state)
 
-    task = Task.Supervisor.async(Bob.BuildSupervisor, fn ->
-      try do
-        task(repo, ref, temp_dir)
-        :ok
-      catch
-        type, term ->
-          {:error, type, term, System.stacktrace}
-      end
-    end)
-
-    state = put_in(state.tasks[task], %{dir: temp_dir, repo: repo, ref: ref})
     {:reply, :ok, state}
   end
 
@@ -40,7 +29,31 @@ defmodule Bob.Queue do
       end
 
     state = update_in(state.tasks, &Map.delete(&1, task))
+    state = dequeue(state)
     {:noreply, state}
+  end
+
+  def dequeue(state) do
+    case :queue.out(state.queue) do
+      {{:value, {repo, ref}}, queue} ->
+        temp_dir = Bob.Builder.temp_dir
+        IO.puts "BUILDING #{repo} #{ref} (#{temp_dir})"
+
+        task = Task.Supervisor.async(Bob.BuildSupervisor, fn ->
+          try do
+            task(repo, ref, temp_dir)
+            :ok
+          catch
+            type, term ->
+              {:error, type, term, System.stacktrace}
+          end
+        end)
+
+        state = put_in(state.tasks[task], %{dir: temp_dir, repo: repo, ref: ref})
+        put_in(state.queue, queue)
+      {:empty, _queue} ->
+        state
+    end
   end
 
   defp task(repo, ref, dir) do
@@ -57,6 +70,6 @@ defmodule Bob.Queue do
   end
 
   defp new_state do
-    %{tasks: %{}}
+    %{tasks: %{}, queue: :queue.new}
   end
 end
