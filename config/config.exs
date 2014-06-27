@@ -24,7 +24,7 @@ use Mix.Config
 repos = %{
   "elixir-lang/elixir" => %{
      build: ["make"],
-     git_url: "git@github.com:elixir-lang/elixir.git",
+     git_url: "git://github.com/elixir-lang/elixir.git",
      zip: ["bin", "CHANGELOG.md", "LEGAL", "lib/*/ebin", "LICENSE",
            "README.md", "VERSION"]
    }
