@@ -1,4 +1,4 @@
-%{"cowboy": {:git, "git://github.com/extend/cowboy.git", "5cd2f0516ad746716105f371a8b51eb71fb41d21", []},
+%{"cowboy": {:git, "git://github.com/extend/cowboy.git", "73f65d5a757dacf952887a32bc611be78773c33f", []},
   "cowlib": {:git, "git://github.com/extend/cowlib.git", "e2ffefe828b918486e2cd76e44c54ae9b62c616e", [ref: "0.6.2"]},
   "envy": {:git, "git://github.com/manderson26/envy.git", "d62cb227b9000ee866c8bcc724ddf68d87621dea", [branch: "master"]},
   "ibrowse": {:git, "git://github.com/opscode/ibrowse", "8f3f6a3a30730b193cc340a8885a960586dc98de", [tag: "v4.0.1.1"]},

@@ -23,6 +23,10 @@ defmodule Bob.Router do
     send_resp(conn, 404, "ERROR: 404")
   end
 
+  defp github_request("ping", _request) do
+    IO.puts "GOT PING"
+  end
+
   defp github_request(event, request) do
     "refs/heads/" <> ref = request["ref"]
 
