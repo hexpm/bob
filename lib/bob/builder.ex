@@ -13,7 +13,7 @@ defmodule Bob.Builder do
       {time, _} = :timer.tc(fn ->
         clone(repo.git_url, ref, dir, log)
         run_build(repo.build, build_dir, log)
-        zip(repo.zip, ref, build_dir, dir)
+        zip(repo.zip, ref, build_dir, log)
       end)
 
       time = time / 1_000_000
@@ -49,16 +49,10 @@ defmodule Bob.Builder do
     end)
   end
 
-  defp zip(include, ref, build_dir, dir) do
-    include = expand_paths(include, build_dir)
-              |> Enum.map(&String.to_char_list/1)
-
-    file = Path.join(dir, "#{ref}.zip")
-           |> String.to_char_list
-
-    build_dir = String.to_char_list(build_dir)
-
-    {:ok, _} = :zip.create(file, include, cwd: build_dir)
+  defp zip(include, ref, dir, log) do
+    zip = Path.join("..", "#{ref}.zip")
+    cmd = "zip -9 -r #{zip} " <> Enum.join(include, " ")
+    command(cmd, dir, log)
   end
 
   defp command(command, dir, log) do
@@ -76,26 +70,5 @@ defmodule Bob.Builder do
 
   defp hash(binary) do
     :crypto.hash(:md5, binary)
-  end
-
-  defp expand_paths(paths, dir) do
-    expand_dir = Path.expand(dir)
-
-    paths
-    |> Enum.map(&Path.join(dir, &1))
-    |> Enum.flat_map(&Path.wildcard/1)
-    |> Enum.flat_map(&dir_files/1)
-    |> Enum.map(&Path.expand/1)
-    |> Enum.filter(&File.regular?/1)
-    |> Enum.uniq
-    |> Enum.map(&Path.relative_to(&1, expand_dir))
-  end
-
-  defp dir_files(path) do
-    if File.dir?(path) do
-      Path.wildcard(Path.join(path, "**"))
-    else
-      [path]
-    end
   end
 end
