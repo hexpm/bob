@@ -28,9 +28,14 @@ defmodule Bob.Queue do
           task
       end
 
+    state = %{state | building: false}
     state = update_in(state.tasks, &Map.delete(&1, task))
     state = dequeue(state)
     {:noreply, state}
+  end
+
+  def dequeue(%{building: true} = state) do
+    state
   end
 
   def dequeue(state) do
@@ -49,6 +54,7 @@ defmodule Bob.Queue do
           end
         end)
 
+        state = %{state | building: true}
         state = put_in(state.tasks[task], %{dir: temp_dir, repo: repo, ref: ref})
         put_in(state.queue, queue)
       {:empty, _queue} ->
@@ -70,6 +76,6 @@ defmodule Bob.Queue do
   end
 
   defp new_state do
-    %{tasks: %{}, queue: :queue.new}
+    %{tasks: %{}, queue: :queue.new, building: false}
   end
 end
