@@ -28,7 +28,7 @@ defmodule Bob.Router do
   end
 
   defp github_request(event, request) do
-    "refs/heads/" <> ref = request["ref"]
+    ref = parse_ref(request["ref"])
 
     name  = request["repository"]["name"]
     owner = request["repository"]["owner"]["name"]
@@ -40,6 +40,10 @@ defmodule Bob.Router do
       "delete" -> Bob.S3.delete(Bob.upload_path(repo, ref))
     end
   end
+
+  defp parse_ref("refs/heads/" <> ref), do: ref
+  defp parse_ref("refs/tags/" <> ref),  do: ref
+  defp parse_ref(ref),                  do: ref
 
   defp json_body(conn, opts) do
     case read_body(conn, opts) do

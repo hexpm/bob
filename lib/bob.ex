@@ -22,4 +22,10 @@ defmodule Bob do
     [_repo, name] = :binary.split(repo, "/")
     "builds/#{name}/#{ref}.zip"
   end
+
+  def format_datetime({{year, month, day}, {hour, min, sec}}) do
+    list = [year, month, day, hour, min, sec]
+    :io_lib.format("~4..0B-~2..0B-~2..0B ~2..0B:~2..0B:~2..0B", list)
+    |> IO.iodata_to_binary
+  end
 end

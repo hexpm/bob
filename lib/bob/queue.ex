@@ -42,7 +42,8 @@ defmodule Bob.Queue do
     case :queue.out(state.queue) do
       {{:value, {repo, ref}}, queue} ->
         temp_dir = Bob.Builder.temp_dir
-        IO.puts "BUILDING #{repo} #{ref} (#{temp_dir})"
+        now      = :calendar.local_time
+        IO.puts "BUILDING #{repo} #{ref} (#{temp_dir}) (#{Bob.format_datetime(now)})"
 
         task = Task.Supervisor.async(Bob.BuildSupervisor, fn ->
           try do
