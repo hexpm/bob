@@ -21,9 +21,9 @@ defmodule Bob.Builder do
       zip(repo.zip, ref, build_dir, log)
     end)
 
-    # task(full_name, ref, dir, "upload", fn log ->
-    #   upload(name, ref, dir)
-    # end)
+    task(full_name, ref, dir, "upload", fn log ->
+      upload(name, ref, dir)
+    end)
 
     task(full_name, ref, dir, "docs", fn log ->
       docs(repo.docs, build_dir, log)
