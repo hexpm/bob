@@ -9,7 +9,7 @@ repos = %{
             "cd ../ex_doc && ../elixir/bin/mix do deps.get, compile",
             "cd .. && git clone https://${BOB_GITHUB_TOKEN}@github.com/ericmj/docs.git",
             "make release_docs",
-            "cd ../docs && git add --all && git commit --allow-empty -m \"Automatic build\" && git push"],
+            "cd ../docs && git add --all && git commit -m \"Automatic build\" && git push"],
      on: %{docs: ["master"]}
    }
 }
