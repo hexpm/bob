@@ -1,9 +1,7 @@
 defmodule Bob.Builder do
-  def build(full_name, name, ref, dir) do
+  def build(repo, full_name, ref, jobs, dir) do
+    name      = repo.name
     build_dir = Path.join(dir, name)
-
-    repos = Application.get_env(:bob, :repos)
-    repo  = repos[full_name]
 
     unless repo do
       raise "no configured repo with name #{full_name}"
@@ -13,21 +11,27 @@ defmodule Bob.Builder do
       clone(repo.git_url, ref, dir, log)
     end)
 
-    task(full_name, ref, dir, "build", fn log ->
-      run_build(repo.build, build_dir, log)
-    end)
+    if :build in jobs do
+      task(full_name, ref, dir, "build", fn log ->
+        run_build(repo.build, build_dir, log)
+      end)
+    end
 
-    task(full_name, ref, dir, "zip", fn log ->
-      zip(repo.zip, ref, build_dir, log)
-    end)
+    if :zip in jobs do
+      task(full_name, ref, dir, "zip", fn log ->
+        zip(repo.zip, ref, build_dir, log)
+      end)
 
-    task(full_name, ref, dir, "upload", fn _ ->
-      upload(name, ref, dir)
-    end)
+      task(full_name, ref, dir, "upload", fn _ ->
+        upload(name, ref, dir)
+      end)
+    end
 
-    task(full_name, ref, dir, "docs", fn log ->
-      docs(repo.docs, build_dir, log)
-    end)
+    if :docs in jobs do
+      task(full_name, ref, dir, "docs", fn log ->
+        docs(repo.docs, build_dir, log)
+      end)
+    end
   end
 
   defp task(full_name, ref, dir, name, fun) do

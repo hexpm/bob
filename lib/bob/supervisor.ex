@@ -7,7 +7,8 @@ defmodule Bob.Supervisor do
 
   def init([]) do
     tree = [supervisor(Task.Supervisor, [[name: Bob.BuildSupervisor]]),
-            worker(Bob.Queue, [])]
+            worker(Bob.Queue, []),
+            worker(Bob.Periodic, [])]
     supervise(tree, strategy: :rest_for_one)
   end
 end

@@ -2,16 +2,20 @@ use Mix.Config
 
 repos = %{
   "elixir-lang/elixir" => %{
-     git_url: "git://github.com/elixir-lang/elixir.git",
-     build: ["make"],
-     zip: ["make release_zip && mv *.zip build.zip"],
-     docs: ["cd .. && git clone git://github.com/elixir-lang/ex_doc.git --depth 1 --single-branch",
-            "cd ../ex_doc && ../elixir/bin/mix do deps.get, compile",
-            "cd .. && git clone https://${BOB_GITHUB_TOKEN}@github.com/ericmj/docs.git",
-            "make release_docs",
-            "cd ../docs && git add --all && git commit -m \"Automatic build\" && git push"],
-     on: %{docs: ["master"]}
-   }
+    name: "elixir",
+    git_url: "git://github.com/elixir-lang/elixir.git",
+    build: ["make"],
+    zip: ["make release_zip && mv *.zip build.zip"],
+    docs: ["cd .. && git clone git://github.com/elixir-lang/ex_doc.git --depth 1 --single-branch",
+           "cd ../ex_doc && ../elixir/bin/mix do deps.get, compile",
+           "cd .. && git clone https://${BOB_GITHUB_TOKEN}@github.com/ericmj/docs.git",
+           "make release_docs",
+           "cd ../docs && git add --all && git commit --allow-empty -m \"Nightly build\" && git push"],
+    on: %{
+      push: [:build, :zip],
+      time: %{{22, 46, 0} => {24*60*60, "master", [:build, :docs]}}
+    }
+  }
 }
 
 config :bob,

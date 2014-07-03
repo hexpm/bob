@@ -28,15 +28,17 @@ defmodule Bob.Router do
   end
 
   defp github_request(event, request) do
-    ref = parse_ref(request["ref"])
-
-    name  = request["repository"]["name"]
-    owner = request["repository"]["owner"]["name"]
-    repo  = "#{owner}/#{name}"
+    ref       = parse_ref(request["ref"])
+    name      = request["repository"]["name"]
+    owner     = request["repository"]["owner"]["name"]
+    full_name = "#{owner}/#{name}"
+    repos     = Application.get_env(:bob, :repos)
+    repo      = repos[full_name]
+    jobs      = repo.on.push
 
     case event do
-      "push"   -> Bob.Queue.build(repo, name, ref)
-      "create" -> Bob.Queue.build(repo, name, ref)
+      "push"   -> Bob.Queue.build(repo, full_name, ref, jobs)
+      "create" -> Bob.Queue.build(repo, full_name, ref, jobs)
       "delete" -> Bob.S3.delete(Bob.upload_path(repo, ref))
     end
   end

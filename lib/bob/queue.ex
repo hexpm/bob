@@ -5,12 +5,12 @@ defmodule Bob.Queue do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
 
-  def build(repo, name, ref) do
-    GenServer.call(__MODULE__, {:build, repo, name, ref})
+  def build(repo, full_name, ref, jobs) do
+    GenServer.call(__MODULE__, {:build, repo, full_name, ref, jobs})
   end
 
-  def handle_call({:build, repo, name, ref}, _from, state) do
-    state = update_in(state.queue, &:queue.in({repo, name, ref}, &1))
+  def handle_call({:build, repo, full_name, ref, jobs}, _from, state) do
+    state = update_in(state.queue, &:queue.in({repo, full_name, ref, jobs}, &1))
     state = dequeue(state)
 
     {:reply, :ok, state}
@@ -40,14 +40,14 @@ defmodule Bob.Queue do
 
   def dequeue(state) do
     case :queue.out(state.queue) do
-      {{:value, {repo, name, ref}}, queue} ->
+      {{:value, {repo, full_name, ref, jobs}}, queue} ->
         temp_dir = Bob.Builder.temp_dir
         now      = :calendar.local_time
-        IO.puts "BUILDING #{repo} #{ref} (#{temp_dir}) (#{Bob.format_datetime(now)})"
+        IO.puts "BUILDING #{repo.name} #{ref} (#{temp_dir}) (#{Bob.format_datetime(now)})"
 
         task = Task.Supervisor.async(Bob.BuildSupervisor, fn ->
           try do
-            task(repo, name, ref, temp_dir)
+            task(repo, full_name, ref, jobs, temp_dir)
             :ok
           catch
             type, term ->
@@ -63,11 +63,11 @@ defmodule Bob.Queue do
     end
   end
 
-  defp task(repo, name, ref, dir) do
+  defp task(repo, full_name, ref, jobs, dir) do
     {time, _} = :timer.tc(fn ->
-      Bob.Builder.build(repo, name, ref, dir)
+      Bob.Builder.build(repo, full_name, ref, jobs, dir)
     end)
-    IO.puts "COMPLETED #{repo} #{ref} (#{dir}) (#{time / 1_000_000}s)"
+    IO.puts "COMPLETED #{repo.name} #{ref} (#{dir}) (#{time / 1_000_000}s)"
   end
 
   defp new_state do
