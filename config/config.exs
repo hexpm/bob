@@ -13,7 +13,7 @@ repos = %{
            "cd ../docs && git add --all && git commit --allow-empty -m \"Nightly build\" && git push"],
     on: %{
       push: [:build, :zip],
-      time: %{{22, 46, 0} => {24*60*60, "master", [:build, :docs]}}
+      time: %{{2, 0, 0} => {24*60*60, "master", [:build, :docs]}}
     }
   }
 }
