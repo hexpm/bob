@@ -35,8 +35,8 @@ defmodule Bob.Router do
     repo  = "#{owner}/#{name}"
 
     case event do
-      "push"   -> Bob.Queue.build(repo, ref)
-      "create" -> Bob.Queue.build(repo, ref)
+      "push"   -> Bob.Queue.build(repo, name, ref)
+      "create" -> Bob.Queue.build(repo, name, ref)
       "delete" -> Bob.S3.delete(Bob.upload_path(repo, ref))
     end
   end

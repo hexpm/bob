@@ -1,37 +1,22 @@
-# This file is responsible for configuring your application
-# and its dependencies. The Mix.Config module provides functions
-# to aid in doing so.
 use Mix.Config
-
-# Note this file is loaded before any dependency and is restricted
-# to this project. If another project depends on this project, this
-# file won't be loaded nor affect the parent project.
-
-# Sample configuration:
-#
-#     config :my_dep,
-#       key: :value,
-#       limit: 42
-
-# It is also possible to import configuration files, relative to this
-# directory. For example, you can emulate configuration per environment
-# by uncommenting the line below and defining dev.exs, test.exs and such.
-# Configuration from the imported file will override the ones defined
-# here (which is why it is important to import them last).
-#
-#     import_config "#{Mix.env}.exs"
 
 repos = %{
   "elixir-lang/elixir" => %{
-     build: ["make"],
      git_url: "git://github.com/elixir-lang/elixir.git",
-     zip: ["bin", "CHANGELOG.md", "LEGAL", "lib/*/ebin", "LICENSE",
-           "README.md", "VERSION"]
+     build: ["make"],
+     zip: ["make release_zip && mv *.zip build.zip"],
+     docs: ["cd .. && git clone git://github.com/elixir-lang/ex_doc.git --depth 1 --single-branch",
+            "cd ../ex_doc && ../elixir/bin/mix do deps.get, compile",
+            "cd .. && git clone https://${BOB_GITHUB_TOKEN}@github.com/ericmj/docs.git",
+            "make release_docs",
+            "cd ../docs && git add --all && git commit --allow-empty -m \"Automatic build\" && git push"],
+     on: %{docs: ["master"]}
    }
 }
 
 config :bob,
   repos:         repos,
+# github_token:  System.get_env("BOB_GITHUB_TOKEN"),
   github_secret: System.get_env("BOB_GITHUB_SECRET"),
   s3_bucket:     System.get_env("BOB_S3_BUCKET"),
   s3_access_key: System.get_env("BOB_S3_ACCESS_KEY"),

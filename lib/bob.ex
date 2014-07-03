@@ -18,8 +18,7 @@ defmodule Bob do
                      Exception.format_stacktrace(stacktrace))
   end
 
-  def upload_path(repo, ref) do
-    [_repo, name] = :binary.split(repo, "/")
+  def upload_path(name, ref) do
     "builds/#{name}/#{ref}.zip"
   end
 

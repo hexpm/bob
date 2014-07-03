@@ -5,12 +5,12 @@ defmodule Bob.Queue do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
 
-  def build(repo, ref) do
-    GenServer.call(__MODULE__, {:build, repo, ref})
+  def build(repo, name, ref) do
+    GenServer.call(__MODULE__, {:build, repo, name, ref})
   end
 
-  def handle_call({:build, repo, ref}, _from, state) do
-    state = update_in(state.queue, &:queue.in({repo, ref}, &1))
+  def handle_call({:build, repo, name, ref}, _from, state) do
+    state = update_in(state.queue, &:queue.in({repo, name, ref}, &1))
     state = dequeue(state)
 
     {:reply, :ok, state}
@@ -40,14 +40,14 @@ defmodule Bob.Queue do
 
   def dequeue(state) do
     case :queue.out(state.queue) do
-      {{:value, {repo, ref}}, queue} ->
+      {{:value, {repo, name, ref}}, queue} ->
         temp_dir = Bob.Builder.temp_dir
         now      = :calendar.local_time
         IO.puts "BUILDING #{repo} #{ref} (#{temp_dir}) (#{Bob.format_datetime(now)})"
 
         task = Task.Supervisor.async(Bob.BuildSupervisor, fn ->
           try do
-            task(repo, ref, temp_dir)
+            task(repo, name, ref, temp_dir)
             :ok
           catch
             type, term ->
@@ -63,17 +63,11 @@ defmodule Bob.Queue do
     end
   end
 
-  defp task(repo, ref, dir) do
-    time = Bob.Builder.build(repo, ref, dir)
-    IO.puts "COMPLETED #{repo} #{ref} (#{dir}) (#{time}s)"
-
-    upload(repo, ref, dir)
-    IO.puts "UPLOADED #{repo} #{ref} (#{dir})"
-  end
-
-  defp upload(repo, ref, dir) do
-    blob = File.read!(Path.join(dir, "#{ref}.zip"))
-    Bob.S3.upload(Bob.upload_path(repo, ref), blob)
+  defp task(repo, name, ref, dir) do
+    {time, _} = :timer.tc(fn ->
+      Bob.Builder.build(repo, name, ref, dir)
+    end)
+    IO.puts "COMPLETED #{repo} #{ref} (#{dir}) (#{time / 1_000_000}s)"
   end
 
   defp new_state do
