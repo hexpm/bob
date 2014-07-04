@@ -8,7 +8,7 @@ repos = %{
     zip: ["make release_zip && mv *.zip build.zip"],
     docs: ["cd .. && git clone git://github.com/elixir-lang/ex_doc.git --depth 1 --single-branch",
            "cd ../ex_doc && ../elixir/bin/mix do deps.get, compile",
-           "cd .. && git clone https://${BOB_GITHUB_TOKEN}@github.com/ericmj/docs.git",
+           "cd .. && git clone https://${BOB_GITHUB_TOKEN}@github.com/elixir-lang/docs.git",
            "make release_docs",
            "cd ../docs && git add --all && git commit --allow-empty -m \"Nightly build\" && git push"],
     on: %{
