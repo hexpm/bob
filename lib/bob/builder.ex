@@ -1,46 +1,42 @@
 defmodule Bob.Builder do
-  def build(repo, full_name, ref, jobs, dir) do
+  def build(repo, ref, jobs, dir) do
     name      = repo.name
     build_dir = Path.join(dir, name)
 
-    unless repo do
-      raise "no configured repo with name #{full_name}"
-    end
-
-    task(full_name, ref, dir, "clone", fn log ->
+    task(name, ref, dir, "clone", fn log ->
       clone(repo.git_url, ref, dir, log)
     end)
 
     if :build in jobs do
-      task(full_name, ref, dir, "build", fn log ->
+      task(name, ref, dir, "build", fn log ->
         run_build(repo.build, build_dir, log)
       end)
     end
 
     if :zip in jobs do
-      task(full_name, ref, dir, "zip", fn log ->
+      task(name, ref, dir, "zip", fn log ->
         zip(repo.zip, ref, build_dir, log)
       end)
 
-      task(full_name, ref, dir, "upload", fn _ ->
+      task(name, ref, dir, "upload", fn _ ->
         upload(name, ref, dir)
       end)
     end
 
     if :docs in jobs do
-      task(full_name, ref, dir, "docs", fn log ->
+      task(name, ref, dir, "docs", fn log ->
         docs(repo.docs, build_dir, log)
       end)
     end
   end
 
-  defp task(full_name, ref, dir, name, fun) do
+  defp task(name, ref, dir, name, fun) do
     {:ok, _} = File.open(Path.join(dir, "#{name}.txt"), [:write, :delayed_write], fn log ->
       {time, _} = :timer.tc(fn ->
         fun.(log)
       end)
 
-      output(full_name, ref, dir, log, time, "#{name} completed")
+      output(name, ref, dir, log, time, "DONE")
     end)
   end
 
@@ -104,9 +100,9 @@ defmodule Bob.Builder do
     :crypto.hash(:md5, binary)
   end
 
-  defp output(repo, ref, dir, log, time, message) do
+  defp output(name, ref, dir, log, time, message) do
     time = time / 1_000_000
     IO.write(log, "\nCOMPLETED IN #{time}s")
-    IO.puts "#{message} #{repo} #{ref} (#{dir}) (#{time}s)"
+    IO.puts "#{message} #{name} #{ref} (#{dir}) (#{time}s)"
   end
 end

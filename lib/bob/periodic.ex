@@ -28,7 +28,7 @@ defmodule Bob.Periodic do  use GenServer
     ms = secs * 1000
     :erlang.send_after(ms, self, {:task, full_name, time, ref, jobs})
 
-    Bob.Queue.build(repo, full_name, ref, jobs)
+    Bob.Queue.build(repo, ref, jobs)
     {:noreply, []}
   end
 

@@ -5,12 +5,12 @@ defmodule Bob.Queue do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
 
-  def build(repo, full_name, ref, jobs) do
-    GenServer.call(__MODULE__, {:build, repo, full_name, ref, jobs})
+  def build(repo, ref, jobs) do
+    GenServer.call(__MODULE__, {:build, repo, ref, jobs})
   end
 
-  def handle_call({:build, repo, full_name, ref, jobs}, _from, state) do
-    state = update_in(state.queue, &:queue.in({repo, full_name, ref, jobs}, &1))
+  def handle_call({:build, repo, ref, jobs}, _from, state) do
+    state = update_in(state.queue, &:queue.in({repo, ref, jobs}, &1))
     state = dequeue(state)
 
     {:reply, :ok, state}
@@ -23,7 +23,7 @@ defmodule Bob.Queue do
           task
         {{:error, type, term, stacktrace}, task} ->
           %{dir: dir, repo: repo, ref: ref} = Map.get(state.tasks, task)
-          IO.puts "FAILED #{repo} #{ref} (#{dir})"
+          IO.puts "FAILED #{repo.name} #{ref} (#{dir})"
           Bob.log_error(type, term, stacktrace)
           task
       end
@@ -40,14 +40,14 @@ defmodule Bob.Queue do
 
   def dequeue(state) do
     case :queue.out(state.queue) do
-      {{:value, {repo, full_name, ref, jobs}}, queue} ->
+      {{:value, {repo, ref, jobs}}, queue} ->
         temp_dir = Bob.Builder.temp_dir
         now      = :calendar.local_time
         IO.puts "BUILDING #{repo.name} #{ref} (#{temp_dir}) (#{Bob.format_datetime(now)})"
 
         task = Task.Supervisor.async(Bob.BuildSupervisor, fn ->
           try do
-            task(repo, full_name, ref, jobs, temp_dir)
+            task(repo, ref, jobs, temp_dir)
             :ok
           catch
             type, term ->
@@ -63,9 +63,9 @@ defmodule Bob.Queue do
     end
   end
 
-  defp task(repo, full_name, ref, jobs, dir) do
+  defp task(repo, ref, jobs, dir) do
     {time, _} = :timer.tc(fn ->
-      Bob.Builder.build(repo, full_name, ref, jobs, dir)
+      Bob.Builder.build(repo, ref, jobs, dir)
     end)
     IO.puts "COMPLETED #{repo.name} #{ref} (#{dir}) (#{time / 1_000_000}s)"
   end
