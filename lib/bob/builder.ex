@@ -30,8 +30,8 @@ defmodule Bob.Builder do
     end
   end
 
-  defp task(name, ref, dir, name, fun) do
-    {:ok, _} = File.open(Path.join(dir, "#{name}.txt"), [:write, :delayed_write], fn log ->
+  defp task(name, ref, dir, task_name, fun) do
+    {:ok, _} = File.open(Path.join(dir, "#{task_name}.txt"), [:write, :delayed_write], fn log ->
       {time, _} = :timer.tc(fn ->
         fun.(log)
       end)
