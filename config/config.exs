@@ -4,13 +4,13 @@ repos = %{
   "elixir-lang/elixir" => %{
     name: "elixir",
     git_url: "git://github.com/elixir-lang/elixir.git",
-    build: ["make"],
+    build: ["cd elixir && make"],
     zip: ["make release_zip && mv *.zip build.zip"],
-    docs: ["cd .. && git clone git://github.com/elixir-lang/ex_doc.git --depth 1 --single-branch",
-           "cd ../ex_doc && ../elixir/bin/mix do deps.get, compile",
-           "cd .. && git clone https://${BOB_GITHUB_TOKEN}@github.com/elixir-lang/docs.git",
-           "make release_docs",
-           "cd ../docs && git add --all && git commit --allow-empty -m \"Nightly build\" && git push"],
+    docs: ["git clone git://github.com/elixir-lang/ex_doc.git --depth 1 --single-branch",
+           "cd ex_doc && ../elixir/bin/elixir ../elixir/bin/mix do deps.get, compile",
+           "git clone https://${BOB_GITHUB_TOKEN}@github.com/elixir-lang/docs.git",
+           "cd elixir && make release_docs",
+           "cd docs && git add --all && git commit --allow-empty -m \"Nightly build\" && git push"],
     on: %{
       push: [:build, :zip],
       time: %{{2, 0, 0} => {24*60*60, "master", [:build, :docs]}}

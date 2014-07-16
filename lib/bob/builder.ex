@@ -1,7 +1,6 @@
 defmodule Bob.Builder do
   def build(repo, ref, jobs, dir) do
-    name      = repo.name
-    build_dir = Path.join(dir, name)
+    name = repo.name
 
     task(name, ref, dir, "clone", fn log ->
       clone(repo.git_url, ref, dir, log)
@@ -9,13 +8,13 @@ defmodule Bob.Builder do
 
     if :build in jobs do
       task(name, ref, dir, "build", fn log ->
-        run_build(repo.build, build_dir, log)
+        run_build(repo.build, dir, log)
       end)
     end
 
     if :zip in jobs do
       task(name, ref, dir, "zip", fn log ->
-        zip(repo.zip, ref, build_dir, log)
+        zip(repo.zip, ref, dir, log)
       end)
 
       task(name, ref, dir, "upload", fn _ ->
@@ -25,7 +24,7 @@ defmodule Bob.Builder do
 
     if :docs in jobs do
       task(name, ref, dir, "docs", fn log ->
-        docs(repo.docs, build_dir, log)
+        docs(repo.docs, dir, log)
       end)
     end
   end
