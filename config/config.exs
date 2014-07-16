@@ -5,7 +5,7 @@ repos = %{
     name: "elixir",
     git_url: "git://github.com/elixir-lang/elixir.git",
     build: ["cd elixir && make"],
-    zip: ["make release_zip && mv *.zip build.zip"],
+    zip: ["cd elixir && make release_zip && mv *.zip build.zip"],
     docs: ["git clone git://github.com/elixir-lang/ex_doc.git --depth 1 --single-branch",
            "cd ex_doc && ../elixir/bin/elixir ../elixir/bin/mix do deps.get, compile",
            "git clone https://${BOB_GITHUB_TOKEN}@github.com/elixir-lang/docs.git",
