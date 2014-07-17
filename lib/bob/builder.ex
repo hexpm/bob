@@ -15,7 +15,7 @@ defmodule Bob.Builder do
 
     if :zip in jobs do
       task(name, ref, dir, "zip", fn log ->
-        zip(repo.zip, ref, dir, log)
+        zip(repo.zip, dir, log)
       end)
 
       task(name, ref, dir, "upload", fn _ ->
@@ -65,15 +65,14 @@ defmodule Bob.Builder do
     end)
   end
 
-  defp zip(commands, ref, dir, log) do
+  defp zip(commands, dir, log) do
     Enum.each(commands, fn cmd ->
       command(cmd, dir, log)
     end)
-    :file.rename(Path.join(dir, "build.zip"), Path.join([dir, "..", "#{ref}.zip"]))
   end
 
   defp upload(name, ref, dir) do
-    blob = File.read!(Path.join(dir, "#{ref}.zip"))
+    blob = File.read!(Path.join(dir, "build.zip"))
     Bob.S3.upload(Bob.upload_path(name, ref), blob)
   end
 
