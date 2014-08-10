@@ -29,9 +29,7 @@ defmodule Bob.Router do
 
   defp github_request(event, request) do
     ref       = parse_ref(request["ref"])
-    name      = request["repository"]["name"]
-    owner     = request["repository"]["owner"]["name"]
-    full_name = "#{owner}/#{name}"
+    full_name = request["repository"]["full_name"]
     repos     = Application.get_env(:bob, :repos)
     repo      = repos[full_name]
     jobs      = repo.on.push
