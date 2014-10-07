@@ -2,7 +2,9 @@ defmodule Bob.Router do
   use Plug.Router
   import Plug.Conn
 
-  plug Bob.Plugs.Exception
+  def call(conn, opts) do
+    Bob.Plugs.Exception.call(conn, [fun: &super(&1, opts)])
+  end
 
   plug :match
   plug :dispatch
@@ -55,7 +57,7 @@ defmodule Bob.Router do
   end
 
   defp parse(body) do
-    case Jazz.decode(body) do
+    case Poison.decode(body) do
       {:ok, params} ->
         params
       _ ->

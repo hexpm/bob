@@ -4,7 +4,7 @@ defmodule Bob.Mixfile do
   def project do
     [app: :bob,
      version: "0.0.1",
-     elixir: "~> 0.14.1",
+     elixir: "~> 1.0",
      deps: deps]
   end
 
@@ -12,7 +12,7 @@ defmodule Bob.Mixfile do
   #
   # Type `mix help compile.app` for more information
   def application do
-    [applications: [:cowboy, :plug, :jazz, :mini_s3, :porcelain],
+    [applications: [:cowboy, :plug, :poison, :mini_s3, :porcelain],
      mod: {Bob, []}]
   end
 
@@ -26,10 +26,10 @@ defmodule Bob.Mixfile do
   #
   # Type `mix help deps` for more examples and options
   defp deps do
-    [{:plug, "~> 0.5.0"},
-     {:cowboy, github: "extend/cowboy"},
-     {:jazz, "~> 0.1.2"},
+    [{:plug, "~> 0.8.0"},
+     {:cowboy, nil},
+     {:poison, "~> 1.0"},
      {:mini_s3, github: "ericmj/mini_s3", branch: "hex-fixes"},
-     {:porcelain, "~> 1.0.0"}]
+     {:porcelain, "~> 1.1"}]
   end
 end
