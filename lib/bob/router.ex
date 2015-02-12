@@ -39,7 +39,7 @@ defmodule Bob.Router do
     case event do
       "push"   -> Bob.Queue.build(repo, ref, jobs)
       "create" -> Bob.Queue.build(repo, ref, jobs)
-      "delete" -> Bob.S3.delete(Bob.upload_path(repo, ref))
+      "delete" -> Bob.S3.delete(Bob.upload_path(repo.name, ref))
     end
   end
 
