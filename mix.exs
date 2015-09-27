@@ -29,7 +29,7 @@ defmodule Bob.Mixfile do
   # Type `mix help deps` for more examples and options
   defp deps do
     [{:plug, "~> 0.8.0"},
-     {:cowboy, nil},
+     {:cowboy, ">= 0.0.0"},
      {:poison, "~> 1.0"},
      {:mini_s3, github: "ericmj/mini_s3", branch: "hex-fixes"},
      {:porcelain, "~> 1.1"}]
