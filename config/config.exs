@@ -23,6 +23,17 @@ config :bob,
   repos:         repos,
 # github_token:  System.get_env("BOB_GITHUB_TOKEN"),
   github_secret: System.get_env("BOB_GITHUB_SECRET"),
-  s3_bucket:     System.get_env("BOB_S3_BUCKET"),
-  s3_access_key: System.get_env("BOB_S3_ACCESS_KEY"),
-  s3_secret_key: System.get_env("BOB_S3_SECRET_KEY")
+  s3_bucket:     System.get_env("BOB_S3_BUCKET")
+
+config :ex_aws,
+  access_key_id:     {:system, "BOB_S3_ACCESS_KEY"},
+  secret_access_key: {:system, "BOB_S3_SECRET_KEY"}
+
+config :ex_aws, :httpoison_opts,
+  recv_timeout: 30_000,
+  hackney: [pool: false]
+
+config :ex_aws, :s3,
+  scheme: "http://",
+  host: "s3.amazonaws.com",
+  region: "us-east-1"

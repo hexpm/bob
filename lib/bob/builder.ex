@@ -2,20 +2,21 @@ defmodule Bob.Builder do
   def build(repo, ref, jobs, dir) do
     name      = repo.name
     build_dir = Path.join(dir, name)
+    preconfig = preconfig(ref)
 
     task(name, ref, dir, "clone", fn log ->
-      clone(repo.git_url, ref, dir, log)
+      clone(repo.git_url, ref, dir, preconfig, log)
     end)
 
     if :build in jobs do
       task(name, ref, dir, "build", fn log ->
-        run_build(repo.build, dir, log)
+        run_build(repo.build, dir, preconfig, log)
       end)
     end
 
     if :zip in jobs do
       task(name, ref, dir, "zip", fn log ->
-        zip(repo.zip, dir, log)
+        zip(repo.zip, dir, preconfig, log)
       end)
 
       task(name, ref, dir, "upload", fn _ ->
@@ -25,10 +26,23 @@ defmodule Bob.Builder do
 
     if :docs in jobs do
       task(name, ref, dir, "docs", fn log ->
-        docs(repo.docs, dir, log)
+        docs(repo.docs, dir, preconfig, log)
       end)
     end
   end
+
+  defp preconfig(ref) do
+    "erln8 --use #{erlang_version(ref)} --force"
+  end
+
+  defp erlang_version("v1.0"), do: "17"
+  defp erlang_version("v1.1"), do: "17"
+  defp erlang_version("v" <> version) do
+    if Version.compare(version, "1.2.0") == :lt,
+        do: "17",
+      else: "18"
+  end
+  defp erlang_version(_version), do: "18"
 
   defp task(name, ref, dir, task, fun) do
     {:ok, _} = File.open(Path.join(dir, "#{task}.txt"), [:write, :delayed_write], fn log ->
@@ -54,20 +68,20 @@ defmodule Bob.Builder do
     path
   end
 
-  defp clone(url, ref, dir, log) do
+  defp clone(url, ref, dir, preconfig, log) do
     cmd = "git clone #{url} -b #{ref} --depth 1 --single-branch"
-    command(cmd, dir, log)
+    command(cmd, dir, preconfig, log)
   end
 
-  defp run_build(commands, dir, log) do
+  defp run_build(commands, dir, preconfig, log) do
     Enum.each(commands, fn cmd ->
-      command(cmd, dir, log)
+      command(cmd, dir, preconfig, log)
     end)
   end
 
-  defp zip(commands, dir, log) do
+  defp zip(commands, dir, preconfig, log) do
     Enum.each(commands, fn cmd ->
-      command(cmd, dir, log)
+      command(cmd, dir, preconfig, log)
     end)
   end
 
@@ -76,13 +90,14 @@ defmodule Bob.Builder do
     Bob.S3.upload(Bob.upload_path(name, ref), blob)
   end
 
-  defp docs(commands, dir, log) do
+  defp docs(commands, dir, preconfig, log) do
     Enum.each(commands, fn cmd ->
-      command(cmd, dir, log)
+      command(cmd, dir, preconfig, log)
     end)
   end
 
-  defp command(command, dir, log) do
+  defp command(command, dir, preconfig, log) do
+    command = preconfig <> " && " <> command
     IO.write(log, "$ #{command}\n")
 
     %Porcelain.Result{status: status} =

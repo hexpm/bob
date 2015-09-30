@@ -14,7 +14,8 @@ defmodule Bob.Mixfile do
   #
   # Type `mix help compile.app` for more information
   def application do
-    [applications: [:cowboy, :plug, :poison, :mini_s3, :porcelain],
+    [applications: [:cowboy, :plug, :poison, :ex_aws, :sweet_xml, :httpoison,
+                    :porcelain],
      mod: {Bob, []}]
   end
 
@@ -31,7 +32,9 @@ defmodule Bob.Mixfile do
     [{:plug, "~> 0.8.0"},
      {:cowboy, ">= 0.0.0"},
      {:poison, "~> 1.0"},
-     {:mini_s3, github: "ericmj/mini_s3", branch: "hex-fixes"},
+     {:ex_aws, ">= 0.4.0"},
+     {:sweet_xml, ">= 0.0.0"},
+     {:httpoison, "~> 0.0"},
      {:porcelain, "~> 1.1"}]
   end
 end
