@@ -5,7 +5,7 @@ defmodule Bob.Builder do
     preconfig = preconfig(ref)
 
     task(name, ref, dir, "clone", fn log ->
-      clone(repo.git_url, ref, dir, preconfig, log)
+      clone(repo.git_url, ref, dir, log)
     end)
 
     if :build in jobs do
@@ -16,7 +16,7 @@ defmodule Bob.Builder do
 
     if :zip in jobs do
       task(name, ref, dir, "zip", fn log ->
-        zip(repo.zip, dir, preconfig, log)
+        zip(repo.zip, dir, log)
       end)
 
       task(name, ref, dir, "upload", fn _ ->
@@ -56,7 +56,7 @@ defmodule Bob.Builder do
 
   def temp_dir do
     random =
-      :erlang.now
+      :erlang.monotonic_time
       |> :erlang.term_to_binary
       |> hash()
       |> Base.encode16(case: :lower)
@@ -68,9 +68,9 @@ defmodule Bob.Builder do
     path
   end
 
-  defp clone(url, ref, dir, preconfig, log) do
+  defp clone(url, ref, dir, log) do
     cmd = "git clone #{url} -b #{ref} --depth 1 --single-branch"
-    command(cmd, dir, preconfig, log)
+    command(cmd, dir, nil, log)
   end
 
   defp run_build(commands, dir, preconfig, log) do
@@ -79,9 +79,9 @@ defmodule Bob.Builder do
     end)
   end
 
-  defp zip(commands, dir, preconfig, log) do
+  defp zip(commands, dir, log) do
     Enum.each(commands, fn cmd ->
-      command(cmd, dir, preconfig, log)
+      command(cmd, dir, nil, log)
     end)
   end
 
@@ -97,7 +97,11 @@ defmodule Bob.Builder do
   end
 
   defp command(command, dir, preconfig, log) do
-    command = preconfig <> " && " <> command
+    IO.write("CWD: #{File.cwd!}; PRECONFIG: #{preconfig};")
+    if preconfig do
+      command = preconfig <> " && " <> command
+    end
+
     IO.write(log, "$ #{command}\n")
 
     %Porcelain.Result{status: status} =
