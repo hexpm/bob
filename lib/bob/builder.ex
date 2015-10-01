@@ -32,7 +32,7 @@ defmodule Bob.Builder do
   end
 
   defp preconfig(ref) do
-    "erln8 --use #{erlang_version(ref)} --force"
+    "erln8 --use #{erlang_version(ref)}"
   end
 
   defp erlang_version("v1.0"), do: "17"
