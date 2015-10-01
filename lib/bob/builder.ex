@@ -97,7 +97,6 @@ defmodule Bob.Builder do
   end
 
   defp command(command, dir, preconfig, log) do
-    IO.puts "CWD: #{Path.join(File.cwd!, dir)}; PRECONFIG: #{preconfig};"
     if preconfig do
       command = preconfig <> " && " <> command
     end
