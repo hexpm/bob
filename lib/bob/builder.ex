@@ -100,12 +100,12 @@ defmodule Bob.Builder do
     if preconfig do
       %Porcelain.Result{status: status} =
         Porcelain.shell(preconfig, out: {:file, log}, err: :out, dir: dir)
-    end
 
-    IO.write(log, "\n")
+      IO.write(log, "\n")
 
-    unless status == 0 do
-      raise "`#{command}` returned: #{status}"
+      unless status == 0 do
+        raise "`#{command}` returned: #{status}"
+      end
     end
 
     IO.write(log, "$ #{command}\n")
