@@ -32,7 +32,8 @@ defmodule Bob.Builder do
   end
 
   defp preconfig(ref) do
-    "erln8 --use #{erlang_version(ref)}"
+    path = "/home/ericmj/.erln8.d/otps/#{erlang_version(ref)}"
+    "#{path}:#{System.get_env("PATH") || ""}"
   end
 
   defp erlang_version("v1.0"), do: "17"
@@ -97,21 +98,15 @@ defmodule Bob.Builder do
   end
 
   defp command(command, dir, preconfig, log) do
+    env = []
     if preconfig do
-      %Porcelain.Result{status: status} =
-        Porcelain.shell(preconfig, out: {:file, log}, err: :out, dir: dir)
-
-      IO.write(log, "\n")
-
-      unless status == 0 do
-        raise "`#{command}` returned: #{status}"
-      end
+      env = [PATH: preconfig]
     end
 
     IO.write(log, "$ #{command}\n")
 
     %Porcelain.Result{status: status} =
-      Porcelain.shell(command, out: {:file, log}, err: :out, dir: dir)
+      Porcelain.shell(command, out: {:file, log}, err: :out, dir: dir, env: env)
 
     IO.write(log, "\n")
 
