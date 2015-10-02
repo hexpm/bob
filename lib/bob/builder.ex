@@ -98,7 +98,14 @@ defmodule Bob.Builder do
 
   defp command(command, dir, preconfig, log) do
     if preconfig do
-      command = preconfig <> " && " <> command
+      %Porcelain.Result{status: status} =
+        Porcelain.shell(preconfig, out: {:file, log}, err: :out, dir: dir)
+    end
+
+    IO.write(log, "\n")
+
+    unless status == 0 do
+      raise "`#{command}` returned: #{status}"
     end
 
     IO.write(log, "$ #{command}\n")
