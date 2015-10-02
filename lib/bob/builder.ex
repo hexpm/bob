@@ -26,7 +26,7 @@ defmodule Bob.Builder do
 
     if :docs in jobs do
       task(name, ref, dir, "docs", fn log ->
-        docs(repo.docs, dir, preconfig, log)
+        docs(repo.docs, dir, log)
       end)
     end
   end
@@ -90,9 +90,9 @@ defmodule Bob.Builder do
     Bob.S3.upload(Bob.upload_path(name, ref), blob)
   end
 
-  defp docs(commands, dir, preconfig, log) do
+  defp docs(commands, dir, log) do
     Enum.each(commands, fn cmd ->
-      command(cmd, dir, preconfig, log)
+      command(cmd, dir, nil, log)
     end)
   end
 
