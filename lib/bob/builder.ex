@@ -39,7 +39,7 @@ defmodule Bob.Builder do
   defp erlang_version("v1.0"), do: "17"
   defp erlang_version("v1.1"), do: "17"
   defp erlang_version("v" <> version) do
-    if Version.compare(version, "1.2.0") == :lt,
+    if Version.compare(version, "1.2.0-rc.0") != :gt,
         do: "17",
       else: "18"
   end
