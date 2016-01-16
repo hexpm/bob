@@ -39,9 +39,15 @@ defmodule Bob.Builder do
   defp erlang_version("v1.0"), do: "17"
   defp erlang_version("v1.1"), do: "17"
   defp erlang_version("v" <> version) do
-    if Version.compare(version, "1.2.0-rc.0") in [:eq, :gt],
-        do: "18",
-      else: "17"
+    case Version.parse(version) do
+      {:ok, version} ->
+        if Version.compare(version, "1.2.0-rc.0") in [:eq, :gt],
+            do: "18",
+          else: "17"
+      :error ->
+        # For v1.2, v1.3, ..., that fail the version parse
+        "18"
+    end
   end
   defp erlang_version(_version), do: "18"
 
