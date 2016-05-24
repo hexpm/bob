@@ -28,6 +28,8 @@ defmodule Bob.Queue do
           task
       end
 
+    clean_temp_dirs()
+
     state = %{state | building: false}
     state = update_in(state.tasks, &Map.delete(&1, task))
     state = dequeue(state)
@@ -68,6 +70,13 @@ defmodule Bob.Queue do
       Bob.Builder.build(repo, ref, jobs, dir)
     end)
     IO.puts "COMPLETED #{repo.name} #{ref} (#{dir}) (#{time / 1_000_000}s)"
+  end
+
+  defp clean_temp_dirs do
+    File.ls!("tmp")
+    |> Enum.sort_by(&(File.stat!(&1).mtime), &>=2)
+    |> Enum.drop(10)
+    |> Enum.map(&File.rm_rf!/1)
   end
 
   defp new_state do

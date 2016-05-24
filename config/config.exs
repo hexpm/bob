@@ -31,9 +31,4 @@ config :ex_aws,
 
 config :ex_aws, :httpoison_opts,
   recv_timeout: 30_000,
-  hackney: [pool: false]
-
-config :ex_aws, :s3,
-  scheme: "http://",
-  host: "s3.amazonaws.com",
-  region: "us-east-1"
+  hackney: [pool: true]
