@@ -74,7 +74,7 @@ defmodule Bob.Queue do
 
   defp clean_temp_dirs do
     File.ls!("tmp")
-    |> Enum.sort_by(&(File.stat!(&1).mtime), &>=2)
+    |> Enum.sort_by(&(File.stat!(&1).mtime), &>=/2)
     |> Enum.drop(10)
     |> Enum.map(&File.rm_rf!/1)
   end
