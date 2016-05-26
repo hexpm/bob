@@ -33,14 +33,11 @@ defmodule Bob.Router do
     ref       = parse_ref(request["ref"])
     full_name = request["repository"]["full_name"]
     repos     = Application.get_env(:bob, :repos)
-    repo      = repos[full_name]
-    jobs      = repo.on.push
+    repo_key  = repos[full_name]
+    repo      = Application.get_env(:bob, repo_key)
+    action    = repo[:github]
 
-    case event do
-      "push"   -> Bob.Queue.build(repo, ref, jobs)
-      "create" -> Bob.Queue.build(repo, ref, jobs)
-      "delete" -> Bob.S3.delete(Bob.upload_path(repo.name, ref))
-    end
+    Bob.Queue.run(repo_key, :github, action, [event, ref])
   end
 
   defp parse_ref("refs/heads/" <> ref), do: ref

@@ -14,8 +14,7 @@ defmodule Bob.Mixfile do
   #
   # Type `mix help compile.app` for more information
   def application do
-    [applications: [:cowboy, :plug, :poison, :ex_aws, :sweet_xml, :httpoison,
-                    :porcelain],
+    [applications: [:cowboy, :plug, :poison, :porcelain],
      mod: {Bob, []}]
   end
 
@@ -29,12 +28,9 @@ defmodule Bob.Mixfile do
   #
   # Type `mix help deps` for more examples and options
   defp deps do
-    [{:plug, "~> 0.8.0"},
+    [{:plug, "~> 1.0"},
      {:cowboy, ">= 0.0.0"},
-     {:poison, "~> 1.0"},
-     {:ex_aws, ">= 0.4.0"},
-     {:sweet_xml, ">= 0.0.0"},
-     {:httpoison, "~> 0.0"},
-     {:porcelain, "~> 1.1"}]
+     {:poison, "~> 2.0"},
+     {:porcelain, "~> 2.0"}]
   end
 end

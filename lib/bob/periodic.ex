@@ -1,34 +1,33 @@
-defmodule Bob.Periodic do  use GenServer
+defmodule Bob.Periodic do
+  use GenServer
+
+  @seconds_min  60
+  @seconds_hour 60 * 60
+  @seconds_day  60 * 60 * 24
+
   def start_link do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
-  @seconds_day 24 * 60 * 60
-  @seconds_hour 60 * 60
-  @seconds_min 60
-
   def init([]) do
-    repos = Application.get_env(:bob, :repos)
+    env = Application.get_env(:bob, :periodic)
 
-    Enum.each(repos, fn {full_name, repo} ->
-      Enum.each(repo.on.time, fn {time, {_, ref, jobs}} ->
-        ms = calc_when(time) * 1000
-        :erlang.send_after(ms, self, {:task, full_name, time, ref, jobs})
-      end)
+    Enum.each(env, fn {name, key} ->
+      opts = Application.get_env(:bob, name)[key]
+
+      :day = opts[:period]
+      ms = calc_when(opts[:time]) * 1000
+      :erlang.send_after(ms, self, {:task, name, opts[:time], opts[:action]})
     end)
 
     {:ok, []}
   end
 
-  def handle_info({:task, full_name, time, ref, jobs}, _) do
-    repos = Application.get_env(:bob, :repos)
-    repo = repos[full_name]
+  def handle_info({:task, name, time, action}, _) do
+    ms = @seconds_day * 1000
+    :erlang.send_after(ms, self, {:task, name, time, action})
 
-    {secs, _, _} = repo.on.time[time]
-    ms = secs * 1000
-    :erlang.send_after(ms, self, {:task, full_name, time, ref, jobs})
-
-    Bob.Queue.build(repo, ref, jobs)
+    Bob.Queue.run(name, :period, action, [])
     {:noreply, []}
   end
 
@@ -38,11 +37,9 @@ defmodule Bob.Periodic do  use GenServer
     time = time_to_seconds(time)
     diff = time - now
 
-    if diff < 0 do
-      diff = @seconds_day + diff
-    end
-
-    diff
+    if diff < 0,
+      do: @seconds_day + diff,
+    else: diff
   end
 
   defp time_to_seconds({hour, min, sec}) do
