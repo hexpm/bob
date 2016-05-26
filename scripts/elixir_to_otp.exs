@@ -1,3 +1,5 @@
+#!/usr/bin/env elixir
+
 [elixir] = System.argv
 
 case elixir do

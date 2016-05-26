@@ -1,3 +1,5 @@
+#!/bin/sh
+
 set -e -u
 
 PATH=$(pwd)/elixir/bin:${PATH}
