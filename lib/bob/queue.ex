@@ -85,7 +85,7 @@ defmodule Bob.Queue do
         {:script, script} ->
           Path.join("scripts", script)
           |> Path.expand
-          |> Porcelain.spawn(args, out: {:file, log}, err: :out, dir: dir)
+          |> Porcelain.exec(args, out: {:file, log}, err: :out, dir: dir)
       end
 
     unless status == 0 do
