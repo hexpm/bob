@@ -6,13 +6,20 @@ config :bob, :elixir,
   zip:      [cmd: "cd elixir && make Precompiled.zip && mv *.zip build.zip"],
   periodic: [
     period: :day,
-    time:   {2, 0, 0},
+    time:   {0, 0, 0},
     action: [script: "elixir_docs.sh"]
+  ]
+
+config :bob, :hex,
+  periodic: [
+    period: :day,
+    time:   {3, 0, 0},
+    action: [script: "backup_s3.sh"]
   ]
 
 config :bob,
   repos:         %{"elixir-lang" => :elixir},
-  periodic:      [elixir: :periodic],
+  periodic:      [elixir: :periodic, hex: :periodic],
 # github_token:  System.get_env("BOB_GITHUB_TOKEN"),
   github_secret: System.get_env("BOB_GITHUB_SECRET")
 
