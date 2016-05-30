@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # $1 = event
 # $2 = ref
