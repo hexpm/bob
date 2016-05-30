@@ -19,7 +19,7 @@ config :bob, :hex,
   ]
 
 config :bob,
-  repos:         %{"elixir-lang" => :elixir},
+  repos:         %{"elixir-lang/elixir" => :elixir},
   periodic:      [elixir: :periodic, hex: :periodic],
 # github_token:  System.get_env("BOB_GITHUB_TOKEN"),
   github_secret: System.get_env("BOB_GITHUB_SECRET")
