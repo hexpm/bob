@@ -5,12 +5,12 @@ defmodule Bob.Queue do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
 
-  def run(repo, type, action, args) do
-    GenServer.call(__MODULE__, {:run, repo, type, action, args})
+  def run(repo, type, action, args, dir) do
+    GenServer.call(__MODULE__, {:run, repo, type, action, args, dir})
   end
 
-  def handle_call({:run, repo, type, action, args}, _from, state) do
-    state = update_in(state.queue, &:queue.in({repo, type, action, args}, &1))
+  def handle_call({:run, repo, type, action, args, dir}, _from, state) do
+    state = update_in(state.queue, &:queue.in({repo, type, action, args, dir}, &1))
     state = dequeue(state)
 
     {:reply, :ok, state}
@@ -42,8 +42,8 @@ defmodule Bob.Queue do
 
   defp dequeue(state) do
     case :queue.out(state.queue) do
-      {{:value, {name, type, action, args}}, queue} ->
-        temp_dir = temp_dir()
+      {{:value, {name, type, action, args, dir}}, queue} ->
+        temp_dir = temp_dir(dir, {name, type})
         now      = :calendar.local_time
         IO.puts "BUILDING #{name} #{type} #{inspect action} #{inspect(args)} (#{temp_dir}) (#{Bob.format_datetime(now)})"
 
@@ -100,7 +100,14 @@ defmodule Bob.Queue do
     |> Enum.each(&File.rm_rf!/1)
   end
 
-  defp temp_dir do
+  defp temp_dir(:persist, {name, type}) do
+    path = Path.join("tmp", "#{name}-#{type}")
+    File.mkdir_p!(path)
+
+    path
+  end
+
+  defp temp_dir(:temp, _name_type) do
     random =
       :crypto.strong_rand_bytes(16)
       |> Base.encode16(case: :lower)

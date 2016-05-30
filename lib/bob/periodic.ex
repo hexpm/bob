@@ -17,17 +17,18 @@ defmodule Bob.Periodic do
 
       :day = opts[:period]
       ms = calc_when(opts[:time]) * 1000
-      :erlang.send_after(ms, self, {:task, name, opts[:time], opts[:action]})
+      dir = opts[:dir] || :temp
+      :erlang.send_after(ms, self, {:task, name, opts[:time], opts[:action], dir})
     end)
 
     {:ok, []}
   end
 
-  def handle_info({:task, name, time, action}, _) do
+  def handle_info({:task, name, time, action, dir}, _) do
     ms = @seconds_day * 1000
-    :erlang.send_after(ms, self, {:task, name, time, action})
+    :erlang.send_after(ms, self, {:task, name, time, action, dir})
 
-    Bob.Queue.run(name, :period, action, [])
+    Bob.Queue.run(name, :period, action, [], dir)
     {:noreply, []}
   end
 

@@ -14,7 +14,8 @@ config :bob, :hex,
   periodic: [
     period: :day,
     time:   {3, 0, 0},
-    action: [script: "backup_s3.sh"]
+    action: [script: "backup_s3.sh"],
+    dir:    :persist
   ]
 
 config :bob,

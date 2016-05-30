@@ -37,7 +37,7 @@ defmodule Bob.Router do
     repo      = Application.get_env(:bob, repo_key)
     action    = repo[:github]
 
-    Bob.Queue.run(repo_key, :github, action, [event, ref])
+    Bob.Queue.run(repo_key, :github, action, [event, ref], :temp)
   end
 
   defp parse_ref("refs/heads/" <> ref), do: ref
