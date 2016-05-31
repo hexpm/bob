@@ -30,8 +30,8 @@ gzip -9 logs-fastly.txt
 echo ""
 echo "### upload ###"
 tarsnap -c -f hex-s3-${today} hex-s3
-aws s3 cp logs-s3.txt.gz s3://backup.hex.pm/logs/daily/hex-s3-${yesterday}.txt
-aws s3 cp logs-fastly.txt.gz s3://backup.hex.pm/logs/daily/hex-fastly-${yesterday}.txt
+aws s3 cp logs-s3.txt.gz s3://backup.hex.pm/logs/daily/hex-s3-${yesterday}.txt.gz
+aws s3 cp logs-fastly.txt.gz s3://backup.hex.pm/logs/daily/hex-fastly-${yesterday}.txt.gz
 
 echo ""
 echo "### clean up ###"
