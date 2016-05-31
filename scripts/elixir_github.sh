@@ -22,8 +22,8 @@ function build {
   otp $1
 
   make
-  make Precompiled.zip
-  aws s3 cp Precompiled*.zip s3://s3.hex.pm/builds/elixir/${1}.zip --acl public-read --cache-control "public, max-age=604800" --metadata "surrogate-key=builds"
+  make Precompiled.zip || make release_zip
+  aws s3 cp *.zip s3://s3.hex.pm/builds/elixir/${1}.zip --acl public-read --cache-control "public, max-age=604800" --metadata "surrogate-key=builds"
   fastly_purge
 
   popd
