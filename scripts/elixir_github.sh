@@ -42,10 +42,10 @@ function otp {
   otp_version=$(elixir ${cwd}/../../scripts/elixir_to_otp.exs "$1")
   case "${otp_version}" in
     "17")
-      echo -e "erlang ref-OTP-17.5.6.9" > .tool-versions
+      echo -e "erlang 17.5" > .tool-versions
       ;;
     "18")
-      echo -e "erlang ref-OTP-18.3.3" > .tool-versions
+      echo -e "erlang 18.3" > .tool-versions
       ;;
   esac
 }
