@@ -3,8 +3,8 @@
 [elixir] = System.argv
 
 case elixir do
-  "v1.0" -> "17"
-  "v1.1" -> "17"
+  "v1.0" <> _ -> "17"
+  "v1.1" <> _ -> "17"
   "v" <> version ->
     case Version.parse(version) do
       {:ok, version} ->

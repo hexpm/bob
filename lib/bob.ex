@@ -20,13 +20,13 @@ defmodule Bob do
     else: 4000
   end
 
-  def upload_path(name, ref) do
-    "builds/#{name}/#{ref}.zip"
-  end
-
   def format_datetime({{year, month, day}, {hour, min, sec}}) do
     list = [year, month, day, hour, min, sec]
     :io_lib.format("~4..0B-~2..0B-~2..0B ~2..0B:~2..0B:~2..0B", list)
     |> IO.iodata_to_binary
+  end
+
+  def build_elixir(ref) do
+    Bob.Queue.run(:elixir, :github, [script: "elixir_github.sh"], ["push", ref], :temp)
   end
 end
