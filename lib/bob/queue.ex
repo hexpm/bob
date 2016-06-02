@@ -101,7 +101,7 @@ defmodule Bob.Queue do
   end
 
   defp temp_dir(:persist, {name, type}) do
-    path = Path.join("tmp", "#{name}-#{type}")
+    path = Path.join("persist", "#{name}-#{type}")
     File.mkdir_p!(path)
 
     path
