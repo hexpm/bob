@@ -20,6 +20,7 @@ function build {
 
   pushd elixir
   otp $1
+  erl +V
 
   make
   make Precompiled.zip || make release_zip
@@ -40,7 +41,8 @@ function otp {
   rm .tool-versions || true
 
   otp_version=$(elixir ${cwd}/../../scripts/elixir_to_otp.exs "$1")
-  echo -e "erlang ${otp_version}" > .tool-versions
+  echo "Using OTP ${otp_version}"
+  PATH=${HOME}/.asdf/installs/erlang/${otp_version}/bin:${PATH}
 }
 
 cwd=$(pwd)
