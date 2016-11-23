@@ -2,8 +2,6 @@ use Mix.Config
 
 config :bob, :elixir,
   github:   [script: "elixir_github.sh"],
-  build:    [cmd: "cd elixir && make"],
-  zip:      [cmd: "cd elixir && make Precompiled.zip && mv *.zip build.zip"],
   periodic: [
     period: :day,
     time:   {0, 0, 0},

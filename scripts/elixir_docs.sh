@@ -2,8 +2,8 @@
 
 set -e -u
 
-git clone git://github.com/elixir-lang/elixir.git --depth 1 --single-branch
-git clone git://github.com/elixir-lang/ex_doc.git --depth 1 --single-branch
+git clone git://github.com/elixir-lang/elixir.git --quiet --depth 1 --single-branch
+git clone git://github.com/elixir-lang/ex_doc.git --quiet --depth 1 --single-branch
 git clone https://${BOB_GITHUB_TOKEN}@github.com/elixir-lang/docs.git
 
 PATH=$(pwd)/elixir/bin:${PATH}
