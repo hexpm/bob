@@ -18,7 +18,7 @@ function fastly_purge {
 
 # $1 = ref
 function build {
-  git clone git://github.com/elixir-lang/elixir.git --quiet --depth 1 --single-branch --branch ${1}
+  git clone git://github.com/elixir-lang/elixir.git --quiet --branch ${1}
 
   pushd elixir
 
@@ -42,7 +42,8 @@ function upload_build {
 function upload_docs {
   MIX_ARCHIVES=${cwd}/.mix
   PATH=${cwd}/elixir/bin:${PATH}
-  
+  elixir -v
+
   ex_doc_version=$(elixir ${cwd}/../../scripts/elixir_to_ex_doc.exs "$1")
   git clone git://github.com/elixir-lang/ex_doc.git --quiet --depth 1 --single-branch --branch ${ex_doc_version}
 
@@ -57,12 +58,19 @@ function upload_docs {
   pushd elixir
   make docs
 
+  tags=$(git tag)
+  latest_version=$(elixir ${cwd}/../../scripts/latest_version.exs "${tags}")
+
   pushd doc
-  for app in "${APPS[@]}"
-  do
+  for app in "${APPS[@]}"; do
     version=$(echo ${1} | sed 's/^v//g')
     aws s3 cp ${app} s3://hexdocs.pm/${app}/${version} --recursive --acl public-read --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"docspage/${app}/${version}","surrogate-control":"public,max-age=604800"}'
     fastly_purge "docspage/${app}/${version}"
+
+    if [ "${version}" == "${latest_version}" ]; then
+      aws s3 cp ${app} s3://hexdocs.pm/${app} --recursive --acl public-read --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"docspage/${app}","surrogate-control":"public,max-age=604800"}'
+      fastly_purge "docspage/${app}"
+    fi
   done
 
   popd
@@ -74,8 +82,7 @@ function delete {
   aws s3 rm s3://s3.hex.pm/builds/elixir/${1}.zip
   fastly_purge builds
 
-  for app in "${APPS[@]}"
-  do
+  for app in "${APPS[@]}"; do
     version=$(echo ${1} | sed 's/^v//g')
     aws s3 rm s3://hexdocs.pm/${app}/${version} --recursive
     fastly_purge "docspage/${app}/${version}"
