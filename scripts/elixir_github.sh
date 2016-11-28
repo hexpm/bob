@@ -40,6 +40,8 @@ function upload_build {
 }
 
 function upload_docs {
+  version=$(echo ${1} | sed 's/^v//g')
+  
   MIX_ARCHIVES=${cwd}/.mix
   PATH=${cwd}/elixir/bin:${PATH}
   elixir -v
@@ -56,24 +58,31 @@ function upload_docs {
   popd
 
   pushd elixir
-  make docs
+  sed -i -e 's/-n http:\/\/elixir-lang.org\/docs\/\$(CANONICAL)\/\$(2)\//-n https:\/\/hexdocs.pm\/\$(2)\/\$(CANONICAL)/g' Makefile
+  CANONICAL="${version}" make docs
 
   tags=$(git tag)
   latest_version=$(elixir ${cwd}/../../scripts/latest_version.exs "${tags}")
 
   pushd doc
   for app in "${APPS[@]}"; do
-    version=$(echo ${1} | sed 's/^v//g')
     aws s3 cp ${app} s3://hexdocs.pm/${app}/${version} --recursive --acl public-read --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"docspage/${app}/${version}","surrogate-control":"public,max-age=604800"}'
     fastly_purge "docspage/${app}/${version}"
+  done
+  popd
 
-    if [ "${version}" == "${latest_version}" ]; then
+  if [ "${version}" == "${latest_version}" ]; then
+    rm -rf doc
+    CANONICAL="" make docs
+
+    pushd doc
+    for app in "${APPS[@]}"; do
       aws s3 cp ${app} s3://hexdocs.pm/${app} --recursive --acl public-read --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"docspage/${app}","surrogate-control":"public,max-age=604800"}'
       fastly_purge "docspage/${app}"
-    fi
-  done
+    done
+    popd
+  fi
 
-  popd
   popd
 }
 
