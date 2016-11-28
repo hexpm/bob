@@ -46,14 +46,17 @@ function upload_docs {
   PATH=${cwd}/elixir/bin:${PATH}
   elixir -v
 
-  ex_doc_version=$(elixir ${cwd}/../../scripts/elixir_to_ex_doc.exs "$1")
-  git clone git://github.com/elixir-lang/ex_doc.git --quiet --depth 1 --single-branch --branch ${ex_doc_version}
-
   mix local.hex --force
   mkdir docs
   cp ../../priv/logo.png docs/logo.png
 
+  git clone git://github.com/elixir-lang/ex_doc.git --quiet
+
   pushd ex_doc
+  tags=$(git tag)
+  latest_version=$(elixir ${scripts}/latest_version.exs "${tags}")
+  ex_doc_version=$(elixir ${scripts}/elixir_to_ex_doc.exs "${1}" "${latest_version}")
+  git checkout ${ex_doc_version}
   mix do deps.get, compile --no-elixir-version-check
   popd
 
@@ -63,7 +66,7 @@ function upload_docs {
   CANONICAL="${version}" make docs
 
   tags=$(git tag)
-  latest_version=$(elixir ${cwd}/../../scripts/latest_version.exs "${tags}")
+  latest_version=$(elixir ${scripts}/latest_version.exs "${tags}")
 
   pushd doc
   for app in "${APPS[@]}"; do
@@ -103,12 +106,13 @@ function delete {
 function otp {
   rm .tool-versions || true
 
-  otp_version=$(elixir ${cwd}/../../scripts/elixir_to_otp.exs "$1")
+  otp_version=$(elixir ${scripts}/elixir_to_otp.exs "$1")
   echo "Using OTP ${otp_version}"
   PATH=${HOME}/.asdf/installs/erlang/${otp_version}/bin:${PATH}
 }
 
 cwd=$(pwd)
+scripts="${cwd}/../../scripts"
 
 case "$1" in
   "push" | "create")
