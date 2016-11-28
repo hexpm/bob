@@ -16,22 +16,20 @@ defmodule Bob.Queue do
     {:reply, :ok, state}
   end
 
-  def handle_info(msg, state) do
-    task =
-      case Task.find(Map.keys(state.tasks), msg) do
-        {:ok, task} ->
-          task
-        {{:error, kind, error, stacktrace}, task} ->
-          %{dir: dir, name: name, type: type, action: action, args: args} = Map.get(state.tasks, task)
-          IO.puts "FAILED #{name} #{type} #{inspect action} #{inspect(args)} (#{dir})"
-          Bob.log_error(kind, error, stacktrace)
-          task
-      end
+  def handle_info({ref, result}, state) do
+    case result do
+      :ok ->
+        :ok
+      {:error, kind, error, stacktrace} ->
+        %{dir: dir, name: name, type: type, action: action, args: args} = Map.get(state.tasks, ref)
+        IO.puts "FAILED #{name} #{type} #{inspect action} #{inspect(args)} (#{dir})"
+        Bob.log_error(kind, error, stacktrace)
+    end
 
     clean_temp_dirs()
 
     state = %{state | building: false}
-    state = update_in(state.tasks, &Map.delete(&1, task))
+    state = update_in(state.tasks, &Map.delete(&1, ref))
     state = dequeue(state)
     {:noreply, state}
   end
@@ -59,7 +57,7 @@ defmodule Bob.Queue do
 
         map = %{dir: temp_dir, name: name, type: type, action: action, args: args}
         state = %{state | building: true}
-        state = put_in(state.tasks[task], map)
+        state = put_in(state.tasks[task.ref], map)
         put_in(state.queue, queue)
       {:empty, _queue} ->
         state
