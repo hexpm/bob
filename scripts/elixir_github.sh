@@ -41,7 +41,7 @@ function upload_build {
 
 function upload_docs {
   version=$(echo ${1} | sed 's/^v//g')
-  
+
   MIX_ARCHIVES=${cwd}/.mix
   PATH=${cwd}/elixir/bin:${PATH}
   elixir -v
@@ -59,6 +59,7 @@ function upload_docs {
 
   pushd elixir
   sed -i -e 's/-n http:\/\/elixir-lang.org\/docs\/\$(CANONICAL)\/\$(2)\//-n https:\/\/hexdocs.pm\/\$(2)\/\$(CANONICAL)/g' Makefile
+  sed -i -e 's/-a http:\/\/elixir-lang.org\/docs\/\$(CANONICAL)\/\$(2)\//-a https:\/\/hexdocs.pm\/\$(2)\/\$(CANONICAL)/g' Makefile
   CANONICAL="${version}" make docs
 
   tags=$(git tag)
