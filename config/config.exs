@@ -1,12 +1,7 @@
 use Mix.Config
 
 config :bob, :elixir,
-  github:   [script: "elixir_github.sh"],
-  periodic: [
-    period: :day,
-    time:   {0, 0, 0},
-    action: [script: "elixir_docs.sh"]
-  ]
+  github:   [script: "elixir_github.sh"]
 
 config :bob, :hex,
   periodic: [
@@ -18,7 +13,7 @@ config :bob, :hex,
 
 config :bob,
   repos:         %{"elixir-lang/elixir" => :elixir},
-  periodic:      [elixir: :periodic, hex: :periodic],
+  periodic:      [hex: :periodic],
 # github_token:  System.get_env("BOB_GITHUB_TOKEN"),
   github_secret: System.get_env("BOB_GITHUB_SECRET")
 
