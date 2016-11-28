@@ -34,6 +34,10 @@ defmodule Bob.Queue do
     {:noreply, state}
   end
 
+  def handle_info({:DOWN, _ref, :process, _pid, :normal}, state) do
+    {:noreply, state}
+  end
+
   defp dequeue(%{building: true} = state) do
     state
   end
