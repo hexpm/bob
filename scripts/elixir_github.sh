@@ -70,7 +70,7 @@ function upload_docs {
 
   pushd doc
   for app in "${APPS[@]}"; do
-    aws s3 cp ${app} s3://hexdocs.pm/${app}/${version} --recursive --acl public-read --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"docspage/${app}/${version}","surrogate-control":"public,max-age=604800"}'
+    aws s3 cp ${app} s3://hexdocs.pm/${app}/${version} --recursive --acl public-read --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}/${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
     fastly_purge "docspage/${app}/${version}"
   done
   popd
@@ -81,7 +81,7 @@ function upload_docs {
 
     pushd doc
     for app in "${APPS[@]}"; do
-      aws s3 cp ${app} s3://hexdocs.pm/${app} --recursive --acl public-read --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"docspage/${app}","surrogate-control":"public,max-age=604800"}'
+      aws s3 cp ${app} s3://hexdocs.pm/${app} --recursive --acl public-read --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}\",\"surrogate-control\":\"public,max-age=604800\"}"
       fastly_purge "docspage/${app}"
     done
     popd
