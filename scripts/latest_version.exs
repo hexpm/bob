@@ -11,7 +11,7 @@ versions =
 
 stable =
   versions
-  |> Enum.filter(&({:ok, v} = Version.parse(&1); v.pre == []))
+  |> Enum.filter(&(elem(Version.parse(&1), 1).pre == []))
   |> List.first
 
 (stable || List.first(versions))
