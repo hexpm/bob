@@ -1,11 +1,18 @@
 #!/usr/bin/env elixir
 
-System.argv
-|> hd
-|> String.split(~r"(\s|\n)", trim: true)
-|> Enum.filter(&(String.at(&1, 0) == "v"))
-|> Enum.map(fn "v" <> version -> version end)
-|> Enum.filter(&match?({:ok, _}, Version.parse(&1)))
-|> Enum.sort_by(&(&1), &(Version.compare(&1, &2) != :lt))
-|> List.first
+versions =
+  System.argv
+  |> hd
+  |> String.split(~r"(\s|\n)", trim: true)
+  |> Enum.filter(&(String.at(&1, 0) == "v"))
+  |> Enum.map(fn "v" <> version -> version end)
+  |> Enum.filter(&match?({:ok, _}, Version.parse(&1)))
+  |> Enum.sort_by(&(&1), &(Version.compare(&1, &2) != :lt))
+
+stable =
+  versions
+  |> Enum.filter(&({:ok, v} = Version.parse(&1); v.pre == []))
+  |> List.first
+
+(stable || List.first(versions))
 |> IO.puts
