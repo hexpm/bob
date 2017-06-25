@@ -9,6 +9,8 @@ APPS=(eex elixir ex_unit iex logger mix)
 HEXPM=$BOB_FASTLY_SERVICE_HEXPM
 HEXDOCS=$BOB_FASTLY_SERVICE_HEXDOCS
 
+# $1 = service
+# $2 = key
 function fastly_purge {
   curl \
     -X POST \
@@ -19,28 +21,66 @@ function fastly_purge {
 }
 
 # $1 = ref
+function push {
+  rm .tool-versions || true
+  original_path=${PATH}
+  otp_versions=($(elixir "${scripts}/elixir_to_otp.exs" "$1"))
+
+  echo "Available OTP ${otp_versions[@]}"
+
+  otp_version=${otp_versions[0]}
+  echo "Using OTP ${otp_version}"
+  PATH="${HOME}/.asdf/installs/erlang/${otp_version}/bin:${original_path}"
+  otp_string=$(otp_string ${otp_version})
+  build "$1"
+  upload_build "$1" ""
+  upload_build "$1" "${otp_string}"
+  upload_docs "$1"
+
+  for otp_version in "${otp_versions[@]:0}"; do
+    echo "Using OTP ${otp_version}"
+    PATH="${HOME}/.asdf/installs/erlang/${otp_version}/bin:${original_path}"
+
+    otp_string=$(otp_string ${otp_version})
+    build "$1"
+    upload_build "$1" "${otp_string}"
+  done
+}
+
+# $1 = version
+function otp_string {
+  otp_string=$(echo "$1" | awk 'match($0, /^[0-9][0-9]/) { print substr( $0, RSTART, RLENGTH )}')
+  otp_string="-otp-${otp_string}"
+  echo "${otp_string}"
+}
+
+# $1 = ref
 function build {
+  rm -rf elixir || true
   git clone git://github.com/elixir-lang/elixir.git --quiet --branch "${1}"
 
   pushd elixir
 
-  otp "$1"
   erl +V
+  make clean
   make compile
 
   popd
 }
 
+# $1 = ref
+# $2 = otp
 function upload_build {
   pushd elixir
 
   make Precompiled.zip || make release_zip
-  aws s3 cp *.zip "s3://s3.hex.pm/builds/elixir/${1}.zip" --acl public-read --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+  aws s3 cp *.zip "s3://s3.hex.pm/builds/elixir/${1}${2}.zip" --acl public-read --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
   fastly_purge $HEXPM builds
 
   popd
 }
 
+# $1 = ref
 function upload_docs {
   version=$(echo "${1}" | sed 's/^v//g')
 
@@ -102,7 +142,7 @@ function delete {
 
   for app in "${APPS[@]}"; do
     version=$(echo "${1}" | sed 's/^v//g')
-    
+
     aws s3 rm "s3://s3.hex.pm/docs/${app}-${version}.tar.gz"
     fastly_purge $HEXPM builds
 
@@ -111,23 +151,12 @@ function delete {
   done
 }
 
-# $1 = ref
-function otp {
-  rm .tool-versions || true
-
-  otp_version=$(elixir "${scripts}/elixir_to_otp.exs" "$1")
-  echo "Using OTP ${otp_version}"
-  PATH="${HOME}/.asdf/installs/erlang/${otp_version}/bin:${PATH}"
-}
-
 cwd=$(pwd)
 scripts="${cwd}/../../scripts"
 
 case "$1" in
   "push" | "create")
-    build "$2"
-    upload_build "$2"
-    upload_docs "$2"
+    push "$2"
     ;;
   "delete")
     delete "$2"
