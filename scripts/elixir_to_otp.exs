@@ -17,6 +17,7 @@ case elixir do
   "v1.4"      -> ["18.3", "19.3", "20.0"]
   "v1.4" <> _ -> ["18.3", "19.3"]
   "v1.5" <> _ -> ["18.3", "19.3", "20.0"]
+  # Assume all other branches support the same versions as master
   _           -> ["19.3", "20.0"]
 end
 |> Enum.join(" ")
