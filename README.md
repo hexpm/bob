@@ -24,7 +24,7 @@ On  git pushes documentation is built and pushed to `https://hexdocs.pm/{APPLICA
   * https://hexdocs.pm/elixir/master
   * https://hexdocs.pm/mix/1.4.5
 
-Documentation tarballs are also uploaded to https://repo.hex.pm/docs/{APPLICATION}-{VERSION}.tar.gz, examples are:
+Documentation tarballs are also uploaded to `https://repo.hex.pm/docs/{APPLICATION}-{VERSION}.tar.gz`, examples are:
 
   * https://repo.hex.pm/docs/elixir-master.tar.gz
   * https://repo.hex.pm/docs/mix-1.4.5.tar.gz
