@@ -139,6 +139,7 @@ function upload_docs {
 # $1 = ref
 function delete {
   aws s3 rm "s3://s3.hex.pm/builds/elixir/${1}.zip"
+  aws s3 rm "s3://s3.hex.pm" --recursive --exclude "*" --include "builds/elixir/${1}-otp-*.zip"
 
   for app in "${APPS[@]}"; do
     version=$(echo "${1}" | sed 's/^v//g')
