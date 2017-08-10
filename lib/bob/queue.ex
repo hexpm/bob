@@ -1,7 +1,7 @@
 defmodule Bob.Queue do
   use GenServer
 
-  def start_link do
+  def start_link() do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
 
@@ -95,7 +95,7 @@ defmodule Bob.Queue do
     end
   end
 
-  defp clean_temp_dirs do
+  defp clean_temp_dirs() do
     Path.wildcard("tmp/*")
     |> Enum.sort_by(&(File.stat!(&1).mtime), &>=/2)
     |> Enum.drop(10)

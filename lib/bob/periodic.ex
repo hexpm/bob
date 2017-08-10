@@ -5,7 +5,7 @@ defmodule Bob.Periodic do
   @seconds_hour 60 * 60
   @seconds_day  60 * 60 * 24
 
-  def start_link do
+  def start_link() do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
@@ -18,7 +18,7 @@ defmodule Bob.Periodic do
       :day = opts[:period]
       ms = calc_when(opts[:time]) * 1000
       dir = opts[:dir] || :temp
-      :erlang.send_after(ms, self, {:task, name, opts[:time], opts[:action], dir})
+      :erlang.send_after(ms, self(), {:task, name, opts[:time], opts[:action], dir})
     end)
 
     {:ok, []}
@@ -26,7 +26,7 @@ defmodule Bob.Periodic do
 
   def handle_info({:task, name, time, action, dir}, _) do
     ms = @seconds_day * 1000
-    :erlang.send_after(ms, self, {:task, name, time, action, dir})
+    :erlang.send_after(ms, self(), {:task, name, time, action, dir})
 
     Bob.Queue.run(name, :period, action, [], dir)
     {:noreply, []}
@@ -38,9 +38,11 @@ defmodule Bob.Periodic do
     time = time_to_seconds(time)
     diff = time - now
 
-    if diff < 0,
-      do: @seconds_day + diff,
-    else: diff
+    if diff < 0 do
+      @seconds_day + diff
+    else
+      diff
+    end
   end
 
   defp time_to_seconds({hour, min, sec}) do

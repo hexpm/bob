@@ -9,7 +9,7 @@ defmodule Bob.Plugs.Exception do
     catch
       kind, error ->
         stacktrace = System.stacktrace
-        status     = Plug.Exception.status(error)
+        status = Plug.Exception.status(error)
 
         if status == 500, do: Bob.log_error(kind, error, stacktrace)
 

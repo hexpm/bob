@@ -14,10 +14,12 @@ defmodule Bob do
                      Exception.format_stacktrace(stacktrace))
   end
 
-  defp port do
-    if port = System.get_env("PORT"),
-      do: String.to_integer(port),
-    else: 4000
+  defp port() do
+    if port = System.get_env("PORT") do
+      String.to_integer(port)
+    else
+      4000
+    end
   end
 
   def format_datetime({{year, month, day}, {hour, min, sec}}) do
@@ -28,5 +30,9 @@ defmodule Bob do
 
   def build_elixir(ref) do
     Bob.Queue.run(:elixir, :github, [script: "elixir_github.sh"], ["push", ref], :temp)
+  end
+
+  def build_guides() do
+    Bob.Queue.run(:elixir_guides, :github, [script: "elixir_guides_github.sh"], ["push", "master"], :temp)
   end
 end
