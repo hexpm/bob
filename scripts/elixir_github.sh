@@ -35,7 +35,6 @@ function push {
   build "$1"
   upload_build "$1" ""
   upload_build "$1" "${otp_string}"
-  upload_docs "$1"
 
   for otp_version in "${otp_versions[@]:0}"; do
     echo "Using OTP ${otp_version}"
@@ -45,6 +44,10 @@ function push {
     build "$1"
     upload_build "$1" "${otp_string}"
   done
+
+  upload_docs "$1"
+
+  PATH=${original_path}
 }
 
 # $1 = version
@@ -99,7 +102,8 @@ function upload_docs {
   latest_version=$(elixir ${scripts}/latest_version.exs "${tags}")
   ex_doc_version=$(elixir ${scripts}/elixir_to_ex_doc.exs "${1}" "${latest_version}")
   git checkout "${ex_doc_version}"
-  mix do deps.get, compile --no-elixir-version-check
+  mix deps.get
+  mix compile --no-elixir-version-check
   popd
 
   pushd elixir
