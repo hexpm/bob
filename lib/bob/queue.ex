@@ -10,8 +10,15 @@ defmodule Bob.Queue do
   end
 
   def handle_call({:run, repo, type, action, args, dir}, _from, state) do
-    state = update_in(state.queue, &:queue.in({repo, type, action, args, dir}, &1))
-    state = dequeue(state)
+    action = {repo, type, action, args, dir}
+    state =
+      if :queue.member(action, state.queue) do
+        IO.puts "DUPLICATE #{name} #{type} #{inspect action} #{inspect(args)} (#{dir})"
+        state
+      else
+        state = update_in(state.queue, &:queue.in(action, &1))
+        dequeue(state)
+      end
 
     {:reply, :ok, state}
   end
