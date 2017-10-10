@@ -13,7 +13,7 @@ defmodule Bob.Queue do
     action = {repo, type, action, args, dir}
     state =
       if :queue.member(action, state.queue) do
-        IO.puts "DUPLICATE #{name} #{type} #{inspect action} #{inspect(args)} (#{dir})"
+        IO.puts "DUPLICATE #{repo} #{type} #{inspect action} #{inspect(args)} (#{dir})"
         state
       else
         state = update_in(state.queue, &:queue.in(action, &1))
