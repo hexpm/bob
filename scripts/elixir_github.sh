@@ -77,7 +77,7 @@ function upload_build {
   pushd elixir
 
   make Precompiled.zip || make release_zip
-  aws s3 cp *.zip "s3://s3.hex.pm/builds/elixir/${1}${2}.zip" --acl public-read --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+  aws s3 cp *.zip "s3://s3.hex.pm/builds/elixir/${1}${2}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
   fastly_purge $HEXPM builds
 
   popd
@@ -116,11 +116,11 @@ function upload_docs {
 
   pushd doc
   for app in "${APPS[@]}"; do
-    aws s3 cp "${app}" "s3://hexdocs.pm/${app}/${version}" --recursive --acl public-read --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}/${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
+    aws s3 cp "${app}" "s3://hexdocs.pm/${app}/${version}" --recursive --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}/${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
     fastly_purge $HEXDOCS "docspage/${app}/${version}"
 
     tar -czf "${app}-${version}.tar.gz" -C "${app}" .
-    aws s3 cp "${app}-${version}.tar.gz" "s3://s3.hex.pm/docs/${app}-${version}.tar.gz" --acl public-read --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docs/${app}-${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
+    aws s3 cp "${app}-${version}.tar.gz" "s3://s3.hex.pm/docs/${app}-${version}.tar.gz" --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docs/${app}-${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
     fastly_purge $HEXPM "docs/${app}-${version}"
   done
   popd
@@ -131,7 +131,7 @@ function upload_docs {
 
     pushd doc
     for app in "${APPS[@]}"; do
-      aws s3 cp "${app}" "s3://hexdocs.pm/${app}" --recursive --acl public-read --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}\",\"surrogate-control\":\"public,max-age=604800\"}"
+      aws s3 cp "${app}" "s3://hexdocs.pm/${app}" --recursive --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}\",\"surrogate-control\":\"public,max-age=604800\"}"
       fastly_purge $HEXDOCS "docspage/${app}"
     done
     popd

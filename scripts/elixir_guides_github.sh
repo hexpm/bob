@@ -35,7 +35,7 @@ function push {
   for file in *.epub
   do
     echo $file
-    aws s3 cp "${file}" "s3://s3.hex.pm/guides/elixir/${file}" --acl public-read --content-type "application/epub+zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"guides","surrogate-control":"public,max-age=604800"}'
+    aws s3 cp "${file}" "s3://s3.hex.pm/guides/elixir/${file}" --content-type "application/epub+zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"guides","surrogate-control":"public,max-age=604800"}'
   done
 
   fastly_purge $HEXPM guides
