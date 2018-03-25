@@ -32,7 +32,12 @@ defmodule Bob do
     Bob.Queue.run(:elixir, :github, [script: "elixir_github.sh"], ["push", ref], :temp)
   end
 
-  def build_guides() do
+  def build_otp(ref_name) do
+    ref = Bob.GitHub.fetch_repo_refs("erlang/otp") |> Map.new() |> Map.fetch!(ref_name)
+    Bob.Queue.run(:otp, :github, [script: "build_otp_docker.sh"], [ref_name, ref], :temp)
+  end
+
+  def build_elixir_guides() do
     Bob.Queue.run(:elixir_guides, :github, [script: "elixir_guides_github.sh"], ["push", "master"], :temp)
   end
 end

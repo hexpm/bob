@@ -20,14 +20,32 @@ config :bob, :hex,
     dir: :temp
   ]
 
+config :bob, :otp,
+  build: [
+    period: {15, :min},
+    action: [github: "erlang/otp"],
+    dir: :temp
+  ],
+  github: [script: "build_otp_docker.sh"]
+
 config :bob,
   repos: %{
     "elixir-lang/elixir" => :elixir,
-    "elixir-lang/elixir-lang.github.com" => :elixir_guides
+    "elixir-lang/elixir-lang.github.com" => :elixir_guides,
+    "erlang/otp" => :otp
   },
-  periodic: [hex: :backup_s3, hex: :backup_db],
-  github_secret: System.get_env("BOB_GITHUB_SECRET")
-# github_token: System.get_env("BOB_GITHUB_TOKEN")
+  periodic: [
+    hex: :backup_s3,
+    hex: :backup_db,
+    otp: :build
+  ],
+  github_secret: System.get_env("BOB_GITHUB_SECRET"),
+  github_user: System.get_env("BOB_GITHUB_USER"),
+  github_token: System.get_env("BOB_GITHUB_TOKEN")
 
 config :porcelain,
   driver: Porcelain.Driver.Basic
+
+config :ex_aws,
+  access_key_id: {:system, "BOB_S3_ACCESS_KEY"},
+  secret_access_key: {:system, "BOB_S3_SECRET_KEY"}

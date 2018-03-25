@@ -10,6 +10,9 @@ defmodule Bob.Queue do
   end
 
   def handle_call({:run, repo, type, action, args, dir}, _from, state) do
+    # TOOD: Better duplicate check for OTP builds since we include the sha with the branch name
+    # in the arguments which means two quick commits to the same branch will trigger two builds
+    # instead of only one
     action = {repo, type, action, args, dir}
     state =
       if :queue.member(action, state.queue) do
@@ -87,19 +90,37 @@ defmodule Bob.Queue do
   end
 
   defp run_task(action, args, dir, log) do
-    %Porcelain.Result{status: status} =
-      case action do
-        {:cmd, cmd} ->
-          Porcelain.shell(cmd, out: {:file, log}, err: :out, dir: dir)
-        {:script, script} ->
-          Path.join("scripts", script)
-          |> Path.expand
-          |> Porcelain.exec(args, out: {:file, log}, err: :out, dir: dir)
-      end
-
-    unless status == 0 do
-      raise "#{inspect action} #{inspect args} returned: #{status}"
+    case run_action(action, args, dir, log) do
+      :ok ->
+        :ok
+      %Porcelain.Result{status: 0} ->
+        :ok
+      %Porcelain.Result{status: status} ->
+        raise "#{inspect action} #{inspect args} returned: #{status}"
     end
+  end
+
+  defp run_action({:cmd, cmd}, [], dir, log) do
+    Porcelain.shell(cmd, out: {:file, log}, err: :out, dir: dir)
+  end
+
+  defp run_action({:script, script}, args, dir, log) do
+    Path.join("scripts", script)
+    |> Path.expand
+    |> Porcelain.exec(args, out: {:file, log}, err: :out, dir: dir)
+  end
+
+  defp run_action({:github, repo}, _args, _dir, _log) do
+    Enum.each(Bob.GitHub.diff(repo), fn {ref_name, ref} ->
+      repos = Application.get_env(:bob, :repos)
+      repo_key = repos[repo]
+      repo = Application.get_env(:bob, repo_key)
+      action = repo[:github]
+
+      Bob.Queue.run(repo_key, :github, action, [ref_name, ref], :temp)
+    end)
+
+    :ok
   end
 
   defp clean_temp_dirs() do

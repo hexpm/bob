@@ -1,7 +1,7 @@
 #!/bin/bash
 
 set -e -u
-
+#!/bin/bash
 APPS=(hexpm hexpm-billing hexpm-staging hexpm-billing-staging)
 today=$(date "+%Y-%m-%d")
 
