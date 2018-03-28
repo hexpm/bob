@@ -21,7 +21,7 @@ defmodule Bob.Schedule do
     {:ok, []}
   end
 
-  def handle_info({:task, module, args, time, period} = message, _) do
+  def handle_info({:run, module, args, time, period} = message, _) do
     Bob.Queue.run(module, args)
 
     ms = calc_when(time, period) * 1000
