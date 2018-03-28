@@ -1,6 +1,7 @@
 defmodule Bob.Router do
   use Plug.Router
   import Plug.Conn
+  require Logger
 
   def call(conn, opts) do
     Bob.Plugs.Exception.call(conn, [fun: &super(&1, opts)])
@@ -30,14 +31,11 @@ defmodule Bob.Router do
   end
 
   defp github_request(event, request) do
-    ref       = parse_ref(request["ref"])
+    ref = parse_ref(request["ref"])
     full_name = request["repository"]["full_name"]
-    repos     = Application.get_env(:bob, :repos)
-    repo_key  = repos[full_name]
-    repo      = Application.get_env(:bob, repo_key)
-    action    = repo[:github]
+    module = repo_to_job(full_name)
 
-    Bob.Queue.run(repo_key, :github, action, [event, ref], :temp)
+    Bob.Queue.run(module, [event, ref])
   end
 
   defp parse_ref("refs/heads/" <> ref), do: ref
@@ -71,8 +69,11 @@ defmodule Bob.Router do
     digest = "sha1=" <> digest
 
     unless digest == signature do
-      IO.puts(:stderr, "BAD SIGNATURE")
+      Logger.error("bad github signature")
       raise Bob.Plug.BadRequestError, message: "bad signature"
     end
   end
+
+  defp repo_to_job("elixir-lang/elixir"), do: Bob.Job.BuildElixir
+  defp repo_to_job("elixir-lang/elixir-lang.github.com"), do: Bob.Job.BuildElixirGuides
 end

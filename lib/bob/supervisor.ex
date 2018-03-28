@@ -9,7 +9,7 @@ defmodule Bob.Supervisor do
     tree = [
       supervisor(Task.Supervisor, [[name: Bob.Tasks]]),
       worker(Bob.Queue, []),
-      worker(Bob.Periodic,  [])
+      worker(Bob.Schedule,  [])
     ]
     supervise(tree, strategy: :rest_for_one)
   end

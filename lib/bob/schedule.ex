@@ -1,4 +1,4 @@
-defmodule Bob.Periodic do
+defmodule Bob.Schedule do
   use GenServer
 
   @seconds_min  60
@@ -10,24 +10,21 @@ defmodule Bob.Periodic do
   end
 
   def init([]) do
-    env = Application.get_env(:bob, :periodic)
+    env = Application.get_env(:bob, :schedule)
 
-    Enum.each(env, fn {name, key} ->
-      opts = Application.get_env(:bob, name)[key]
-
+    Enum.each(env, fn opts ->
       ms = calc_when(opts[:time], opts[:period]) * 1000
-      dir = opts[:dir] || :temp
-      :erlang.send_after(ms, self(), {:task, name, opts[:time], opts[:period], opts[:action], dir})
+      :erlang.send_after(ms, self(), {:run, opts[:module], opts[:args], opts[:time], opts[:period]})
     end)
 
     {:ok, []}
   end
 
-  def handle_info({:task, name, time, period, action, dir}, _) do
-    ms = calc_when(time, period) * 1000
-    :erlang.send_after(ms, self(), {:task, name, time, period, action, dir})
+  def handle_info({:task, module, args, time, period}, _) do
+    Bob.Queue.run(module, args)
 
-    Bob.Queue.run(name, :period, action, [], dir)
+    ms = calc_when(time, period) * 1000
+    :erlang.send_after(ms, self(), {:task, module, args, time, period})
     {:noreply, []}
   end
 
@@ -36,6 +33,7 @@ defmodule Bob.Periodic do
   end
 
   defp calc_when(time, period) when period in [:day, :hour, :min] do
+    # TODO: NaiveDateTime
     {_, now} = :calendar.local_time()
     now = time_to_seconds(period, now)
     time = time_to_seconds(period, time)
