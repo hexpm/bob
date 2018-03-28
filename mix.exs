@@ -14,7 +14,6 @@ defmodule Bob.Mixfile do
 
   def application() do
     [
-      applications: [:cowboy, :plug, :poison, :porcelain, :hackney, :ex_aws_s3],
       mod: {Bob, []}
     ]
   end
@@ -26,7 +25,8 @@ defmodule Bob.Mixfile do
       {:poison, "~> 2.0"},
       {:porcelain, "~> 2.0"},
       {:hackney, "~> 1.11"},
-      {:ex_aws_s3, "~> 2.0"}
+      {:ex_aws_s3, "~> 2.0"},
+      {:rollbax, "~> 0.9.0"}
     ]
   end
 end
