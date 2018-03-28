@@ -14,6 +14,10 @@ defmodule Bob.Queue do
     GenServer.call(__MODULE__, {:run, module, args})
   end
 
+  def state() do
+    GenServer.call(__MODULE__, :state)
+  end
+
   def handle_call({:run, module, args}, _from, state) do
     queue = Map.get(state.queue, module, [])
     duplicate? = Enum.any?(queue, &module.equal?(&1, args))
@@ -28,6 +32,10 @@ defmodule Bob.Queue do
       end
 
     {:reply, :ok, state}
+  end
+
+  def handle_call(:state, _from, state) do
+    {:reply, state, state}
   end
 
   def handle_info({ref, result}, state) do
