@@ -31,3 +31,7 @@ config :porcelain, driver: Porcelain.Driver.Basic
 config :ex_aws,
   access_key_id: {:system, "BOB_S3_ACCESS_KEY"},
   secret_access_key: {:system, "BOB_S3_SECRET_KEY"}
+
+config :rollbax, enabled: false
+
+import_config "#{Mix.env()}.exs"

@@ -89,7 +89,7 @@ defmodule Bob.Queue do
 
   defp run_task(module, args) do
     {time, _} = :timer.tc(fn -> module.run(args) end)
-    IO.puts("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
+    Logger.info("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
   end
 
   defp new_state do
