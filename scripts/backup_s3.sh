@@ -14,8 +14,8 @@ aws s3 sync s3://s3.hex.pm hex-s3 --delete --include "*" > /dev/null
 
 echo ""
 echo "### logs s3 ###"
-aws s3 cp s3://logs.hex.pm      logs                         --recursive --exclude "*" --include "hex/${yesterday}-*" > /dev/null
-aws s3 cp s3://eu.logs.hex.pm   logs --region eu-west-1      --recursive --exclude "*" --include "hex/${yesterday}-*" > /dev/null
+aws s3 cp s3://logs.hex.pm logs --recursive --exclude "*" --include "hex/${yesterday}-*" > /dev/null
+aws s3 cp s3://eu.logs.hex.pm logs --region eu-west-1 --recursive --exclude "*" --include "hex/${yesterday}-*" > /dev/null
 echo logs/hex/* | xargs cat > logs-s3.txt
 gzip -9 logs-s3.txt
 

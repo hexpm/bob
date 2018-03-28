@@ -1,6 +1,10 @@
 defmodule Bob do
   use Application
 
+  # TOOD: Better duplicate check for OTP builds since we include the sha with the branch name
+  # in the arguments which means two quick commits to the same branch will trigger two builds
+  # instead of only one
+
   def start(_type, _args) do
     opts  = [port: port(), compress: true]
 
@@ -22,22 +26,16 @@ defmodule Bob do
     end
   end
 
-  def format_datetime({{year, month, day}, {hour, min, sec}}) do
-    list = [year, month, day, hour, min, sec]
-    :io_lib.format("~4..0B-~2..0B-~2..0B ~2..0B:~2..0B:~2..0B", list)
-    |> IO.iodata_to_binary
-  end
-
   def build_elixir(ref) do
-    Bob.Queue.run(:elixir, :github, [script: "elixir_github.sh"], ["push", ref], :temp)
+    Bob.Queue.run(Bob.Job.BuildElixir, ["push", ref])
   end
 
   def build_otp(ref_name) do
     ref = Bob.GitHub.fetch_repo_refs("erlang/otp") |> Map.new() |> Map.fetch!(ref_name)
-    Bob.Queue.run(:otp, :github, [script: "build_otp_docker.sh"], [ref_name, ref], :temp)
+    Bob.Queue.run(Bob.Job.BuildOTP, [ref_name, ref])
   end
 
   def build_elixir_guides() do
-    Bob.Queue.run(:elixir_guides, :github, [script: "elixir_guides_github.sh"], ["push", "master"], :temp)
+    Bob.Queue.run(Bob.Job.BuildElixirGuides, ["push", "master"])
   end
 end

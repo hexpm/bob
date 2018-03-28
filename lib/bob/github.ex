@@ -1,6 +1,7 @@
 defmodule Bob.GitHub do
   @github_url "https://api.github.com/"
   @bucket "s3.hex.pm"
+  @linux "ubuntu-14.04"
 
   def diff(repo) do
     existing = fetch_repo_refs(repo)
@@ -52,6 +53,7 @@ defmodule Bob.GitHub do
     end)
   end
 
+  # TODO: Use S3 object metadata
   defp fetch_built_refs(repo) do
     key = repo_to_path(repo) <> "/builds.txt"
 
@@ -60,8 +62,6 @@ defmodule Bob.GitHub do
     String.split(body, "\n", trim: true)
     |> Map.new(&List.to_tuple(String.split(&1, " ", parts: 2, trim: true)))
   end
-
-  @linux "ubuntu-14.04"
 
   defp repo_to_path("erlang/otp"), do: "builds/otp/#{@linux}"
 

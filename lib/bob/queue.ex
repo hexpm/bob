@@ -1,46 +1,49 @@
 defmodule Bob.Queue do
   use GenServer
+  require Logger
 
   def start_link() do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
 
-  def run(repo, type, action, args, dir) do
-    GenServer.call(__MODULE__, {:run, repo, type, action, args, dir})
+  def init(state) do
+    {:ok, state}
   end
 
-  def handle_call({:run, repo, type, action, args, dir}, _from, state) do
-    # TOOD: Better duplicate check for OTP builds since we include the sha with the branch name
-    # in the arguments which means two quick commits to the same branch will trigger two builds
-    # instead of only one
-    action = {repo, type, action, args, dir}
+  def run(module, args) do
+    GenServer.call(__MODULE__, {:run, module, args})
+  end
+
+  def handle_call({:run, module, args}, _from, state) do
+    queue = Map.get(state.queue, module, [])
+    duplicate? = Enum.any?(queue, &module.equal?(&1, args))
+
     state =
-      if :queue.member(action, state.queue) do
-        IO.puts "DUPLICATE #{repo} #{type} #{inspect action} #{inspect(args)} (#{dir})"
+      if duplicate? do
+        Logger.info("DUPLICATE #{inspect(module)} #{inspect(args)}")
         state
       else
-        state = update_in(state.queue, &:queue.in(action, &1))
-        dequeue(state)
+        state = update_in(state.queue[module], &(&1 || [] ++ [args]))
+        dequeue(state, module)
       end
 
     {:reply, :ok, state}
   end
 
   def handle_info({ref, result}, state) do
+    {module, args} = Map.fetch!(state.tasks, ref)
+
     case result do
       :ok ->
         :ok
       {:error, kind, error, stacktrace} ->
-        %{dir: dir, name: name, type: type, action: action, args: args} = Map.get(state.tasks, ref)
-        IO.puts "FAILED #{name} #{type} #{inspect action} #{inspect(args)} (#{dir})"
+        Logger.error("FAILED #{inspect(module)} #{inspect(args)}")
         Bob.log_error(kind, error, stacktrace)
     end
 
-    clean_temp_dirs()
-
-    state = %{state | building: false}
+    state = update_in(state.running, &Map.delete(&1, module))
     state = update_in(state.tasks, &Map.delete(&1, ref))
-    state = dequeue(state)
+    state = dequeue(state, module)
     {:noreply, state}
   end
 
@@ -48,108 +51,41 @@ defmodule Bob.Queue do
     {:noreply, state}
   end
 
-  defp dequeue(%{building: true} = state) do
-    state
-  end
-
-  defp dequeue(state) do
-    case :queue.out(state.queue) do
-      {{:value, {name, type, action, args, dir}}, queue} ->
-        temp_dir = temp_dir(dir, {name, type})
-        now      = :calendar.local_time
-        IO.puts "BUILDING #{name} #{type} #{inspect action} #{inspect(args)} (#{temp_dir}) (#{Bob.format_datetime(now)})"
-
-        task = Task.Supervisor.async(Bob.Tasks, fn ->
-          try do
-            task(name, type, action, args, temp_dir)
-            :ok
-          catch
-            kind, error ->
-              {:error, kind, error, System.stacktrace}
-          end
-        end)
-
-        map = %{dir: temp_dir, name: name, type: type, action: action, args: args}
-        state = %{state | building: true}
-        state = put_in(state.tasks[task.ref], map)
-        put_in(state.queue, queue)
-      {:empty, _queue} ->
-        state
+  defp dequeue(state, module) do
+    case state do
+      %{running: %{^module => true}} -> state
+      %{queue: %{^module => []}} -> state
+      %{queue: %{^module => queue}} -> dequeue_task(state, module, queue)
     end
   end
 
-  defp task(name, type, actions, args, dir) do
-    {:ok, time} = File.open(Path.join(dir, "out.txt"), [:write, :delayed_write], fn log ->
-      {time, _} = :timer.tc(fn ->
-        Enum.each(actions, &run_task(&1, args, dir, log))
-      end)
-      time
+  defp dequeue_task(state, module, [args | module_queue]) do
+    Logger.info("STARTING #{inspect(module)} #{inspect(args)}")
+
+    task = Task.Supervisor.async(Bob.Tasks, fn ->
+      try do
+        run_task(module, args)
+        :ok
+      catch
+        kind, error ->
+          {:error, kind, error, System.stacktrace}
+      end
     end)
 
-    IO.puts "COMPLETED #{name} #{type} #{inspect actions} #{inspect(args)} (#{dir}) (#{time / 1_000_000}s)"
+    state = put_in(state.running[module], true)
+    state = put_in(state.tasks[task.ref], {module, args})
+    put_in(state.queue[module], module_queue)
   end
 
-  defp run_task(action, args, dir, log) do
-    case run_action(action, args, dir, log) do
-      :ok ->
-        :ok
-      %Porcelain.Result{status: 0} ->
-        :ok
-      %Porcelain.Result{status: status} ->
-        raise "#{inspect action} #{inspect args} returned: #{status}"
-    end
-  end
-
-  defp run_action({:cmd, cmd}, [], dir, log) do
-    Porcelain.shell(cmd, out: {:file, log}, err: :out, dir: dir)
-  end
-
-  defp run_action({:script, script}, args, dir, log) do
-    Path.join("scripts", script)
-    |> Path.expand
-    |> Porcelain.exec(args, out: {:file, log}, err: :out, dir: dir)
-  end
-
-  defp run_action({:github, repo}, _args, _dir, _log) do
-    Enum.each(Bob.GitHub.diff(repo), fn {ref_name, ref} ->
-      repos = Application.get_env(:bob, :repos)
-      repo_key = repos[repo]
-      repo = Application.get_env(:bob, repo_key)
-      action = repo[:github]
-
-      Bob.Queue.run(repo_key, :github, action, [ref_name, ref], :temp)
+  defp run_task(module, args) do
+    {time, _} = :timer.tc(fn ->
+      module.run(args)
     end)
 
-    :ok
-  end
-
-  defp clean_temp_dirs() do
-    Path.wildcard("tmp/*")
-    |> Enum.sort_by(&(File.stat!(&1).mtime), &>=/2)
-    |> Enum.drop(10)
-    |> Enum.each(&File.rm_rf!/1)
-  end
-
-  defp temp_dir(:persist, {name, type}) do
-    path = Path.join("persist", "#{name}-#{type}")
-    File.mkdir_p!(path)
-
-    path
-  end
-
-  defp temp_dir(:temp, _name_type) do
-    random =
-      :crypto.strong_rand_bytes(16)
-      |> Base.encode16(case: :lower)
-
-    path = Path.join("tmp", random)
-    File.rm_rf!(path)
-    File.mkdir_p!(path)
-
-    path
+    IO.puts "COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)"
   end
 
   defp new_state do
-    %{tasks: %{}, queue: :queue.new, building: false}
+    %{tasks: %{}, queue: %{}, running: %{}}
   end
 end
