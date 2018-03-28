@@ -6,13 +6,13 @@ config :bob,
       module: Bob.Job.BackupS3,
       args: [],
       period: :day,
-      time: {3, 0, 0}
+      time: {1, 0, 0}
     ],
     [
       module: Bob.Job.BackupDB,
       args: [],
       period: :day,
-      time: {2, 0, 0}
+      time: {0, 15, 0}
     ],
     [
       module: Bob.Job.BuildOTPChecker,
@@ -31,6 +31,9 @@ config :porcelain, driver: Porcelain.Driver.Basic
 config :ex_aws,
   access_key_id: {:system, "BOB_S3_ACCESS_KEY"},
   secret_access_key: {:system, "BOB_S3_SECRET_KEY"}
+
+config :logger, :console,
+  format: "$time $metadata[$level] $message\n"
 
 config :rollbax, enabled: false
 
