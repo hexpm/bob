@@ -3,12 +3,12 @@ defmodule Bob.Plugs.Exception do
 
   def init(opts), do: opts
 
-  def call(conn, [fun: fun]) do
+  def call(conn, fun: fun) do
     try do
       fun.(conn)
     catch
       kind, error ->
-        stacktrace = System.stacktrace
+        stacktrace = System.stacktrace()
         status = Plug.Exception.status(error)
 
         if status == 500, do: Bob.log_error(kind, error, stacktrace)

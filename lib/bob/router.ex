@@ -4,17 +4,17 @@ defmodule Bob.Router do
   require Logger
 
   def call(conn, opts) do
-    Bob.Plugs.Exception.call(conn, [fun: &super(&1, opts)])
+    Bob.Plugs.Exception.call(conn, fun: &super(&1, opts))
   end
 
-  plug :match
-  plug :dispatch
+  plug(:match)
+  plug(:dispatch)
 
   post "github" do
     {request, body, conn} = json_body(conn, [])
-    secret    = Application.get_env(:bob, :github_secret)
-    signature = get_req_header(conn, "x-hub-signature") |> List.first
-    event     = get_req_header(conn, "x-github-event") |> List.first
+    secret = Application.get_env(:bob, :github_secret)
+    signature = get_req_header(conn, "x-hub-signature") |> List.first()
+    event = get_req_header(conn, "x-github-event") |> List.first()
 
     verify_signature(body, secret, signature)
     github_request(event, request)
@@ -27,7 +27,7 @@ defmodule Bob.Router do
   end
 
   defp github_request("ping", _request) do
-    IO.puts "GOT PING"
+    IO.puts("GOT PING")
   end
 
   defp github_request(event, request) do
@@ -39,13 +39,14 @@ defmodule Bob.Router do
   end
 
   defp parse_ref("refs/heads/" <> ref), do: ref
-  defp parse_ref("refs/tags/" <> ref),  do: ref
-  defp parse_ref(ref),                  do: ref
+  defp parse_ref("refs/tags/" <> ref), do: ref
+  defp parse_ref(ref), do: ref
 
   defp json_body(conn, opts) do
     case read_body(conn, opts) do
       {:ok, body, conn} ->
         {parse(body), body, conn}
+
       {:more, _data, _conn} ->
         raise Plug.Parsers.RequestTooLargeError
     end
@@ -55,6 +56,7 @@ defmodule Bob.Router do
     case Poison.decode(body) do
       {:ok, params} ->
         params
+
       _ ->
         raise Bob.Plug.BadRequestError, message: "malformed JSON"
     end

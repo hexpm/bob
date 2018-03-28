@@ -17,7 +17,7 @@ defmodule Bob.Directory do
 
   defp clean_temp_dirs() do
     Path.wildcard("tmp/*")
-    |> Enum.sort_by(&(File.stat!(&1).mtime), &>=/2)
+    |> Enum.sort_by(&File.stat!(&1).mtime, &>=/2)
     |> Enum.drop(@max_temp_dirs)
     |> Enum.each(&File.rm_rf!/1)
   end

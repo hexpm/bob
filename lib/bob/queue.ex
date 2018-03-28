@@ -36,6 +36,7 @@ defmodule Bob.Queue do
     case result do
       :ok ->
         :ok
+
       {:error, kind, error, stacktrace} ->
         Logger.error("FAILED #{inspect(module)} #{inspect(args)}")
         Bob.log_error(kind, error, stacktrace)
@@ -61,28 +62,26 @@ defmodule Bob.Queue do
 
   defp dequeue_task(state, module, [args | module_queue]) do
     Logger.info("STARTING #{inspect(module)} #{inspect(args)}")
-
-    task = Task.Supervisor.async(Bob.Tasks, fn ->
-      try do
-        run_task(module, args)
-        :ok
-      catch
-        kind, error ->
-          {:error, kind, error, System.stacktrace}
-      end
-    end)
+    task = Task.Supervisor.async(Bob.Tasks, fn -> task_fun(module, args) end)
 
     state = put_in(state.running[module], true)
     state = put_in(state.tasks[task.ref], {module, args})
     put_in(state.queue[module], module_queue)
   end
 
-  defp run_task(module, args) do
-    {time, _} = :timer.tc(fn ->
-      module.run(args)
-    end)
+  defp task_fun(module, args) do
+    try do
+      run_task(module, args)
+      :ok
+    catch
+      kind, error ->
+        {:error, kind, error, System.stacktrace()}
+    end
+  end
 
-    IO.puts "COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)"
+  defp run_task(module, args) do
+    {time, _} = :timer.tc(fn -> module.run(args) end)
+    IO.puts("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
   end
 
   defp new_state do
