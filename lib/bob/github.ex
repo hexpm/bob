@@ -26,8 +26,10 @@ defmodule Bob.GitHub do
   end
 
   defp github_request(url) do
-    basic_auth = {Application.get_env(:bob, :github_user), Application.get_env(:bob, :github_token)}
-    opts = [:with_body, basic_auth: basic_auth]
+    user = Application.get_env(:bob, :github_user)
+    token = Application.get_env(:bob, :github_token)
+
+    opts = [:with_body, basic_auth: {user, token}]
     {:ok, 200, headers, body} = :hackney.request(:get, url, [], "", opts)
     body = Poison.decode!(body)
 
@@ -44,6 +46,7 @@ defmodule Bob.GitHub do
 
     Enum.find_value(links, fn link ->
       [link, rel] = String.split(link, ";", trim: true, parts: 2)
+
       if String.trim(rel) == "rel=\"next\"" do
         link
         |> String.trim()

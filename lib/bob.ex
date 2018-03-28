@@ -6,16 +6,17 @@ defmodule Bob do
   # instead of only one
 
   def start(_type, _args) do
-    opts  = [port: port(), compress: true]
+    opts = [port: port(), compress: true]
 
     File.mkdir_p!("tmp")
     Plug.Adapters.Cowboy.http(Bob.Router, [], opts)
-    Bob.Supervisor.start_link
+    Bob.Supervisor.start_link()
   end
 
   def log_error(kind, error, stacktrace) do
-    IO.puts(:stderr, Exception.format_banner(kind, error, stacktrace) <> "\n" <>
-                     Exception.format_stacktrace(stacktrace))
+    banner = Exception.format_banner(kind, error, stacktrace)
+    stacktrace = Exception.format_stacktrace(stacktrace)
+    IO.puts(:stderr, banner <> "\n" <> stacktrace)
   end
 
   defp port() do

@@ -9,10 +9,12 @@ defmodule Bob.Script do
     case exec(action, args, dir, log) do
       :ok ->
         :ok
+
       %Porcelain.Result{status: 0} ->
         :ok
+
       %Porcelain.Result{status: status} ->
-        raise "#{inspect action} #{inspect args} returned: #{status}"
+        raise "#{inspect(action)} #{inspect(args)} returned: #{status}"
     end
   end
 

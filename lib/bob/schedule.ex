@@ -1,9 +1,9 @@
 defmodule Bob.Schedule do
   use GenServer
 
-  @seconds_min  60
+  @seconds_min 60
   @seconds_hour 60 * 60
-  @seconds_day  60 * 60 * 24
+  @seconds_day 60 * 60 * 24
 
   def start_link() do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
@@ -14,17 +14,18 @@ defmodule Bob.Schedule do
 
     Enum.each(env, fn opts ->
       ms = calc_when(opts[:time], opts[:period]) * 1000
-      :erlang.send_after(ms, self(), {:run, opts[:module], opts[:args], opts[:time], opts[:period]})
+      message = {:run, opts[:module], opts[:args], opts[:time], opts[:period]}
+      :erlang.send_after(ms, self(), message)
     end)
 
     {:ok, []}
   end
 
-  def handle_info({:task, module, args, time, period}, _) do
+  def handle_info({:task, module, args, time, period} = message, _) do
     Bob.Queue.run(module, args)
 
     ms = calc_when(time, period) * 1000
-    :erlang.send_after(ms, self(), {:task, module, args, time, period})
+    :erlang.send_after(ms, self(), message)
     {:noreply, []}
   end
 
@@ -50,7 +51,9 @@ defmodule Bob.Schedule do
   defp calc_period({num, :hour}), do: num * @seconds_hour
   defp calc_period({num, :min}), do: num * @seconds_min
 
-  defp time_to_seconds(:day, {hour, min, sec}), do: @seconds_hour * hour + @seconds_min * min + sec
+  defp time_to_seconds(:day, {hour, min, sec}),
+    do: @seconds_hour * hour + @seconds_min * min + sec
+
   defp time_to_seconds(:hour, {_hour, min, sec}), do: @seconds_min * min + sec
   defp time_to_seconds(:hour, {min, sec}), do: @seconds_min * min + sec
   defp time_to_seconds(:min, {_hour, _min, sec}), do: sec
