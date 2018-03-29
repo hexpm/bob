@@ -14,9 +14,12 @@ defmodule Bob do
   end
 
   def log_error(kind, error, stacktrace) do
-    banner = Exception.format_banner(kind, error, stacktrace)
-    stacktrace = Exception.format_stacktrace(stacktrace)
-    IO.puts(:stderr, banner <> "\n" <> stacktrace)
+    formatted_banner = Exception.format_banner(kind, error, stacktrace)
+    formatted_stacktrace = Exception.format_stacktrace(stacktrace)
+    exception = Exception.normalize(kind, error, stacktrace)
+
+    IO.puts(:stderr, formatted_banner <> "\n" <> formatted_stacktrace)
+    Rollbax.report(kind, exception, stacktrace)
   end
 
   defp port() do
