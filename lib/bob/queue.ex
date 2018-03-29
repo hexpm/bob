@@ -27,7 +27,7 @@ defmodule Bob.Queue do
         Logger.info("DUPLICATE #{inspect(module)} #{inspect(args)}")
         state
       else
-        state = update_in(state.queue[module], &(&1 || [] ++ [args]))
+        state = update_in(state.queue[module], &((&1 || []) ++ [args]))
         dequeue(state, module)
       end
 
