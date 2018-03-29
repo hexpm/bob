@@ -14,7 +14,8 @@ defmodule Bob.Mixfile do
 
   def application() do
     [
-      mod: {Bob, []}
+      mod: {Bob, []},
+      extra_applications: [:logger, :runtime_tools]
     ]
   end
 
@@ -26,7 +27,7 @@ defmodule Bob.Mixfile do
       {:porcelain, "~> 2.0"},
       {:hackney, "~> 1.11"},
       {:ex_aws_s3, "~> 2.0"},
-      {:rollbax, "~> 0.9.0"}
+      {:rollbax, "== 0.9.0"}
     ]
   end
 end
