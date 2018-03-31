@@ -2,7 +2,7 @@ defmodule Bob.Job.BackupS3 do
   require Logger
 
   def run([]) do
-    directory = Bob.Directory.new()
+    directory = "persist/backup-s3"
     Logger.info("Using directory #{directory}")
     Bob.Script.run({:script, "backup_s3.sh"}, [], directory)
   end
