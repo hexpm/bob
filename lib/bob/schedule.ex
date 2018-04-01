@@ -40,7 +40,7 @@ defmodule Bob.Schedule do
     time = time_to_seconds(period, time)
     diff = time - now
 
-    if diff < 0 do
+    if diff <= 0 do
       calc_period({1, period}) + diff
     else
       diff
