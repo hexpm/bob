@@ -27,7 +27,8 @@ defmodule Bob.Mixfile do
       {:porcelain, "~> 2.0"},
       {:hackney, "~> 1.11"},
       {:ex_aws_s3, "~> 2.0"},
-      {:rollbax, "== 0.9.0"}
+      {:rollbax, "== 0.9.0"},
+      {:distillery, "~> 1.5", runtime: false}
     ]
   end
 end
