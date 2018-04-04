@@ -7,29 +7,32 @@ set -e -u
 
 cwd=$(pwd)
 scripts="${cwd}/../../scripts"
-linux="ubuntu-14.04"
+ref_name=$1
+ref=$2
+linux=$3
 
 # $1 = service
 # $2 = key
 function fastly_purge {
-  curl -X PURGE https://repo.hex.pm/${1}
+  curl -X PURGE https://repo.hex.pm/${ref_name}
 }
 
 cp ${scripts}/otp-${linux}.dockerfile .
-cp ${scripts}/build_otp.sh .
+cp ${scripts}/build_otp_*.sh .
 
 docker rm $(docker ps -aq) || true
 docker build -t otp-build -f otp-${linux}.dockerfile .
-docker run -t -e OTP_REF=${1} --name=otp-build-${linux}-${1} otp-build
+docker run -t -e OTP_REF=${ref_name} --name=otp-build-${linux}-${ref_name} otp-build
 
-docker cp otp-build-${linux}-${1}:/home/build/out/${1}.tar.gz ${1}.tar.gz
+docker cp otp-build-${linux}-${ref_name}:/home/build/out/${ref_name}.tar.gz ${ref_name}.tar.gz
 
-aws s3 cp ${1}.tar.gz s3://s3.hex.pm/builds/otp/${linux}/${1}.tar.gz --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"otp-builds","surrogate-control":"public,max-age=604800"}'
+aws s3 cp ${ref_name}.tar.gz s3://s3.hex.pm/builds/otp/${linux}/${ref_name}.tar.gz --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"otp-builds","surrogate-control":"public,max-age=604800"}'
 
-aws s3 cp s3://s3.hex.pm/builds/otp/${linux}/builds.txt builds.txt
-echo -e "${1} ${2}\n$(cat builds.txt)" > builds.txt
+aws s3 cp s3://s3.hex.pm/builds/otp/${linux}/builds.txt builds.txt || true
+touch builds.txt
+echo -e "${ref_name} ${ref}\n$(cat builds.txt)" > builds.txt
 sort -u -k1,1 -o builds.txt builds.txt
 aws s3 cp builds.txt s3://s3.hex.pm/builds/otp/${linux}/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"otp-builds","surrogate-control":"public,max-age=604800"}'
 
-fastly_purge builds/otp/${linux}/${1}.tar.gz
+fastly_purge builds/otp/${linux}/${ref_name}.tar.gz
 fastly_purge builds/otp/${linux}/builds.txt
