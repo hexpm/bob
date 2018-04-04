@@ -1,0 +1,17 @@
+sudo: required
+language: elixir
+otp_release: 20.2
+elixir: 1.6.4
+services:
+  - docker
+before_install:
+  - TRAVIS_BRANCH_DASH=${TRAVIS_BRANCH//\//-}
+  - docker pull $TRAVIS_REPO_SLUG:$TRAVIS_BRANCH_DASH || true
+script:
+  - mix test
+  - docker build --cache-from $TRAVIS_REPO_SLUG:$TRAVIS_BRANCH_DASH -t $TRAVIS_REPO_SLUG:$TRAVIS_BRANCH_DASH .
+deploy:
+  provider: script
+  script: bash build/docker-push.sh
+  on:
+    all_branches: true
