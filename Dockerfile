@@ -1,4 +1,4 @@
-FROM ubuntu:16.04 AS builder
+FROM alpine:3.7 AS builder
 
 RUN mkdir /build
 WORKDIR /build
@@ -8,30 +8,27 @@ ENV APP_NAME=bob
 ENV APP_ERLANG_VERSION=20.3
 ENV APP_ELIXIR_VERSION=1.6.4
 
-RUN apt-get update
-RUN apt-get install -y \
+RUN apk --no-cache upgrade
+
+RUN apk add --update \
   git \
   wget \
   curl \
   unzip \
-  locales
+  bash \
+  openssl
 
 RUN git clone https://github.com/asdf-vm/asdf.git /asdf --branch v0.4.3
 ENV PATH="$PATH:/asdf/shims:/asdf/bin"
-COPY build/asdf-install-otp.sh asdf-install-otp.sh
 RUN asdf plugin-add erlang
 RUN asdf plugin-add elixir
+COPY build/asdf-install-otp.sh asdf-install-otp.sh
 
-RUN ./asdf-install-otp.sh $APP_ERLANG_VERSION
+RUN ./asdf-install-otp.sh $APP_ERLANG_VERSION alpine-3.7
 RUN asdf install elixir $APP_ELIXIR_VERSION
 
 RUN asdf global erlang $APP_ERLANG_VERSION
 RUN asdf global elixir $APP_ELIXIR_VERSION
-
-RUN locale-gen en_US.UTF-8
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
-ENV LC_ALL en_US.UTF-8
 
 COPY mix.exs mix.lock /build/
 COPY config /build/config
@@ -54,31 +51,21 @@ RUN mv _build/$MIX_ENV/rel/$APP_NAME/releases/*/$APP_NAME.tar.gz .
 
 
 
-FROM ubuntu:16.04 as app
+FROM alpine:3.7 as app
 
 ENV APP_NAME=bob
 
-RUN echo "deb http://pkg.tarsnap.com/deb/xenial ./" > /etc/apt/sources.list.d/tarsnap.list
+RUN apk --no-cache upgrade
 
-RUN apt-get update
-RUN apt-get install -y --allow-unauthenticated \
-  python-pip \
+RUN apk add --update \
+  py2-pip \
   tarsnap \
   git \
   wget \
   curl \
   unzip \
-  locales \
-  automake \
-  autoconf \
-  libreadline-dev \
-  libncurses-dev \
-  libssl-dev \
-  libyaml-dev \
-  libxslt-dev \
-  libffi-dev \
-  libtool \
-  unixodbc-dev
+  bash \
+  openssl
 
 RUN pip install awscli --upgrade --user
 
@@ -88,23 +75,19 @@ COPY build/asdf-install-otp.sh asdf-install-otp.sh
 RUN asdf plugin-add erlang
 RUN asdf plugin-add elixir
 
-RUN ./asdf-install-otp.sh 17.3
-RUN ./asdf-install-otp.sh 17.5
-RUN ./asdf-install-otp.sh 18.3
-RUN ./asdf-install-otp.sh 19.3
-RUN ./asdf-install-otp.sh 20.2
-RUN ./asdf-install-otp.sh 20.3
-
-RUN locale-gen en_US.UTF-8
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
-ENV LC_ALL en_US.UTF-8
+# RUN ./asdf-install-otp.sh 17.3 alpine-3.7
+# RUN ./asdf-install-otp.sh 17.5 alpine-3.7
+# RUN ./asdf-install-otp.sh 18.3 alpine-3.7
+# RUN ./asdf-install-otp.sh 19.3 alpine-3.7
+# RUN ./asdf-install-otp.sh 20.2 alpine-3.7
+RUN ./asdf-install-otp.sh 20.3 alpine-3.7
 
 COPY --from=builder /build/$APP_NAME.tar.gz ./
 RUN mkdir /app && tar xf $APP_NAME.tar.gz -C /app && rm $APP_NAME.tar.gz
 WORKDIR /app
 
-ENTRYPOINT bin/$APP_NAME foreground
+# Hardocded app name :(
+ENTRYPOINT ["bin/bob", "foreground"]
 
 
 
