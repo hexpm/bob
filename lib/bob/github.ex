@@ -1,11 +1,10 @@
 defmodule Bob.GitHub do
   @github_url "https://api.github.com/"
   @bucket "s3.hex.pm"
-  @linux "ubuntu-14.04"
 
-  def diff(repo) do
+  def diff(repo, linux) do
     existing = fetch_repo_refs(repo)
-    built = fetch_built_refs(repo)
+    built = fetch_built_refs(repo, linux)
 
     Enum.filter(existing, fn {name, ref} ->
       case Map.fetch(built, name) do
@@ -57,8 +56,8 @@ defmodule Bob.GitHub do
   end
 
   # TODO: Use S3 object metadata
-  defp fetch_built_refs(repo) do
-    key = repo_to_path(repo) <> "/builds.txt"
+  defp fetch_built_refs(repo, linux) do
+    key = repo_to_path(repo, linux) <> "/builds.txt"
 
     {:ok, %{body: body}} = ExAws.S3.get_object(@bucket, key, []) |> ExAws.request()
 
@@ -66,7 +65,7 @@ defmodule Bob.GitHub do
     |> Map.new(&List.to_tuple(String.split(&1, " ", parts: 2, trim: true)))
   end
 
-  defp repo_to_path("erlang/otp"), do: "builds/otp/#{@linux}"
+  defp repo_to_path("erlang/otp", linux), do: "builds/otp/#{linux}"
 
   defp valid_ref_name?("erlang/otp", "OTP-18.0-rc2"), do: false
   defp valid_ref_name?("erlang/otp", "OTP_" <> _), do: false

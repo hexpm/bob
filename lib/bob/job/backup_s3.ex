@@ -7,5 +7,7 @@ defmodule Bob.Job.BackupS3 do
     Bob.Script.run({:script, "backup_s3.sh"}, [], directory)
   end
 
-  def equal?(_, _), do: true
+  def equal?(_, _), do: false
+
+  def similar?(_, _), do: true
 end

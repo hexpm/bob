@@ -2,17 +2,12 @@
 
 set -e -u
 
-# $1 = version
-# $2 = ref
-
 cwd=$(pwd)
 scripts="${cwd}/../../scripts"
 ref_name=$1
 ref=$2
 linux=$3
 
-# $1 = service
-# $2 = key
 function fastly_purge {
   curl -X PURGE https://repo.hex.pm/${ref_name}
 }

@@ -3,4 +3,5 @@ defmodule Bob.Job do
 
   @callback run(args()) :: term()
   @callback equal?(args(), args()) :: boolean()
+  @callback similar?(args(), args()) :: boolean()
 end

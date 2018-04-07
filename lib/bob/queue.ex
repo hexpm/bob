@@ -20,15 +20,21 @@ defmodule Bob.Queue do
 
   def handle_call({:run, module, args}, _from, state) do
     queue = Map.get(state.queue, module, [])
-    duplicate? = Enum.any?(queue, &module.equal?(&1, args))
 
     state =
-      if duplicate? do
-        Logger.info("DUPLICATE #{inspect(module)} #{inspect(args)}")
-        state
-      else
-        state = update_in(state.queue[module], &((&1 || []) ++ [args]))
-        dequeue(state, module)
+      cond do
+        Enum.any?(queue, &module.similar?(&1, args)) ->
+          Logger.info("ALREADY QUEUED #{inspect(module)} #{inspect(args)}")
+          state
+
+        Enum.any?(state.tasks, fn {_ref, {^module, run_args}} -> module.equal?(run_args, args) end) ->
+          Logger.info("ALREADY RUNNING #{inspect(module)} #{inspect(args)}")
+          state
+
+        true ->
+          Logger.info("QUEUED #{inspect(module)} #{inspect(args)}")
+          state = update_in(state.queue[module], &((&1 || []) ++ [args]))
+          dequeue(state, module)
       end
 
     {:reply, :ok, state}
