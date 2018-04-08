@@ -23,11 +23,11 @@ defmodule Bob.Queue do
 
     state =
       cond do
-        Enum.any?(queue, &module.similar?(&1, args)) ->
+        already_queued?(queue, module, args) ->
           Logger.info("ALREADY QUEUED #{inspect(module)} #{inspect(args)}")
           state
 
-        Enum.any?(state.tasks, fn {_ref, {^module, run_args}} -> module.equal?(run_args, args) end) ->
+        already_running?(state.tasks, module, args) ->
           Logger.info("ALREADY RUNNING #{inspect(module)} #{inspect(args)}")
           state
 
@@ -96,6 +96,16 @@ defmodule Bob.Queue do
   defp run_task(module, args) do
     {time, _} = :timer.tc(fn -> module.run(args) end)
     Logger.info("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
+  end
+
+  defp already_queued?(queue, module, args) do
+    Enum.any?(queue, &module.similar?(&1, args))
+  end
+
+  defp already_running?(tasks, module, args) do
+    Enum.any?(tasks, fn {_ref, {run_module, run_args}} ->
+      run_module == run_args and module.equal?(run_args, args)
+    end)
   end
 
   defp new_state do
