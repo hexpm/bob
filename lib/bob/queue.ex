@@ -104,7 +104,7 @@ defmodule Bob.Queue do
 
   defp already_running?(tasks, module, args) do
     Enum.any?(tasks, fn {_ref, {run_module, run_args}} ->
-      run_module == run_args and module.equal?(run_args, args)
+      run_module == module and module.equal?(run_args, args)
     end)
   end
 
