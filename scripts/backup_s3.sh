@@ -10,7 +10,7 @@ today=$(date "+%Y-%m-%d")
 yesterday=$(date "+%Y-%m-%d" --date=yesterday)
 
 echo "### s3 ###"
-aws s3 sync s3://s3.hex.pm hex-s3 --delete --include "*" --exclude "builds/" > /dev/null
+aws s3 sync s3://s3.hex.pm hex-s3 --delete --include "*" --exclude "builds/*" > /dev/null
 
 echo ""
 echo "### logs s3 ###"
