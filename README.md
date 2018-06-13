@@ -31,12 +31,6 @@ Documentation tarballs are also uploaded to `https://repo.hex.pm/docs/{APPLICATI
 
 ## Hex S3 backups
 
-Each days backups of yesterdays access logs stored on the buckets:
-
-  * `logs.hex.pm`
-  * `logs-eu.hex.pm`
-  * `logs-asia.hex.pm`
-
-are uploaded to the bucket `backup.hex.pm`.
+Each days backups of yesterdays access logs stored on the bucket `logs.hex.pm` is uploaded to the bucket `backup.hex.pm`.
 
 A snapshot of the bucket `s3.hex.pm` is also uploaded to [tarsnap](https://www.tarsnap.com).
