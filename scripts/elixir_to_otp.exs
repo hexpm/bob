@@ -34,8 +34,9 @@ case elixir do
   "v1.6.3"    -> ["19.3", "20.2"]
   "v1.6.4"    -> ["19.3", "20.3"]
   "v1.6" <> _ -> ["19.3", "20.3", "21.0"]
+  "v1.7" <> _ -> ["20.3", "21.0"]
   # Assume all other branches support the same versions as master
-  _           -> ["19.3", "20.3", "21.0"]
+  _           -> ["20.3", "21.0"]
 end
 |> Enum.join(" ")
 |> IO.puts()
