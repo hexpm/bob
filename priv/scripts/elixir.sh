@@ -67,6 +67,13 @@ function upload_build {
   version=$(echo ${1} | sed -e 's/\//-/g')
   aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${version}${2}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
   fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
+
+  aws s3 cp s3://s3.hex.pm/builds/elixir/builds.txt builds.txt || true
+  touch builds.txt
+  sed -i "/^${ref_name} /d" builds.txt
+  echo -e "${1}${2} $(git rev-parse HEAD) $(date -u '+%Y-%m-%d %H:%M:%S')\n$(cat builds.txt)" > builds.txt
+  sort -u -k1,1 -o builds.txt builds.txt
+  aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
 }
 
 # $1 = ref
@@ -103,6 +110,11 @@ function delete {
   ref=$(echo "${1}" | sed -e 's/\//-/g')
   aws s3 rm "s3://s3.hex.pm/builds/elixir/${ref}.zip"
   aws s3 rm "s3://s3.hex.pm" --recursive --exclude "*" --include "builds/elixir/${ref}-otp-*.zip"
+
+  aws s3 cp s3://s3.hex.pm/builds/elixir/builds.txt builds.txt || true
+  touch builds.txt
+  awk "\$1 !~ /^${1}/" builds.txt > tmp.txt && mv -f tmp.txt builds.txt
+  aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
 
   for app in "${APPS[@]}"; do
     version=$(echo "${ref}" | sed -e 's/^v//g')
