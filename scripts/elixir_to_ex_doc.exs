@@ -3,9 +3,7 @@
 [elixir, latest] = System.argv
 
 case elixir do
-  # Temporary until ex_doc v0.19.0 is released
-  "v1.7.0-rc" <> _ -> "master"
-  "v1.7" <> _ -> "master"
+  "v1.7" <> _ -> "v0.19.0"
   "v1.6" <> _ -> "v0.18.3"
   "v1.5" <> _ -> "v0.18.3"
   "v1.4" <> _ -> "v0.18.3"
