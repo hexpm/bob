@@ -2,7 +2,7 @@
 
 set -e -u
 
-APPS=(hexpm hexpm-billing hexpm-staging hexpm-billing-staging)
+APPS=(hexpm)
 today=$(date "+%Y-%m-%d")
 
 for app in "${APPS[@]}"; do
