@@ -9,22 +9,16 @@ APPS=(eex elixir ex_unit iex logger mix)
 HEXPM=$BOB_FASTLY_SERVICE_HEXPM
 HEXDOCS=$BOB_FASTLY_SERVICE_HEXDOCS
 
-# $1 = service
-# $2 = key
-function fastly_purge {
-  curl \
-    -X POST \
-    -H "Fastly-Key: ${BOB_FASTLY_KEY}" \
-    -H "Accept: application/json" \
-    -H "Content-Length: 0" \
-    "https://api.fastly.com/service/${1}/purge/${2}"
-}
+cwd=$(pwd)
+script_dir=$(dirname $(pwd)/${BASH_SOURCE})
+
+source ${script_dir}/utils.sh
 
 # $1 = ref
 function push {
   rm .tool-versions || true
   original_path=${PATH}
-  otp_versions=($(elixir "${scripts}/elixir_to_otp.exs" "$1"))
+  otp_versions=($(elixir "${script_dir}/elixir_to_otp.exs" "$1"))
 
   echo "Available OTP ${otp_versions[@]}"
 
@@ -99,8 +93,8 @@ function upload_docs {
 
   pushd ex_doc
   tags=$(git tag)
-  latest_version=$(elixir ${scripts}/latest_version.exs "${tags}")
-  ex_doc_version=$(elixir ${scripts}/elixir_to_ex_doc.exs "${1}" "${latest_version}")
+  latest_version=$(elixir ${script_dir}/latest_version.exs "${tags}")
+  ex_doc_version=$(elixir ${script_dir}/elixir_to_ex_doc.exs "${1}" "${latest_version}")
   git checkout "${ex_doc_version}"
   mix deps.get
   mix compile --no-elixir-version-check
@@ -112,7 +106,7 @@ function upload_docs {
   CANONICAL="${version}" make docs
 
   tags=$(git tag)
-  latest_version=$(elixir ${scripts}/latest_version.exs "${tags}")
+  latest_version=$(elixir ${script_dir}/latest_version.exs "${tags}")
 
   pushd doc
   for app in "${APPS[@]}"; do
@@ -155,9 +149,6 @@ function delete {
     fastly_purge $HEXDOCS "docspage/${app}/${version}"
   done
 }
-
-cwd=$(pwd)
-scripts="${cwd}/../../scripts"
 
 case "$1" in
   "push" | "create")

@@ -4,7 +4,7 @@ defmodule Bob.Job.BuildElixir do
   def run([event, ref]) do
     directory = Bob.Directory.new()
     Logger.info("Using directory #{directory}")
-    Bob.Script.run({:script, "elixir_github.sh"}, [event, ref], directory)
+    Bob.Script.run({:script, "build_elixir.sh"}, [event, ref], directory)
   end
 
   def equal?(_, _), do: false

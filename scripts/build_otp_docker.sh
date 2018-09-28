@@ -3,17 +3,15 @@
 set -e -u
 
 cwd=$(pwd)
-scripts="${cwd}/../../scripts"
+script_dir=$(dirname $(pwd)/${BASH_SOURCE})
 ref_name=$1
 ref=$2
 linux=$3
 
-function fastly_purge {
-  curl -X PURGE https://repo.hex.pm/${ref_name}
-}
+source ${script_dir}/utils.sh
 
-cp ${scripts}/otp-${linux}.dockerfile .
-cp ${scripts}/build_otp_*.sh .
+cp ${script_dir}/otp-${linux}.dockerfile .
+cp ${script_dir}/build_otp_*.sh .
 
 docker rm $(docker ps -aq) || true
 docker build -t otp-build -f otp-${linux}.dockerfile .
@@ -29,5 +27,5 @@ echo -e "${ref_name} ${ref}\n$(cat builds.txt)" > builds.txt
 sort -u -k1,1 -o builds.txt builds.txt
 aws s3 cp builds.txt s3://s3.hex.pm/builds/otp/${linux}/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"otp-builds","surrogate-control":"public,max-age=604800"}'
 
-fastly_purge builds/otp/${linux}/${ref_name}.tar.gz
-fastly_purge builds/otp/${linux}/builds.txt
+fastly_purge_path builds/otp/${linux}/${ref_name}.tar.gz
+fastly_purge_path builds/otp/${linux}/builds.txt

@@ -7,16 +7,9 @@ set -e -u
 
 HEXPM=$BOB_FASTLY_SERVICE_HEXPM
 
-# $1 = service
-# $2 = key
-function fastly_purge {
-  curl \
-    -X POST \
-    -H "Fastly-Key: ${BOB_FASTLY_KEY}" \
-    -H "Accept: application/json" \
-    -H "Content-Length: 0" \
-    "https://api.fastly.com/service/${1}/purge/${2}"
-}
+script_dir=$(dirname $(pwd)/${BASH_SOURCE})
+
+source ${script_dir}/utils.sh
 
 # $1 = ref
 function push {
