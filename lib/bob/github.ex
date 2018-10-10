@@ -30,7 +30,7 @@ defmodule Bob.GitHub do
 
     opts = [:with_body, basic_auth: {user, token}]
     {:ok, 200, headers, body} = :hackney.request(:get, url, [], "", opts)
-    body = Poison.decode!(body)
+    body = Jason.decode!(body)
 
     if url = next_link(headers) do
       body ++ github_request(url)

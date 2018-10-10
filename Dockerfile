@@ -1,97 +1,44 @@
-FROM alpine:3.7 AS builder
+FROM elixir:1.6.6-alpine as build
 
-RUN mkdir /build
-WORKDIR /build
+# install build dependencies
+RUN apk add --update git
 
-ENV MIX_ENV=prod
-ENV APP_NAME=bob
-ENV APP_ERLANG_VERSION=20.3
-ENV APP_ELIXIR_VERSION=1.6.4
-
-RUN apk --no-cache upgrade
-
-RUN apk add --update \
-  git \
-  wget \
-  curl \
-  unzip \
-  bash \
-  openssl
-
-RUN git clone https://github.com/asdf-vm/asdf.git /asdf --branch v0.4.3
-ENV PATH="$PATH:/asdf/shims:/asdf/bin"
-RUN asdf plugin-add erlang
-RUN asdf plugin-add elixir
-COPY build/asdf-install-otp.sh asdf-install-otp.sh
-
-RUN ./asdf-install-otp.sh $APP_ERLANG_VERSION alpine-3.7
-RUN asdf install elixir $APP_ELIXIR_VERSION
-
-RUN asdf global erlang $APP_ERLANG_VERSION
-RUN asdf global elixir $APP_ELIXIR_VERSION
-
-COPY mix.exs mix.lock /build/
-COPY config /build/config
-COPY priv /build/priv
-
-RUN \
-  mix local.hex --force && \
-  mix local.rebar --force && \
-  mix deps.get && \
-  mix deps.compile
-
-COPY lib /build/lib
-COPY rel/config.exs /build/rel/config.exs
-
-RUN \
-  mix compile && \
-  mix release --env=$MIX_ENV
-
-RUN mv _build/$MIX_ENV/rel/$APP_NAME/releases/*/$APP_NAME.tar.gz .
-
-
-
-FROM alpine:3.7 as app
-
-ENV APP_NAME=bob
-
-RUN apk --no-cache upgrade
-
-RUN apk add --update \
-  py2-pip \
-  tarsnap \
-  git \
-  wget \
-  curl \
-  unzip \
-  bash \
-  openssl
-
-RUN pip install awscli --upgrade --user
-
-RUN git clone https://github.com/asdf-vm/asdf.git /asdf --branch v0.4.3
-ENV PATH="$PATH:/asdf/shims:/asdf/bin"
-COPY build/asdf-install-otp.sh asdf-install-otp.sh
-RUN asdf plugin-add erlang
-RUN asdf plugin-add elixir
-
-# RUN ./asdf-install-otp.sh 17.3 alpine-3.7
-# RUN ./asdf-install-otp.sh 17.5 alpine-3.7
-# RUN ./asdf-install-otp.sh 18.3 alpine-3.7
-# RUN ./asdf-install-otp.sh 19.3 alpine-3.7
-# RUN ./asdf-install-otp.sh 20.2 alpine-3.7
-RUN ./asdf-install-otp.sh 20.3 alpine-3.7
-
-COPY --from=builder /build/$APP_NAME.tar.gz ./
-RUN mkdir /app && tar xf $APP_NAME.tar.gz -C /app && rm $APP_NAME.tar.gz
+# prepare build dir
+RUN mkdir /app
 WORKDIR /app
 
-# Hardocded app name :(
-ENTRYPOINT ["bin/bob", "foreground"]
+# install hex + rebar
+RUN mix local.hex --force && \
+    mix local.rebar --force
 
+# set build ENV
+ENV MIX_ENV=prod
 
+# install mix dependencies
+COPY mix.exs mix.lock ./
+COPY config config
+RUN mix deps.get
+RUN mix deps.compile
 
+# build project
+COPY priv priv
+COPY lib lib
+RUN mix compile
 
-# RUN apt install -y docker docker.io
-# sudo groupadd docker
-# sudo usermod -aG docker $USER
+# build release
+COPY rel rel
+RUN mix release --no-tar
+
+# prepare release image
+FROM alpine:3.6 AS app
+RUN apk add --update bash curl docker gzip make openssl py-pip tar tarsnap wget zip
+
+RUN pip install --upgrade awscli
+
+COPY etc/tarsnap.conf /usr/local/etc/tarsnap.conf
+
+WORKDIR /app
+
+COPY --from=build /app/_build/prod/rel/bob ./
+
+ENV HOME=/app REPLACE_OS_VARS=true

@@ -8,7 +8,7 @@ defmodule Bob do
   def start(_type, _args) do
     opts = [port: port(), compress: true]
 
-    File.mkdir_p!("tmp")
+    File.mkdir_p!(tmp_dir())
     Plug.Adapters.Cowboy.http(Bob.Router, [], opts)
     Bob.Supervisor.start_link()
   end
@@ -23,10 +23,10 @@ defmodule Bob do
   end
 
   defp port() do
-    if port = System.get_env("PORT") do
+    if port = System.get_env("BOB_PORT") do
       String.to_integer(port)
     else
-      4000
+      4003
     end
   end
 
@@ -41,5 +41,9 @@ defmodule Bob do
 
   def build_elixir_guides() do
     Bob.Queue.run(Bob.Job.BuildElixirGuides, ["push", "master"])
+  end
+
+  def tmp_dir() do
+    Application.get_env(:bob, :tmp_dir)
   end
 end

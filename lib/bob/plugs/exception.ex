@@ -1,4 +1,4 @@
-defmodule Bob.Plugs.Exception do
+defmodule Bob.Plug.Exception do
   import Plug.Conn
 
   def init(opts), do: opts

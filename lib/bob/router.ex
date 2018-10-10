@@ -1,12 +1,16 @@
 defmodule Bob.Router do
   use Plug.Router
+  use Bob.Plug.Rollbax
   import Plug.Conn
   require Logger
 
   def call(conn, opts) do
-    Bob.Plugs.Exception.call(conn, fun: &super(&1, opts))
+    Bob.Plug.Exception.call(conn, fun: &super(&1, opts))
   end
 
+  plug(Bob.Plug.Forwarded)
+  plug(Bob.Plug.Status)
+  # TODO: SSL ?
   plug(:match)
   plug(:dispatch)
 
@@ -53,7 +57,7 @@ defmodule Bob.Router do
   end
 
   defp parse(body) do
-    case Poison.decode(body) do
+    case Jason.decode(body) do
       {:ok, params} ->
         params
 

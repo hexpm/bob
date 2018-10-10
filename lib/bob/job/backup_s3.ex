@@ -8,6 +8,5 @@ defmodule Bob.Job.BackupS3 do
   end
 
   def equal?(_, _), do: false
-
   def similar?(_, _), do: true
 end
