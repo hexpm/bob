@@ -13,6 +13,7 @@ echo "Building $1 $2 $3"
 container="otp-build-${linux}-${ref_name}"
 image="gcr.io/hexpm-prod/bob-otp"
 tag=${linux}
+date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 docker pull ${image}:${tag} || true
 docker build -t ${image}:${tag} -f ${SCRIPT_DIR}/otp-${linux}.dockerfile ${SCRIPT_DIR}
@@ -26,7 +27,7 @@ aws s3 cp ${ref_name}.tar.gz s3://s3.hex.pm/builds/otp/${linux}/${ref_name}.tar.
 
 aws s3 cp s3://s3.hex.pm/builds/otp/${linux}/builds.txt builds.txt || true
 touch builds.txt
-sed -i '/^${ref_name} /d' builds.txt
+sed -i "/^${ref_name} /d" builds.txt
 echo -e "${ref_name} ${ref}\n$(cat builds.txt)" > builds.txt
 sort -u -k1,1 -o builds.txt builds.txt
 aws s3 cp builds.txt s3://s3.hex.pm/builds/otp/${linux}/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"otp-builds","surrogate-control":"public,max-age=604800"}'
