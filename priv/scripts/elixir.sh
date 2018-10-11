@@ -109,6 +109,7 @@ function delete {
 
 case "$1" in
   "push" | "create")
+    echo "Building $2 ${@:3}"
     push "$2" ${@:3}
     ;;
   "delete")

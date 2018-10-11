@@ -8,6 +8,8 @@ linux=$3
 
 source ${SCRIPT_DIR}/utils.sh
 
+echo "Building $1 $2 $3"
+
 container="otp-build-${linux}-${ref_name}"
 image="gcr.io/hexpm-prod/bob-otp"
 tag=${linux}
