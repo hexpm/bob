@@ -8,7 +8,7 @@ defmodule Bob.Directory do
       :crypto.strong_rand_bytes(16)
       |> Base.encode16(case: :lower)
 
-    path = Path.join("tmp", random)
+    path = Path.join(Bob.tmp_dir(), random)
     File.rm_rf!(path)
     File.mkdir_p!(path)
 
@@ -16,7 +16,7 @@ defmodule Bob.Directory do
   end
 
   defp clean_temp_dirs() do
-    Path.wildcard("tmp/*")
+    Path.wildcard(Path.join(Bob.tmp_dir(), "*"))
     |> Enum.sort_by(&File.stat!(&1).mtime, &>=/2)
     |> Enum.drop(@max_temp_dirs)
     |> Enum.each(&File.rm_rf!/1)

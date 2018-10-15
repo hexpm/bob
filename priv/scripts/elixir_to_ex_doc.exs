@@ -1,6 +1,6 @@
 #!/usr/bin/env elixir
 
-[elixir, latest] = System.argv
+[elixir, _latest] = System.argv
 
 case elixir do
   "v1.7" <> _ -> "v0.19.0"

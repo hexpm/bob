@@ -19,12 +19,20 @@ defmodule Bob.Script do
   end
 
   defp exec({:cmd, cmd}, [], dir, log) do
-    Porcelain.shell(cmd, out: {:file, log}, err: :out, dir: dir)
+    Porcelain.shell(cmd, out: {:file, log}, err: :out, dir: dir, env: env())
   end
 
   defp exec({:script, script}, args, dir, log) do
-    Path.join("scripts", script)
+    Path.join(script_dir(), script)
     |> Path.expand()
-    |> Porcelain.exec(args, out: {:file, log}, err: :out, dir: dir)
+    |> Porcelain.exec(args, out: {:file, log}, err: :out, dir: dir, env: env())
+  end
+
+  defp env() do
+    [{"SCRIPT_DIR", script_dir()}]
+  end
+
+  defp script_dir() do
+    Path.join(Application.app_dir(:bob, "priv"), "scripts")
   end
 end

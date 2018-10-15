@@ -4,7 +4,7 @@ defmodule Bob.Job.BuildOTP do
   def run([ref_name, ref, linux]) do
     directory = Bob.Directory.new()
     Logger.info("Using directory #{directory}")
-    Bob.Script.run({:script, "build_otp_docker.sh"}, [ref_name, ref, linux], directory)
+    Bob.Script.run({:script, "otp.sh"}, [ref_name, ref, linux], directory)
   end
 
   def equal?(args, args), do: true

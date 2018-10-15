@@ -22,8 +22,9 @@ defmodule Bob.Mixfile do
   defp deps() do
     [
       {:plug, "~> 1.0"},
-      {:cowboy, ">= 0.0.0"},
-      {:poison, "~> 2.0"},
+      {:cowboy, "~> 1.0"},
+      {:jason, "~> 1.1"},
+      {:poison, "~> 3.1"},
       {:porcelain, "~> 2.0"},
       {:hackney, "~> 1.11"},
       {:ex_aws_s3, "~> 2.0"},
