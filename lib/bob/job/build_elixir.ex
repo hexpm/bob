@@ -3,7 +3,7 @@ defmodule Bob.Job.BuildElixir do
 
   def run([event, ref]) do
     directory = Bob.Directory.new()
-    args = [event, ref] ++ elixir_to_otp(ref)
+    args = [event, ref] ++ Enum.reverse(elixir_to_otp(ref))
     Logger.info("Using directory #{directory}")
     Bob.Script.run({:script, "elixir.sh"}, args, directory)
   end
