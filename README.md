@@ -14,7 +14,7 @@ These Elixir builds will be compiled against the oldest supported OTP version to
   * https://repo.hex.pm/builds/elixir/master-otp-20.zip
   * https://repo.hex.pm/builds/elixir/v1.4.5-otp-19.zip
 
-Since these builds are only available for officially supported OTP versions it is recommended that you fall back to the non OTP versioned URL if you get a 404 error for your combination of Elixir and OTP versions. Check https://github.com/hexpm/bob/blob/master/scripts/elixir_to_otp.exs to find which OTP versions we build against for particular Elixir versions.
+Since these builds are only available for officially supported OTP versions it is recommended that you fall back to the non OTP versioned URL if you get a 404 error for your combination of Elixir and OTP versions. Check https://github.com/hexpm/bob/blob/master/lib/bob/job/build_elixir.ex to find which OTP versions we build against for particular Elixir versions.
 
 ## Elixir docs
 
