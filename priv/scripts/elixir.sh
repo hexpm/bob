@@ -44,7 +44,8 @@ function otp_string {
 # $3 = build_docs
 function build {
   echo "Building Elixir $1 with OTP $2 BUILD_DOCS=$3"
-  container="bob-elixir-otp-${2}-ref-${1}"
+  ref=$(echo ${1} | sed -e 's/\//-/g')
+  container="bob-elixir-otp-${2}-ref-${ref}"
   image="gcr.io/hexpm-prod/bob-elixir"
   tag="otp-${2}"
 
