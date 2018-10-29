@@ -63,13 +63,14 @@ function build {
 # $1 = ref
 # $2 = otp
 function upload_build {
-  aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${1}${2}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+  version=$(echo ${1} | sed -e 's/\//-/g')
+  aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${version}${2}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
   fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
 }
 
 # $1 = ref
 function upload_docs {
-  version=$(echo "${1}" | sed 's/^v//g')
+  version=$(echo "${1}" | sed -e 's/^v//g' | sed -e 's/\//-/g')
 
   pushd versioned-docs
   for app in "${APPS[@]}"; do
@@ -94,11 +95,12 @@ function upload_docs {
 
 # $1 = ref
 function delete {
-  aws s3 rm "s3://s3.hex.pm/builds/elixir/${1}.zip"
-  aws s3 rm "s3://s3.hex.pm" --recursive --exclude "*" --include "builds/elixir/${1}-otp-*.zip"
+  ref=$(echo "${1}" | sed -e 's/\//-/g')
+  aws s3 rm "s3://s3.hex.pm/builds/elixir/${ref}.zip"
+  aws s3 rm "s3://s3.hex.pm" --recursive --exclude "*" --include "builds/elixir/${ref}-otp-*.zip"
 
   for app in "${APPS[@]}"; do
-    version=$(echo "${1}" | sed 's/^v//g')
+    version=$(echo "${ref}" | sed -e 's/^v//g')
 
     aws s3 rm "s3://s3.hex.pm/docs/${app}-${version}.tar.gz"
     fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
