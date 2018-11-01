@@ -14,7 +14,7 @@ defmodule Bob.Script do
         :ok
 
       %Porcelain.Result{status: status} ->
-        raise "#{inspect(action)} #{inspect(args)} returned: #{status}"
+        raise "#{inspect(action)} #{inspect(args)} #{inspect(dir)} returned: #{status}"
     end
   end
 
