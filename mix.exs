@@ -21,15 +21,16 @@ defmodule Bob.Mixfile do
 
   defp deps() do
     [
-      {:plug, "~> 1.0"},
       {:cowboy, "~> 1.0"},
+      {:distillery, "~> 1.5", runtime: false},
+      {:ex_aws_s3, "~> 2.0"},
+      {:hackney, "~> 1.11"},
       {:jason, "~> 1.1"},
+      {:plug, "~> 1.0"},
       {:poison, "~> 3.1"},
       {:porcelain, "~> 2.0"},
-      {:hackney, "~> 1.11"},
-      {:ex_aws_s3, "~> 2.0"},
       {:rollbax, "== 0.9.0"},
-      {:distillery, "~> 1.5", runtime: false}
+      {:sweet_xml, "~> 0.5"}
     ]
   end
 end
