@@ -82,4 +82,5 @@ defmodule Bob.Router do
 
   defp repo_to_job("elixir-lang/elixir"), do: Bob.Job.BuildElixir
   defp repo_to_job("elixir-lang/elixir-lang.github.com"), do: Bob.Job.BuildElixirGuides
+  defp repo_to_job("hexpm/hex"), do: Bob.Job.BuildHexDocs
 end
