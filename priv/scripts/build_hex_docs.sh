@@ -15,9 +15,7 @@ popd
 
 git clone git://github.com/hexpm/hex.git --quiet --branch "${HEX_REF}"
 pushd hex
-# TODO:
-# mkdir docs
-# cp logo.png docs/logo.png
+mkdir docs
 mix compile
 echo "Building docs"
 
@@ -28,6 +26,7 @@ pwd
   _build/dev/lib/hex/ebin \
   -u https://github.com/hexpm/hex \
   -m Mix.Tasks.Hex \
+  --logo ${SCRIPT_DIR}/hex_logo.png \
   --source-ref "$HEX_REF"
 
 cp -R doc ../versioned-docs
