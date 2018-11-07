@@ -43,6 +43,10 @@ defmodule Bob do
     Bob.Queue.run(Bob.Job.BuildElixirGuides, ["push", "master"])
   end
 
+  def build_hex_docs(ref) do
+    Bob.Queue.run(Bob.Job.BuildHexDocs, ["push", ref])
+  end
+
   def tmp_dir() do
     Application.get_env(:bob, :tmp_dir)
   end
