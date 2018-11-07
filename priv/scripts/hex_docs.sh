@@ -9,7 +9,7 @@ source ${SCRIPT_DIR}/utils.sh
 
 # $1 = ref
 function build {
-  image="gcr.io/hexpm-prod/bob-elixir-guides"
+  image="gcr.io/hexpm-prod/bob-hex-docs"
   container="hex-docs"
 
   docker pull ${image} || true
