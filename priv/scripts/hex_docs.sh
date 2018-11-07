@@ -28,17 +28,17 @@ function push {
   version=$(echo "${1}" | sed -e 's/^v//g' | sed -e 's/\//-/g')
 
   pushd versioned-docs
-  aws s3 cp . "s3://hexdocs.pm/${app}/${version}" --recursive --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}/${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
+  gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}/${version}" -h "x-goog-meta-surrogate-control: public,max-age=604800" rsync -d -r . "gs://hexdocs.pm/${app}/${version}"
   fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/${version}"
+  popd
 
-  tar -czf "${app}-${version}.tar.gz" -C "${app}" .
+  tar -czf "${app}-${version}.tar.gz" -C versioned-docs .
   aws s3 cp "${app}-${version}.tar.gz" "s3://s3.hex.pm/docs/${app}-${version}.tar.gz" --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docs/${app}-${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
   fastly_purge $BOB_FASTLY_SERVICE_HEXPM "docs/${app}-${version}"
-  popd
 
   if [ -f unversioned-docs ]; then
     pushd unversioned-docs
-    aws s3 cp . "s3://hexdocs.pm/${app}" --recursive --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}\",\"surrogate-control\":\"public,max-age=604800\"}"
+    gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}" -h "x-goog-meta-surrogate-control: public,max-age=604800" rsync -d -r . "gs://hexdocs.pm/${app}"
     fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}"
   fi
 }

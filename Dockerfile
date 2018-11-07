@@ -31,11 +31,12 @@ RUN mix release --no-tar
 
 # prepare release image
 FROM alpine:3.6 AS app
-RUN apk add --update bash curl docker gzip make openssl py-pip tar tarsnap wget zip
+RUN apk add --update bash build-base curl docker gzip libffi-dev openssl openssl-dev python-dev py-pip tar tarsnap wget zip
 
-RUN pip install --upgrade awscli
+RUN pip install --upgrade awscli gsutil
 
 COPY etc/tarsnap.conf /usr/local/etc/tarsnap.conf
+COPY etc/boto /app/.boto
 
 WORKDIR /app
 

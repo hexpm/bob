@@ -1,0 +1,2 @@
+[Credentials]
+gs_service_key_file = /boto/keyfile.json
