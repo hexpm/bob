@@ -16,7 +16,10 @@ function build {
   docker build -t ${image} -f ${SCRIPT_DIR}/hex-docs.dockerfile ${SCRIPT_DIR}
   docker push ${image}
   docker rm ${container} || true
-  docker run -t --name=${container} ${image}
+  docker run -t -e HEX_REF=${1} --name=${container} ${image}
+
+  docker cp ${container}:/home/build/versioned-docs versioned-docs || true
+  docker cp ${container}:/home/build/unversioned-docs unversioned-docs || true
 }
 
 # $1 = ref
@@ -25,7 +28,7 @@ function push {
   version=$(echo "${1}" | sed -e 's/^v//g' | sed -e 's/\//-/g')
 
   pushd versioned-docs
-  aws s3 cp "${app}" "s3://hexdocs.pm/${app}/${version}" --recursive --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}/${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
+  aws s3 cp . "s3://hexdocs.pm/${app}/${version}" --recursive --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}/${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
   fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/${version}"
 
   tar -czf "${app}-${version}.tar.gz" -C "${app}" .
@@ -35,7 +38,7 @@ function push {
 
   if [ -f unversioned-docs ]; then
     pushd unversioned-docs
-    aws s3 cp "${app}" "s3://hexdocs.pm/${app}" --recursive --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}\",\"surrogate-control\":\"public,max-age=604800\"}"
+    aws s3 cp . "s3://hexdocs.pm/${app}" --recursive --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docspage/${app}\",\"surrogate-control\":\"public,max-age=604800\"}"
     fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}"
   fi
 }

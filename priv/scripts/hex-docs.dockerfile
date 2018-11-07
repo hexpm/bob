@@ -26,6 +26,6 @@ COPY build_hex_docs.sh /home/build/build.sh
 COPY utils.sh /home/build/utils.sh
 COPY latest_version.exs /home/build/latest_version.exs
 COPY elixir_to_ex_doc.exs /home/build/elixir_to_ex_doc.exs
-COPY logo.png /home/build/logo.png
+COPY hex_logo.png /home/build/logo.png
 RUN chmod +x /home/build/build.sh
 CMD ./build.sh
