@@ -12,7 +12,7 @@ RUN /otp/Install -minimal /otp
 
 ENV PATH=/otp/bin:$PATH
 
-RUN mkdir -p /home/build/out
+RUN mkdir -p /home/build
 WORKDIR /home/build
 
 COPY build_elixir.sh /home/build/build.sh

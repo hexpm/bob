@@ -19,7 +19,7 @@ ENV PATH=/otp/bin:/elixir/bin:$PATH
 RUN mix local.hex --force
 RUN mix local.rebar --force
 
-RUN mkdir -p /home/build/out
+RUN mkdir -p /home/build
 WORKDIR /home/build
 
 COPY build_elixir_guides.sh /home/build/build.sh
