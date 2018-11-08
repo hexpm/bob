@@ -85,7 +85,7 @@ function upload_docs {
   done
   popd
 
-  if [ -f unversioned-docs ]; then
+  if [ -d unversioned-docs ]; then
     pushd unversioned-docs
     for app in "${APPS[@]}"; do
       pushd ${app}

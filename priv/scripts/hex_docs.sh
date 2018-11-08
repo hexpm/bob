@@ -36,7 +36,11 @@ function push {
   aws s3 cp "${app}-${version}.tar.gz" "s3://s3.hex.pm/docs/${app}-${version}.tar.gz" --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docs/${app}-${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
   fastly_purge $BOB_FASTLY_SERVICE_HEXPM "docs/${app}-${version}"
 
-  if [ -f unversioned-docs ]; then
+  echo "Checking if unversioned docs"
+  ls
+
+  if [ -d unversioned-docs ]; then
+    echo "Pushing unversioned docs"
     pushd unversioned-docs
     gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}" -h "x-goog-meta-surrogate-control: public,max-age=604800" rsync -d -r . "gs://hexdocs.pm/${app}"
     fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}"
