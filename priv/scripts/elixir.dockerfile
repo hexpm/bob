@@ -11,6 +11,7 @@ RUN tar zxf otp.tar.gz -C /otp --strip-components=1
 RUN /otp/Install -minimal /otp
 
 ENV PATH=/otp/bin:$PATH
+ENV LANG=C.UTF-8
 
 RUN mkdir -p /home/build
 WORKDIR /home/build

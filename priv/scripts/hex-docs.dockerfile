@@ -16,6 +16,8 @@ RUN wget -nv -O elixir.zip https://repo.hex.pm/builds/elixir/${elixir_version}-o
 RUN unzip -d /elixir elixir.zip
 
 ENV PATH=/otp/bin:/elixir/bin:$PATH
+ENV LANG=C.UTF-8
+
 RUN mix local.hex --force
 RUN mix local.rebar --force
 
