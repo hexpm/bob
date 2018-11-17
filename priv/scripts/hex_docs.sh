@@ -38,7 +38,7 @@ function push {
 
   if [ -d unversioned-docs ]; then
     pushd unversioned-docs
-    gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}" -h "x-goog-meta-surrogate-control: public,max-age=604800" rsync -d -r . "gs://hexdocs.pm/${app}"
+    gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}" -h "x-goog-meta-surrogate-control: public,max-age=604800" cp -r . "gs://hexdocs.pm/${app}"
     fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}"
   fi
 }
