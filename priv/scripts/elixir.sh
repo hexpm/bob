@@ -19,7 +19,6 @@ function push {
   otp_version=${otp_versions[0]}
   otp_string=$(otp_string ${otp_version})
   build "$1" "${otp_version}" "1"
-  upload_build "$1" ""
   upload_build "$1" "${otp_string}"
   upload_docs "$1"
 
@@ -28,6 +27,8 @@ function push {
     build "$1" "${otp_version}" "0"
     upload_build "$1" "${otp_string}"
   done
+
+  upload_build "$1" ""
 
   PATH=${original_path}
 }
