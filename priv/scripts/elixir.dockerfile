@@ -10,6 +10,7 @@ RUN mkdir -p /otp
 RUN tar zxf otp.tar.gz -C /otp --strip-components=1
 RUN /otp/Install -minimal /otp
 
+ENV OTP_VERSION=$otp_version
 ENV PATH=/otp/bin:$PATH
 ENV LANG=C.UTF-8
 
