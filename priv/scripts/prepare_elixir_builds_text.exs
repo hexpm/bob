@@ -1,5 +1,5 @@
 defmodule Line do
-  defstruct [:date, :time, :path, :ref, :sha, :otp]
+  defstruct [:datetime, :path, :ref, :sha, :otp]
 
   def from_line(line) do
     pattern = ~r|builds/elixir/(.*?)(-otp-.*)?\.zip|
@@ -13,8 +13,7 @@ defmodule Line do
       end
 
     %Line{
-      date: Date.from_iso8601!(date),
-      time: Time.from_iso8601!(time),
+      datetime: "#{date}T#{time}Z",
       path: path,
       ref: ref,
       otp: otp
@@ -28,11 +27,12 @@ defmodule Line do
   end
 
   def to_builds_txt(line) do
-    [line.ref <> line.otp, line.sha, line.date, line.time] |> Enum.join(" ")
+    [line.ref <> line.otp, line.sha, line.datetime] |> Enum.join(" ")
   end
 end
 
-input = "ls.txt"
+# aws s3 ls s3://s3.hex.pm/builds/elixir --recursive
+input = "elixir-ls.txt"
 output = "builds.txt"
 repo = "https://github.com/elixir-lang/elixir.git"
 repo_dir = "elixir"
