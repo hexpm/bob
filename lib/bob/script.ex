@@ -1,5 +1,7 @@
 defmodule Bob.Script do
   def run(action, args, dir) do
+    File.mkdir_p!(dir)
+
     {:ok, :ok} =
       File.open(Path.join(dir, "out.txt"), [:write, :delayed_write], fn log ->
         run_script(action, args, dir, log)
