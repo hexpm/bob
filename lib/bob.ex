@@ -50,4 +50,8 @@ defmodule Bob do
   def tmp_dir() do
     Application.get_env(:bob, :tmp_dir)
   end
+
+  def persist_dir() do
+    Application.get_env(:bob, :persist_dir)
+  end
 end

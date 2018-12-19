@@ -15,7 +15,9 @@ config :bob,
     ]
   ]
 
-config :bob, tmp_dir: "tmp"
+config :bob,
+  tmp_dir: "tmp",
+  persist_dir: "persist"
 
 config :porcelain, driver: Porcelain.Driver.Basic
 

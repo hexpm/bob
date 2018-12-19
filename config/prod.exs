@@ -2,6 +2,7 @@ use Mix.Config
 
 config :bob,
   tmp_dir: "/tmp",
+  persist_dir: "/persist",
   github_secret: "${BOB_GITHUB_SECRET}",
   github_user: "${BOB_GITHUB_USER}",
   github_token: "${BOB_GITHUB_TOKEN}"
