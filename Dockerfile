@@ -35,7 +35,7 @@ RUN apk add --update bash build-base coreutils curl docker gzip libffi-dev opens
 
 RUN pip install --upgrade awscli gsutil
 
-COPY etc/tarsnap.conf /usr/local/etc/tarsnap.conf
+COPY etc/tarsnap.conf /etc/tarsnap/tarsnap.conf
 COPY etc/boto /app/.boto
 
 WORKDIR /app
