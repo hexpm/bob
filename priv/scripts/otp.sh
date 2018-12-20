@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e -u
+set -euox pipefail
 
 ref_name=$1
 ref=$2

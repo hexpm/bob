@@ -4,7 +4,7 @@
 # $2 = ref
 # $@ = otp_versions
 
-set -e -u
+set -euox pipefail
 
 APPS=(eex elixir ex_unit iex logger mix)
 

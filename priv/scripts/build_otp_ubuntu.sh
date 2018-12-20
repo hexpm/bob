@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e -u
+set -euox pipefail
 
 if [ -z "${OTP_REF}" ]; then
   echo "OTP_REF not set"

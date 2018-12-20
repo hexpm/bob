@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e -u
+set -euox pipefail
 
 git clone git://github.com/elixir-lang/elixir-lang.github.com.git --quiet --branch master
 

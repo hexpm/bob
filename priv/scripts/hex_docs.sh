@@ -3,7 +3,7 @@
 # $1 = event
 # $2 = ref
 
-set -e -u
+set -euox pipefail
 
 source ${SCRIPT_DIR}/utils.sh
 

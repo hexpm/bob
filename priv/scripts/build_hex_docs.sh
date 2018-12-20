@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e -u
+set -euox pipefail
 
 version=$(echo "${HEX_REF}" | sed 's/^v//g')
 

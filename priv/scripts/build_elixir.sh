@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e -u
+set -euox pipefail
 
 cwd=$(pwd)
 

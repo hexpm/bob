@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e -u
+set -euox pipefail
 
 rm -rf logs* || true
 mkdir -p hex-s3
