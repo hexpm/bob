@@ -2,14 +2,14 @@ defmodule Bob.GitHub do
   @github_url "https://api.github.com/"
   @bucket "s3.hex.pm"
 
-  def diff(repo, linux) do
+  def diff(repo, build_path) do
     existing = fetch_repo_refs(repo)
-    built = fetch_built_refs(repo, linux)
+    built = fetch_built_refs(build_path)
 
     Enum.filter(existing, fn {name, ref} ->
       case Map.fetch(built, name) do
         {:ok, ^ref} -> false
-        _other -> valid_ref_name?(repo, name)
+        _other -> true
       end
     end)
   end
@@ -56,22 +56,12 @@ defmodule Bob.GitHub do
   end
 
   # TODO: Use S3 object metadata
-  defp fetch_built_refs(repo, linux) do
-    key = repo_to_path(repo, linux) <> "/builds.txt"
+  defp fetch_built_refs(build_path) do
+    key = build_path <> "/builds.txt"
 
     {:ok, %{body: body}} = ExAws.S3.get_object(@bucket, key, []) |> ExAws.request()
 
     String.split(body, "\n", trim: true)
     |> Map.new(&List.to_tuple(String.split(&1, " ", parts: 2, trim: true)))
   end
-
-  defp repo_to_path("erlang/otp", linux), do: "builds/otp/#{linux}"
-
-  defp valid_ref_name?("erlang/otp", "OTP-18.0-rc2"), do: false
-  defp valid_ref_name?("erlang/otp", "OTP_" <> _), do: false
-  defp valid_ref_name?("erlang/otp", "OTP-" <> _), do: true
-  defp valid_ref_name?("erlang/otp", "maint-r" <> _), do: false
-  defp valid_ref_name?("erlang/otp", "maint" <> _), do: true
-  defp valid_ref_name?("erlang/otp", "master" <> _), do: true
-  defp valid_ref_name?("erlang/otp", _), do: false
 end
