@@ -113,7 +113,7 @@ function delete {
 
   aws s3 cp s3://s3.hex.pm/builds/elixir/builds.txt builds.txt || true
   touch builds.txt
-  awk "\$1 !~ /^${1}/" builds.txt > tmp.txt && mv -f tmp.txt builds.txt
+  sed -i "/^${1} /d" builds.txt
   aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
 
   for app in "${APPS[@]}"; do
