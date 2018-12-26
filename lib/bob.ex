@@ -1,10 +1,6 @@
 defmodule Bob do
   use Application
 
-  # TOOD: Better duplicate check for OTP builds since we include the sha with the branch name
-  # in the arguments which means two quick commits to the same branch will trigger two builds
-  # instead of only one
-
   def start(_type, _args) do
     opts = [port: port(), compress: true]
 

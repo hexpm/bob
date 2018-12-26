@@ -57,11 +57,16 @@ defmodule Bob.GitHub do
 
   # TODO: Use S3 object metadata
   defp fetch_built_refs(build_path) do
-    key = build_path <> "/builds.txt"
+    key = Path.join(build_path, "builds.txt")
 
     {:ok, %{body: body}} = ExAws.S3.get_object(@bucket, key, []) |> ExAws.request()
 
     String.split(body, "\n", trim: true)
-    |> Map.new(&List.to_tuple(String.split(&1, " ", parts: 2, trim: true)))
+    |> Map.new(&line_to_ref/1)
+  end
+
+  defp line_to_ref(line) do
+    destructure [ref_name, ref], String.split(line, " ", trim: true)
+    {ref_name, ref}
   end
 end
