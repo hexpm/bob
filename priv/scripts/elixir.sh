@@ -70,7 +70,7 @@ function upload_build {
 
   aws s3 cp s3://s3.hex.pm/builds/elixir/builds.txt builds.txt || true
   touch builds.txt
-  sed -i "/^${ref_name} /d" builds.txt
+  sed -i "/^${1} /d" builds.txt
   echo -e "${1}${2} $(git rev-parse HEAD) $(date -u '+%Y-%m-%dT%H:%M:%SZ')\n$(cat builds.txt)" > builds.txt
   sort -u -k1,1 -o builds.txt builds.txt
   aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
