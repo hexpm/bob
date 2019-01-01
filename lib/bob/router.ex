@@ -35,11 +35,12 @@ defmodule Bob.Router do
   end
 
   defp github_request(event, request) do
-    ref = parse_ref(request["ref"])
+    ref_name = parse_ref(request["ref"])
+    ref = request["head_commit"]["id"]
     full_name = request["repository"]["full_name"]
     module = repo_to_job(full_name)
 
-    Bob.Queue.run(module, [event, ref])
+    Bob.Queue.run(module, [event, ref_name, ref])
   end
 
   defp parse_ref("refs/heads/" <> ref), do: ref

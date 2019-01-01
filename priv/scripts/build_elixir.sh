@@ -13,9 +13,10 @@ if [ "${OTP_VERSION}" == "17.3" ]; then
   export HEX_UNSAFE_HTTPS=1
 fi
 
-git clone git://github.com/elixir-lang/elixir.git --quiet --branch "${ELIXIR_REF}"
+git clone git://github.com/elixir-lang/elixir.git --quiet
 
 pushd elixir
+git checkout "${ELIXIR_SHA}"
 erl +V
 make compile
 make Precompiled.zip || make release_zip

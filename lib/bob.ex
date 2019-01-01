@@ -26,8 +26,9 @@ defmodule Bob do
     end
   end
 
-  def build_elixir(ref) do
-    Bob.Queue.run(Bob.Job.BuildElixir, ["push", ref])
+  def build_elixir(ref_name) do
+    ref = Bob.GitHub.fetch_repo_refs("elixir-lang/elixir") |> Map.new() |> Map.fetch!(ref_name)
+    Bob.Queue.run(Bob.Job.BuildElixir, ["push", ref_name, ref])
   end
 
   def build_otp(ref_name, linux \\ "ubuntu-14.04") do
@@ -39,8 +40,8 @@ defmodule Bob do
     Bob.Queue.run(Bob.Job.BuildElixirGuides, ["push", "master"])
   end
 
-  def build_hex_docs(ref) do
-    Bob.Queue.run(Bob.Job.BuildHexDocs, ["push", ref])
+  def build_hex_docs(ref_name) do
+    Bob.Queue.run(Bob.Job.BuildHexDocs, ["push", ref_name])
   end
 
   def tmp_dir() do

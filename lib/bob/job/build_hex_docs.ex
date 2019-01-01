@@ -1,13 +1,13 @@
 defmodule Bob.Job.BuildHexDocs do
   require Logger
 
-  def run([event, ref]) do
-    if run?(ref) do
+  def run([event, ref_name | _]) do
+    if run?(ref_name) do
       directory = Bob.Directory.new()
       Logger.info("Using directory #{directory}")
-      Bob.Script.run({:script, "hex_docs.sh"}, [event, ref], directory)
+      Bob.Script.run({:script, "hex_docs.sh"}, [event, ref_name], directory)
     else
-      Logger.info("Skipping hexpm/hex/#{ref}")
+      Logger.info("Skipping hexpm/hex/#{ref_name}")
     end
   end
 
