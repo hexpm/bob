@@ -22,7 +22,7 @@ config :bob,
 config :porcelain, driver: Porcelain.Driver.Basic
 
 config :logger, :console,
-  format: "$time $metadata[$level] $message\n"
+  format: "$metadata[$level] $message\n"
 
 config :rollbax, enabled: false
 
