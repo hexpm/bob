@@ -1,13 +1,20 @@
 defmodule Bob.Job.BuildElixir do
   require Logger
 
-  def run([event, ref_name, ref]) do
+  def run(["push", ref_name, ref]) do
     if build_ref?(ref_name) do
       directory = Bob.Directory.new()
-      args = [event, ref_name, ref] ++ Enum.reverse(elixir_to_otp(ref_name))
+      args = ["push", ref_name, ref] ++ Enum.reverse(elixir_to_otp(ref_name))
       Logger.info("Using directory #{directory}")
       Bob.Script.run({:script, "elixir.sh"}, args, directory)
     end
+  end
+
+  def run(["delete", ref_name]) do
+    directory = Bob.Directory.new()
+    args = ["delete", ref_name]
+    Logger.info("Using directory #{directory}")
+    Bob.Script.run({:script, "elixir.sh"}, args, directory)
   end
 
   def equal?(_, _), do: false
