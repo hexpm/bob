@@ -30,7 +30,7 @@ function push {
   done
 
   upload_build "$1" "$2" ""
-  update_builds_txt "$1" "$2" ${otp_versions}
+  update_builds_txt "$1" "$2" ${@:3}
   fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
 
   PATH=${original_path}
