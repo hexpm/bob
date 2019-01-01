@@ -30,6 +30,8 @@ function push {
   done
 
   upload_build "$1" "$2" ""
+  update_builds_txt "$1" "$2" ${otp_versions}
+  fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
 
   PATH=${original_path}
 }
@@ -64,20 +66,34 @@ function build {
 }
 
 # $1 = ref
-# $2 = sha
-# $3 = otp
+# $2 = otp
 function upload_build {
   version=$(echo ${1} | sed -e 's/\//-/g')
-  aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${version}${3}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+  aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${version}${2}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+}
+
+# $1 = ref
+# $2 = sha
+# $@ = otp_versions
+function update_builds_txt {
+  otp_versions=(${@:3})
+  date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
   aws s3 cp s3://s3.hex.pm/builds/elixir/builds.txt builds.txt || true
   touch builds.txt
-  sed -i "/^${1}${3} /d" builds.txt
-  echo -e "${1}${3} ${2} $(date -u '+%Y-%m-%dT%H:%M:%SZ')\n$(cat builds.txt)" > builds.txt
+
+  sed -i "/^${1} /d" builds.txt
+  sed -i "/^${1}-otp-\d\+ /d" builds.txt
+
+  echo -e "${1} ${2} ${date}\n$(cat builds.txt)" > builds.txt
+
+  for otp_version in "${otp_versions[@]}"; do
+    otp_string=$(otp_string ${otp_version})
+    echo -e "${1}${otp_string} ${2} ${date}\n$(cat builds.txt)" > builds.txt
+  done
+
   sort -u -k1,1 -o builds.txt builds.txt
   aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
-
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
 }
 
 # $1 = ref
