@@ -16,6 +16,8 @@ These Elixir builds will be compiled against the oldest supported OTP version to
 
 Since these builds are only available for officially supported OTP versions it is recommended that you fall back to the non OTP versioned URL if you get a 404 error for your combination of Elixir and OTP versions. Check https://github.com/hexpm/bob/blob/master/lib/bob/job/build_elixir.ex to find which OTP versions we build against for particular Elixir versions.
 
+See https://repo.hex.pm/builds/elixir/builds.txt for a list of all builds.
+
 ## Elixir docs
 
 On  git pushes documentation is built and pushed to `https://hexdocs.pm/{APPLICATION}/{VERSION}` where `{APPLICATION}` is an application in the Elixir standard distribution and `{VERSION}` is the Elixir version, examples are:
