@@ -63,6 +63,9 @@ function build {
   docker cp ${container}:/home/build/elixir.zip elixir.zip
   docker cp ${container}:/home/build/versioned-docs versioned-docs || true
   docker cp ${container}:/home/build/unversioned-docs unversioned-docs || true
+
+  docker rm ${container}
+  docker rmi ${image}:${tag}
 }
 
 # $1 = ref
