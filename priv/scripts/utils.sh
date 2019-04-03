@@ -10,6 +10,6 @@ function fastly_purge {
 }
 
 # $1 = path
-function fastly_purge_path {
+function fastly_purge_repo_path {
   curl -X PURGE https://repo.hex.pm/${1}
 }
