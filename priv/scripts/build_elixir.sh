@@ -2,6 +2,8 @@
 
 set -euox pipefail
 
+APPS=(eex elixir ex_unit iex logger mix)
+
 cwd=$(pwd)
 
 if [ -z "${ELIXIR_REF}" ]; then
@@ -49,6 +51,7 @@ if [ "${BUILD_DOCS}" == "1" ]; then
   sed -i -e 's/-n http:\/\/elixir-lang.org\/docs\/\$(CANONICAL)\/\$(2)\//-n https:\/\/hexdocs.pm\/\$(2)\/\$(CANONICAL)/g' Makefile
   sed -i -e 's/-a http:\/\/elixir-lang.org\/docs\/\$(CANONICAL)\/\$(2)\//-a https:\/\/hexdocs.pm\/\$(2)\/\$(CANONICAL)/g' Makefile
   CANONICAL="${version}" make docs
+
   mv doc ../versioned-docs
 
   tags=$(git tag)
@@ -58,6 +61,14 @@ if [ "${BUILD_DOCS}" == "1" ]; then
     CANONICAL="" make docs
     mv doc ../unversioned-docs
   fi
+
+  tags=$(git tag)
+  versions=$(elixir ${cwd}/tags_to_versions.exs "${tags}" 1.0.0)
+
+  for app in "${APPS[@]}"; do
+    elixir ${cwd}/build_docs_config.exs ${app} "master ${versions}"
+    mv docs_config.js ../versioned-docs/${app}/
+  done
 
   popd
 fi

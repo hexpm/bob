@@ -35,4 +35,8 @@ if [ "${version}" == "${latest_version}" ]; then
   mv doc ../unversioned-docs
 fi
 
+versions=$(elixir ../tags_to_versions.exs "${tags}" 0.18.2)
+elixir ../build_docs_config.exs hex "${versions}"
+mv docs_config.js ../versioned-docs
+
 popd
