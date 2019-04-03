@@ -109,11 +109,8 @@ function upload_docs {
     gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}/${version}" -h "x-goog-meta-surrogate-control: public,max-age=604800" rsync -d -r . "gs://hexdocs.pm/${app}/${version}"
     fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/${version}"
 
-    mkdir tmp
-    mv docs_config.js tmp/
-    gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}/docs_config.js" -h "x-goog-meta-surrogate-control: public,max-age=604800" rsync tmp "gs://hexdocs.pm/${app}"
+    gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}/docs_config.js" -h "x-goog-meta-surrogate-control: public,max-age=604800" cp docs_config.js "gs://hexdocs.pm/${app}"
     fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/docs_config.js"
-    rm -r tmp
 
     popd
 
