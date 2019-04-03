@@ -66,7 +66,7 @@ if [ "${BUILD_DOCS}" == "1" ]; then
   versions=$(elixir ${cwd}/tags_to_versions.exs "${tags}" 1.0.0)
 
   for app in "${APPS[@]}"; do
-    elixir ${cwd}/build_docs_config.exs ${app} "master ${versions}"
+    elixir ${cwd}/build_docs_config.exs ${app} "${versions}"
     mv docs_config.js ../versioned-docs/${app}/
   done
 
