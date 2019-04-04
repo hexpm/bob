@@ -63,7 +63,7 @@ if [ "${BUILD_DOCS}" == "1" ]; then
   fi
 
   tags=$(git tag)
-  versions=$(elixir ${cwd}/tags_to_versions.exs "${tags}" 1.0.0)
+  versions=$(elixir ${cwd}/tags_to_versions.exs "${tags}" 1.0.4)
 
   for app in "${APPS[@]}"; do
     elixir ${cwd}/build_docs_config.exs ${app} "${versions}"
