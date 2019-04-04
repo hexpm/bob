@@ -32,7 +32,7 @@ function push {
   fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/${version}"
 
   gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}/docs_config.js" -h "x-goog-meta-surrogate-control: public,max-age=604800" cp docs_config.jsk "gs://hexdocs.pm/${app}"
-  fastly_purge_hexdocs_path "/${app}/docs_config.js"
+  fastly_purge_hexdocs_path "${app}/docs_config.js"
   popd
 
   tar -czf "${app}-${version}.tar.gz" -C versioned-docs .
