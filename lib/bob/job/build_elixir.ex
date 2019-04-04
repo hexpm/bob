@@ -10,7 +10,7 @@ defmodule Bob.Job.BuildElixir do
     end
   end
 
-  def run(["delete", ref_name]) do
+  def run(["delete", ref_name, _ref]) do
     directory = Bob.Directory.new()
     args = ["delete", ref_name]
     Logger.info("Using directory #{directory}")
