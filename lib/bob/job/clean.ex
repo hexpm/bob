@@ -2,7 +2,8 @@ defmodule Bob.Job.Clean do
   require Logger
 
   def run([]) do
-    Bob.Script.run({:script, "clean.sh"}, [], "/tmp")
+    directory = Bob.Directory.new()
+    Bob.Script.run({:script, "clean.sh"}, [], directory)
   end
 
   def equal?(_, _), do: false
