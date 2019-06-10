@@ -1,3 +1,13 @@
+# Usage:
+#
+#    cd /path/to/bob
+#    rm -rf tmp && mkdir tmp && cd tmp
+#    aws s3 ls s3://s3.hex.pm/builds/elixir --recursive | grep -v builds.txt > elixir-ls.txt
+#    aws s3 cp s3://s3.hex.pm/builds/elixir . --recursive
+#    elixir ../priv/scripts/prepare_elixir_builds_text.exs
+#    aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt
+#    curl -XPURGE https://repo.hex.pm/builds/elixir/builds.txt
+
 defmodule Line do
   defstruct [:datetime, :path, :ref, :sha, :otp]
 
