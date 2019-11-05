@@ -6,7 +6,7 @@ config :bob,
       module: Bob.Job.Clean,
       args: [],
       period: :day,
-      time: {3, 0, 0}
+      time: {4, 0, 0}
     ],
     [
       module: Bob.Job.BackupS3,
@@ -16,8 +16,14 @@ config :bob,
     ],
     [
       module: Bob.Job.BuildOTPChecker,
-      args: [],
+      args: [:tags],
       period: {15, :min}
+    ],
+    [
+      module: Bob.Job.BuildOTPChecker,
+      args: [:branches],
+      period: :day,
+      time: {3, 0, 0}
     ]
   ]
 
