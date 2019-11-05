@@ -24,7 +24,6 @@ docker run -t -e OTP_REF=${ref_name} --name=${container} ${image}:${tag}
 docker cp ${container}:/home/build/out/${ref_name}.tar.gz ${ref_name}.tar.gz
 
 docker rm ${container}
-docker rmi ${image}:${tag}
 
 aws s3 cp ${ref_name}.tar.gz s3://s3.hex.pm/builds/otp/${linux}/${ref_name}.tar.gz --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"otp-builds","surrogate-control":"public,max-age=604800"}'
 

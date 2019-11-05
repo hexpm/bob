@@ -65,7 +65,6 @@ function build {
   docker cp ${container}:/home/build/unversioned-docs unversioned-docs || true
 
   docker rm ${container}
-  docker rmi ${image}:${tag}
 }
 
 # $1 = ref
