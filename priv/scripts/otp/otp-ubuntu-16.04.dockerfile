@@ -29,6 +29,6 @@ RUN apt-get install -y \
 RUN mkdir -p /home/build/out
 WORKDIR /home/build
 
-COPY build_otp_ubuntu.sh /home/build/build.sh
+COPY otp/build_otp_ubuntu.sh /home/build/build.sh
 RUN chmod +x /home/build/build.sh
 CMD ./build.sh

@@ -5,7 +5,7 @@ defmodule Bob.Job.BuildHexDocs do
     if run?(ref_name) do
       directory = Bob.Directory.new()
       Logger.info("Using directory #{directory}")
-      Bob.Script.run({:script, "hex_docs.sh"}, [event, ref_name], directory)
+      Bob.Script.run({:script, "hex/hex_docs.sh"}, [event, ref_name], directory)
     else
       Logger.info("Skipping hexpm/hex/#{ref_name}")
     end

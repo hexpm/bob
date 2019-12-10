@@ -1,23 +1,25 @@
 defmodule Bob.Job.BuildOTPChecker do
   @repo "erlang/otp"
-  @linux "ubuntu-14.04"
-  @build_path "builds/otp/#{@linux}"
+  @linuxes ["ubuntu-14.04", "alpine-3.10"]
 
   def run([type]) do
-    for {ref_name, ref} <- Bob.GitHub.diff(@repo, @build_path),
-        build_ref?(type, ref_name),
-        do: Bob.Queue.run(Bob.Job.BuildOTP, [ref_name, ref, @linux])
+    for linux <- @linuxes,
+        {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/otp/#{linux}"),
+        build_ref?(type, linux, ref_name),
+        do: Bob.Queue.run(Bob.Job.BuildOTP, [ref_name, ref, linux])
   end
 
   def equal?(_, _), do: true
 
   def similar?(_, _), do: true
 
-  defp build_ref?(_type, "OTP-18.0-rc2"), do: false
-  defp build_ref?(_type, "OTP_" <> _), do: false
-  defp build_ref?(_type, "maint-r" <> _), do: false
-  defp build_ref?(:tags, "OTP-" <> _), do: true
-  defp build_ref?(:branches, "maint" <> _), do: true
-  defp build_ref?(:branches, "master" <> _), do: true
-  defp build_ref?(_type, _ref), do: false
+  defp build_ref?(_type, _linux, "OTP-18.0-rc2"), do: false
+  defp build_ref?(_type, _linux, "OTP_" <> _), do: false
+  defp build_ref?(_type, _linux, "maint-r" <> _), do: false
+  defp build_ref?(:tags, "alpine-3.10", "OTP-17" <> _), do: false
+  defp build_ref?(:tags, "alpine-3.10", "OTP-18" <> _), do: false
+  defp build_ref?(:tags, _linux, "OTP-" <> _), do: true
+  defp build_ref?(:branches, _linux, "maint" <> _), do: true
+  defp build_ref?(:branches, _linux, "master" <> _), do: true
+  defp build_ref?(_type, _linux, _ref), do: false
 end

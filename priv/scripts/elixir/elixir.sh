@@ -20,18 +20,20 @@ function push {
   otp_version=${otp_versions[0]}
   otp_string=$(otp_string ${otp_version})
   build "$1" "$2" "${otp_version}" "1"
-  upload_build "$1" "${otp_string}"
-  upload_docs "$1"
+  # upload_build "$1" "${otp_string}"
+  # upload_docs "$1"
 
   for otp_version in "${otp_versions[@]:1}"; do
     otp_string=$(otp_string ${otp_version})
     build "$1" "$2" "${otp_version}" "0"
-    upload_build "$1" "${otp_string}"
+    # upload_build "$1" "${otp_string}"
+    update_builds_txt "$1" "$2" "${otp_string}"
   done
 
-  upload_build "$1" ""
-  update_builds_txt "$1" "$2" ${@:3}
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
+  # upload_build "$1" ""
+  update_builds_txt "$1" "$2" ""
+
+  # fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
 
   PATH=${original_path}
 }
@@ -55,8 +57,8 @@ function build {
   tag="otp-${3}"
 
   docker pull ${image}:${tag} || true
-  docker build --build-arg otp_version=${3} -t ${image}:${tag} -f ${SCRIPT_DIR}/elixir.dockerfile ${SCRIPT_DIR}
-  docker push ${image}:${tag}
+  docker build --build-arg otp_version=${3} -t ${image}:${tag} -f ${SCRIPT_DIR}/elixir/elixir.dockerfile ${SCRIPT_DIR}
+  # docker push ${image}:${tag}
   docker rm ${container} || true
   docker run -t -e ELIXIR_REF=${1} -e ELIXIR_SHA=${2} -e BUILD_DOCS=${4} --name=${container} ${image}:${tag}
 
@@ -76,26 +78,20 @@ function upload_build {
 
 # $1 = ref
 # $2 = sha
-# $@ = otp_versions
+# $3 = otp
 function update_builds_txt {
-  otp_versions=(${@:3})
   date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  build_sha256=$(sha256sum elixir.zip | cut -d ' ' -f 1)
 
   aws s3 cp s3://s3.hex.pm/builds/elixir/builds.txt builds.txt || true
   touch builds.txt
 
-  sed -i "/^${1} /d" builds.txt
-  sed -i "/^${1}-otp-\d\+ /d" builds.txt
+  sed -i "/^${1}${3} /d" builds.txt
 
-  echo -e "${1} ${2} ${date}\n$(cat builds.txt)" > builds.txt
-
-  for otp_version in "${otp_versions[@]}"; do
-    otp_string=$(otp_string ${otp_version})
-    echo -e "${1}${otp_string} ${2} ${date}\n$(cat builds.txt)" > builds.txt
-  done
+  echo -e "${1}${3} ${2} ${date} ${build_sha256} \n$(cat builds.txt)" > builds.txt
 
   sort -u -k1,1 -o builds.txt builds.txt
-  aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+  # aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
 }
 
 # $1 = ref

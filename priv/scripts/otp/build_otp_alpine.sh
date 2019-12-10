@@ -13,16 +13,20 @@ otp_tar_name=$(basename https://github.com/erlang/otp/archive/${OTP_REF}.tar.gz)
 otp_untar_dir="otp-${OTP_REF}"
 
 wget -nv ${otp_url}
-echo "******====*******"
-ls
-echo "******====*******"
 tar -zxf ${otp_tar_name}
 chmod -R 777 ${otp_untar_dir}
 
 cd ${otp_untar_dir}
 
 ./otp_build autoconf
+
+patch -p1 < ../patches/replace-glibc-check.patch || true
+patch -p1 < ../patches/safe-signal-handling.patch || true
+
+gnuArch="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)"
+
 ./configure \
+  --build="$gnuArch" \
   --without-javac \
   --without-wx \
   --without-debugger \
@@ -50,6 +54,6 @@ make -j4
 make release
 
 cd ../
-mv otp-${OTP_REF}/release/x86_64-unknown-linux-gnu/ ${OTP_REF}
+mv otp-${OTP_REF}/release/x86_64-pc-linux-musl/ ${OTP_REF}
 rm ${OTP_REF}.tar.gz
 tar -zcf out/${OTP_REF}.tar.gz ${OTP_REF}
