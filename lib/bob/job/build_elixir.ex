@@ -6,7 +6,7 @@ defmodule Bob.Job.BuildElixir do
       directory = Bob.Directory.new()
       args = ["push", ref_name, ref] ++ Enum.reverse(elixir_to_otp(ref_name))
       Logger.info("Using directory #{directory}")
-      Bob.Script.run({:script, "elixir.sh"}, args, directory)
+      Bob.Script.run({:script, "elixir/elixir.sh"}, args, directory)
     end
   end
 
@@ -14,7 +14,7 @@ defmodule Bob.Job.BuildElixir do
     directory = Bob.Directory.new()
     args = ["delete", ref_name]
     Logger.info("Using directory #{directory}")
-    Bob.Script.run({:script, "elixir.sh"}, args, directory)
+    Bob.Script.run({:script, "elixir/elixir.sh"}, args, directory)
   end
 
   def equal?(_, _), do: false

@@ -13,9 +13,6 @@ otp_tar_name=$(basename https://github.com/erlang/otp/archive/${OTP_REF}.tar.gz)
 otp_untar_dir="otp-${OTP_REF}"
 
 wget -nv ${otp_url}
-echo "******====*******"
-ls
-echo "******====*******"
 tar -zxf ${otp_tar_name}
 chmod -R 777 ${otp_untar_dir}
 

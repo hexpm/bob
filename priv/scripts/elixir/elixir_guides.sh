@@ -12,7 +12,7 @@ function push {
   container="elixir-guides"
 
   docker pull ${image} || true
-  docker build -t ${image} -f ${SCRIPT_DIR}/elixir-guides.dockerfile ${SCRIPT_DIR}
+  docker build -t ${image} -f ${SCRIPT_DIR}/elixir/elixir-guides.dockerfile ${SCRIPT_DIR}
   docker push ${image}
   docker rm ${container} || true
   docker run -t --name=${container} ${image}

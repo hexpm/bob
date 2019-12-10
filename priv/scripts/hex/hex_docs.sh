@@ -13,7 +13,7 @@ function build {
   container="hex-docs"
 
   docker pull ${image} || true
-  docker build -t ${image} -f ${SCRIPT_DIR}/hex-docs.dockerfile ${SCRIPT_DIR}
+  docker build -t ${image} -f ${SCRIPT_DIR}/hex/hex-docs.dockerfile ${SCRIPT_DIR}
   docker push ${image}
   docker rm ${container} || true
   docker run -t -e HEX_REF=${1} --name=${container} ${image}

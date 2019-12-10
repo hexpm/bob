@@ -3,6 +3,8 @@ FROM alpine:3.10
 RUN apk --no-cache upgrade
 
 RUN apk add --no-cache \
+    dpkg-dev \
+    dpkg \
     wget \
     bash \
     pcre \
@@ -11,8 +13,6 @@ RUN apk add --no-cache \
     ncurses-dev \
     unixodbc-dev \
     zlib-dev \
-    # dpkg-dev \
-    # dpkg \
     autoconf \
     build-base \
     perl-dev
@@ -20,6 +20,7 @@ RUN apk add --no-cache \
 RUN mkdir -p /home/build/out
 WORKDIR /home/build
 
-COPY build_otp_alpine.sh /home/build/build.sh
+COPY otp/alpine-patches /home/build/patches
+COPY otp/build_otp_alpine.sh /home/build/build.sh
 RUN chmod +x /home/build/build.sh
 CMD ./build.sh
