@@ -1,10 +1,9 @@
 defmodule Bob.GitHub do
   @github_url "https://api.github.com/"
-  @bucket "s3.hex.pm"
 
   def diff(repo, build_path) do
     existing = fetch_repo_refs(repo)
-    built = fetch_built_refs(build_path)
+    built = Bob.Repo.fetch_built_refs(build_path)
 
     Enum.filter(existing, fn {name, ref} ->
       case Map.fetch(built, name) do
@@ -53,20 +52,5 @@ defmodule Bob.GitHub do
         |> String.trim_trailing(">")
       end
     end)
-  end
-
-  # TODO: Use S3 object metadata
-  defp fetch_built_refs(build_path) do
-    key = Path.join(build_path, "builds.txt")
-
-    {:ok, %{body: body}} = ExAws.S3.get_object(@bucket, key, []) |> ExAws.request()
-
-    String.split(body, "\n", trim: true)
-    |> Map.new(&line_to_ref/1)
-  end
-
-  defp line_to_ref(line) do
-    destructure [ref_name, ref], String.split(line, " ", trim: true)
-    {ref_name, ref}
   end
 end

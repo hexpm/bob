@@ -24,6 +24,11 @@ config :bob,
       args: [:branches],
       period: :day,
       time: {3, 0, 0}
+    ],
+    [
+      module: Bob.Job.BuildDockerChecker,
+      args: [],
+      period: {15, :min}
     ]
   ]
 
