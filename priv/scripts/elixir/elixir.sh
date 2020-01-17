@@ -53,12 +53,10 @@ function build {
   echo "Building Elixir $1 $2 with OTP $3 BUILD_DOCS=$4"
   ref=$(echo ${1} | sed -e 's/\//-/g')
   container="bob-elixir-otp-${3}-ref-${ref}"
-  image="gcr.io/hexpm-prod/bob-elixir"
+  image="bob-elixir"
   tag="otp-${3}"
 
-  docker pull ${image}:${tag} || true
   docker build --build-arg otp_version=${3} -t ${image}:${tag} -f ${SCRIPT_DIR}/elixir/elixir.dockerfile ${SCRIPT_DIR}
-  # docker push ${image}:${tag}
   docker rm ${container} || true
   docker run -t -e ELIXIR_REF=${1} -e ELIXIR_SHA=${2} -e BUILD_DOCS=${4} --name=${container} ${image}:${tag}
 

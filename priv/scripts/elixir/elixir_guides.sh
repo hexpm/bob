@@ -8,12 +8,10 @@ set -euox pipefail
 source ${SCRIPT_DIR}/utils.sh
 
 function push {
-  image="gcr.io/hexpm-prod/bob-elixir-guides"
+  image="bob-elixir-guides"
   container="elixir-guides"
 
-  docker pull ${image} || true
   docker build -t ${image} -f ${SCRIPT_DIR}/elixir/elixir-guides.dockerfile ${SCRIPT_DIR}
-  docker push ${image}
   docker rm ${container} || true
   docker run -t --name=${container} ${image}
 
