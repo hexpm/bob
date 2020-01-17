@@ -9,12 +9,10 @@ source ${SCRIPT_DIR}/utils.sh
 
 # $1 = ref
 function build {
-  image="gcr.io/hexpm-prod/bob-hex-docs"
+  image="bob-hex-docs"
   container="hex-docs"
 
-  docker pull ${image} || true
   docker build -t ${image} -f ${SCRIPT_DIR}/hex/hex-docs.dockerfile ${SCRIPT_DIR}
-  docker push ${image}
   docker rm ${container} || true
   docker run -t -e HEX_REF=${1} --name=${container} ${image}
 

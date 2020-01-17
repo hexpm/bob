@@ -11,13 +11,11 @@ source ${SCRIPT_DIR}/utils.sh
 echo "Building $1 $2 $3"
 
 container="otp-build-${linux}-${ref_name}"
-image="gcr.io/hexpm-prod/bob-otp"
+image="bob-otp"
 tag=${linux}
 date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-docker pull ${image}:${tag} || true
 docker build -t ${image}:${tag} -f ${SCRIPT_DIR}/otp/otp-${linux}.dockerfile ${SCRIPT_DIR}
-docker push ${image}:${tag}
 docker rm ${container} || true
 docker run -t -e OTP_REF=${ref_name} --name=${container} ${image}:${tag}
 
