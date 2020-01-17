@@ -17,8 +17,15 @@ defmodule Bob.Directory do
 
   defp clean_temp_dirs() do
     Path.wildcard(Path.join(Bob.tmp_dir(), "*"))
-    |> Enum.sort_by(&File.stat!(&1).mtime, &>=/2)
+    |> Enum.sort_by(&mtime/1, &>=/2)
     |> Enum.drop(@max_temp_dirs)
-    |> Enum.each(&File.rm_rf!/1)
+    |> Enum.each(&File.rm_rf/1)
+  end
+
+  defp mtime(path) do
+    case File.stat(path) do
+      {:ok, stat} -> stat.mtime
+      {:error, _} -> :calendar.universal_time()
+    end
   end
 end
