@@ -20,7 +20,7 @@ See https://repo.hex.pm/builds/elixir/builds.txt for a list of all builds.
 
 ## Elixir docs
 
-On  git pushes documentation is built and pushed to `https://hexdocs.pm/{APPLICATION}/{VERSION}` where `{APPLICATION}` is an application in the Elixir standard distribution and `{VERSION}` is the Elixir version, examples are:
+On git pushes documentation is built and pushed to `https://hexdocs.pm/{APPLICATION}/{VERSION}` where `{APPLICATION}` is an application in the Elixir standard distribution and `{VERSION}` is the Elixir version, examples are:
 
   * https://hexdocs.pm/elixir/
   * https://hexdocs.pm/elixir/master
@@ -30,6 +30,20 @@ Documentation tarballs are also uploaded to `https://repo.hex.pm/docs/{APPLICATI
 
   * https://repo.hex.pm/docs/elixir-master.tar.gz
   * https://repo.hex.pm/docs/mix-1.4.5.tar.gz
+
+## Erlang builds
+
+Erlang builds compiled on Ubuntu 14.04 and Alpine 3.10 are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
+
+After the builds complete they will be available at `https://repo.hex.pm/builds/otp/${OS_VER}/{REF}.tar.gz` where `{REF}` is the name of the git tag or branch. Examples of URLs are:
+
+  * https://repo.hex.pm/builds/otp/ubuntu-14.04/master.tar.gz
+  * https://repo.hex.pm/builds/otp/alpine-3.10/OTP-22.tar.gz
+
+For lists of builds see:
+
+  * https://repo.hex.pm/builds/otp/ubuntu-14.04/builds.txt
+  * https://repo.hex.pm/builds/otp/alpine-3.10/builds.txt
 
 ## Hex S3 backups
 
