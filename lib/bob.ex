@@ -4,9 +4,17 @@ defmodule Bob do
   def start(_type, _args) do
     opts = [port: port(), compress: true]
 
+    setup_docker()
     File.mkdir_p!(tmp_dir())
     Plug.Adapters.Cowboy.http(Bob.Router, [], opts)
     Bob.Supervisor.start_link()
+  end
+
+  defp setup_docker() do
+    if path = System.get_env("BOB_DOCKER_CONFIG_PATH") do
+      File.mkdir_p!("~/.docker")
+      File.cp!(path, "~/.docker/config.json")
+    end
   end
 
   def log_error(kind, error, stacktrace) do
