@@ -12,8 +12,8 @@ defmodule Bob do
 
   defp setup_docker() do
     if path = System.get_env("BOB_DOCKER_CONFIG_PATH") do
-      File.mkdir_p!("~/.docker")
-      File.cp!(path, "~/.docker/config.json")
+      File.mkdir_p!(Path.expand("~/.docker"))
+      File.cp!(path, Path.expand("~/.docker/config.json"))
     end
   end
 
