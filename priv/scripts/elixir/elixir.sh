@@ -20,20 +20,20 @@ function push {
   otp_version=${otp_versions[0]}
   otp_string=$(otp_string ${otp_version})
   build "$1" "$2" "${otp_version}" "1"
-  # upload_build "$1" "${otp_string}"
-  # upload_docs "$1"
+  upload_build "$1" "${otp_string}"
+  upload_docs "$1"
 
   for otp_version in "${otp_versions[@]:1}"; do
     otp_string=$(otp_string ${otp_version})
     build "$1" "$2" "${otp_version}" "0"
-    # upload_build "$1" "${otp_string}"
+    upload_build "$1" "${otp_string}"
     update_builds_txt "$1" "$2" "${otp_string}"
   done
 
-  # upload_build "$1" ""
+  upload_build "$1" ""
   update_builds_txt "$1" "$2" ""
 
-  # fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
+  fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
 
   PATH=${original_path}
 }
@@ -89,7 +89,7 @@ function update_builds_txt {
   echo -e "${1}${3} ${2} ${date} ${build_sha256} \n$(cat builds.txt)" > builds.txt
 
   sort -u -k1,1 -o builds.txt builds.txt
-  # aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+  aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
 }
 
 # $1 = ref
