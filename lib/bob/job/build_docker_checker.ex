@@ -1,8 +1,10 @@
 defmodule Bob.Job.BuildDockerChecker do
   @erlang_build_regex ~r"^OTP-(\d+(?:\.\d+)?(?:\.\d+))?$"
-  @erlang_tag_regex ~r"^((\d+)(?:\.\d+)?(?:\.\d+)?)-alpine-.+$"
+  @erlang_tag_regex ~r"^((\d+)(?:\.\d+)?(?:\.\d+)?)-alpine-(.+)$"
   @elixir_build_regex ~r"^v(\d+\.\d+\.\d+)-otp-(\d+)$"
-  @elixir_tag_regex ~r"^(.+)-erlang-(.+)-alpine-.+$"
+  @elixir_tag_regex ~r"^(.+)-erlang-(.+)-alpine-(.+)$"
+
+  @alpines ["3.11.2", "3.11.3"]
 
   def run([]) do
     erlang()
@@ -13,18 +15,21 @@ defmodule Bob.Job.BuildDockerChecker do
     builds = Map.keys(Bob.Repo.fetch_built_refs("builds/otp/alpine-3.10"))
     tags = Bob.DockerHub.fetch_repo_tags("hexpm/erlang")
 
-    Enum.each(diff_erlang_tags(builds, tags), fn ref ->
-      Bob.Queue.run(Bob.Job.BuildDockerErlang, [ref])
+    Enum.each(diff_erlang_tags(builds, tags), fn {ref, alpine} ->
+      Bob.Queue.run(Bob.Job.BuildDockerErlang, [ref, alpine])
     end)
   end
 
   defp diff_erlang_tags(builds, tags) do
-    builds = builds |> Enum.map(&parse_erlang_build/1) |> Enum.filter(& &1)
+    builds =
+      for alpine <- @alpines,
+          build <- builds |> Enum.map(&parse_erlang_build/1) |> Enum.filter(& &1),
+          do: {build, alpine}
 
     tags =
       Enum.map(tags, fn tag ->
-        {erlang, _major} = parse_erlang_tag(tag)
-        erlang
+        {erlang, _major, alpine} = parse_erlang_tag(tag)
+        {erlang, alpine}
       end)
 
     builds -- tags
@@ -47,12 +52,12 @@ defmodule Bob.Job.BuildDockerChecker do
           build_elixir?(elixir_build),
           {elixir, elixir_erlang_major} = parse_elixir_build(elixir_build),
           erlang_tag <- erlang_tags,
-          {erlang, erlang_major} = parse_erlang_tag(erlang_tag),
+          {erlang, erlang_major, alpine} = parse_erlang_tag(erlang_tag),
           elixir_erlang_major == erlang_major,
-          do: {elixir, erlang, erlang_major}
+          do: {elixir, erlang, erlang_major, alpine}
 
-    Enum.each(diff_elixir_tags(builds, tags), fn {elixir, erlang, erlang_major} ->
-      Bob.Queue.run(Bob.Job.BuildDockerElixir, [elixir, erlang, erlang_major])
+    Enum.each(diff_elixir_tags(builds, tags), fn {elixir, erlang, erlang_major, alpine} ->
+      Bob.Queue.run(Bob.Job.BuildDockerElixir, [elixir, erlang, erlang_major, alpine])
     end)
   end
 
@@ -66,19 +71,19 @@ defmodule Bob.Job.BuildDockerChecker do
   end
 
   defp parse_erlang_tag(tag) do
-    [erlang, major] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
-    {erlang, major}
+    [erlang, major, alpine] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
+    {erlang, major, alpine}
   end
 
   defp diff_elixir_tags(builds, tags) do
     tags =
       MapSet.new(tags, fn tag ->
-        [elixir, erlang] = Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
-        {elixir, erlang}
+        [elixir, erlang, alpine] = Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
+        {elixir, erlang, alpine}
       end)
 
-    Enum.reject(builds, fn {elixir, erlang, _erlang_major} ->
-      {elixir, erlang} in tags
+    Enum.reject(builds, fn {elixir, erlang, _erlang_major, alpine} ->
+      {elixir, erlang, alpine} in tags
     end)
   end
 

@@ -1,12 +1,11 @@
 defmodule Bob.Job.BuildDockerErlang do
   require Logger
 
-  @alpine "3.11.2"
 
-  def run([ref]) do
+  def run([ref, alpine]) do
     directory = Bob.Directory.new()
     Logger.info("Using directory #{directory}")
-    Bob.Script.run({:script, "docker/erlang.sh"}, [ref, @alpine], directory)
+    Bob.Script.run({:script, "docker/erlang.sh"}, [ref, alpine], directory)
   end
 
   def equal?(args, args), do: true
