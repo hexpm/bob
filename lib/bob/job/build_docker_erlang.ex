@@ -1,7 +1,7 @@
 defmodule Bob.Job.BuildDockerErlang do
   require Logger
 
-  @alpine "3.11.3"
+  @alpine "3.11.2"
 
   def run([ref]) do
     directory = Bob.Directory.new()

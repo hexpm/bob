@@ -1,7 +1,7 @@
 defmodule Bob.Job.BuildDockerElixir do
   require Logger
 
-  @alpine "3.11.3"
+  @alpine "3.11.2"
 
   def run([elixir, erlang, otp_major]) do
     directory = Bob.Directory.new()
