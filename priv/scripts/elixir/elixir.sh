@@ -22,6 +22,7 @@ function push {
   build "$1" "$2" "${otp_version}" "1"
   upload_build "$1" "${otp_string}"
   upload_docs "$1"
+  update_builds_txt "$1" "$2" "${otp_string}"
 
   for otp_version in "${otp_versions[@]:1}"; do
     otp_string=$(otp_string ${otp_version})
