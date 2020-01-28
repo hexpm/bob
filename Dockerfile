@@ -1,4 +1,4 @@
-FROM elixir:1.8.1-alpine as build
+FROM hexpm/elixir:1.10.0-erlang-22.2.3-alpine-3.11.3 as build
 
 # install build dependencies
 RUN apk add --update git
@@ -30,7 +30,7 @@ COPY rel rel
 RUN mix release --no-tar
 
 # prepare release image
-FROM alpine:3.9 AS app
+FROM alpine:3.11.3 AS app
 RUN apk add --update bash build-base coreutils curl docker gzip libffi-dev openssl openssl-dev python-dev py-pip tar tarsnap wget zip
 
 RUN pip install --upgrade awscli gsutil
