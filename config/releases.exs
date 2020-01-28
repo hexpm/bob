@@ -10,4 +10,4 @@ config :ex_aws,
   secret_access_key: System.fetch_env!("BOB_S3_SECRET_KEY")
 
 config :rollbax,
-  access_token: System.fetch_env!("BOB_ROLLBAR_ACCESS_TOKEN"),
+  access_token: System.fetch_env!("BOB_ROLLBAR_ACCESS_TOKEN")

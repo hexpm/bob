@@ -1,7 +1,6 @@
 defmodule Bob.Job.BuildDockerErlang do
   require Logger
 
-
   def run([ref, alpine]) do
     directory = Bob.Directory.new()
     Logger.info("Using directory #{directory}")
