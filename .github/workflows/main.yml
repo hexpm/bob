@@ -21,8 +21,8 @@ jobs:
       - name: Check mix format
         run: mix format --check-formatted
 
-  test-hexpm:
-    name: Test Hexpm
+  test:
+    name: Test
     runs-on: ubuntu-latest
 
     steps:
