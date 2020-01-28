@@ -27,7 +27,7 @@ RUN mix compile
 
 # build release
 COPY rel rel
-RUN mix release --no-tar
+RUN mix release
 
 # prepare release image
 FROM alpine:3.11.3 AS app
@@ -42,4 +42,4 @@ WORKDIR /app
 
 COPY --from=build /app/_build/prod/rel/bob ./
 
-ENV HOME=/app REPLACE_OS_VARS=true
+ENV HOME=/app
