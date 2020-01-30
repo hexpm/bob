@@ -9,7 +9,7 @@ config :bob,
       time: {4, 0, 0}
     ],
     [
-      module: Bob.Job.BackupS3,
+      module: Bob.Job.Backup,
       args: [],
       period: :day,
       time: {2, 0, 0}
