@@ -4,7 +4,7 @@ FROM alpine:${ALPINE} AS build
 
 ARG ERLANG
 
-RUN apk add --update wget tar binutils
+RUN apk add --no-cache --update wget tar binutils
 RUN wget -q -O /tmp/otp.tar.gz https://repo.hex.pm/builds/otp/alpine-3.10/OTP-${ERLANG}.tar.gz
 RUN mkdir /otp
 RUN tar zxf /tmp/otp.tar.gz -C /otp --strip-components=1

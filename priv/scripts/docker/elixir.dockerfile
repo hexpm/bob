@@ -6,7 +6,7 @@ FROM alpine:${ALPINE} AS build
 ARG ERLANG_MAJOR
 ARG ELIXIR
 
-RUN apk add --update wget zip
+RUN apk add --no-cache --update wget zip
 RUN wget -q -O /tmp/elixir.zip https://repo.hex.pm/builds/elixir/v${ELIXIR}-otp-${ERLANG_MAJOR}.zip
 RUN unzip -d /elixir /tmp/elixir.zip
 
