@@ -14,7 +14,6 @@ aws s3 sync s3://s3.hex.pm hex-s3 --delete --include "*" --exclude "builds/*" > 
 
 echo ""
 echo "### logs fastly ###"
-mkdir logs
 gsutil -m cp "gs://hexpm-logs-prod/fastly_hex/${yesterday}T*" logs > /dev/null
 echo logs/*.gz | xargs gunzip
 echo logs/* | xargs cat > logs-fastly.txt
