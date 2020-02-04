@@ -14,7 +14,10 @@ aws s3 sync s3://s3.hex.pm hex-s3 --delete --include "*" --exclude "builds/*" > 
 
 echo ""
 echo "### logs fastly ###"
-gsutil -m cp "gs://hexpm-logs-prod/fastly_hex/${yesterday}T*" logs > /dev/null
+# -m flag seems to crash with OOM, we may need to raise memory limits or
+# figure out what is using all the memory.
+# Fortunately latency is low so -m flag does not do much.
+gsutil cp "gs://hexpm-logs-prod/fastly_hex/${yesterday}T*" logs > /dev/null
 echo logs/*.gz | xargs gunzip
 echo logs/* | xargs cat > logs-fastly.txt
 gzip -9 logs-fastly.txt
