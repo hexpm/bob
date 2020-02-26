@@ -15,18 +15,18 @@ config :bob,
       time: {2, 0, 0}
     ],
     [
-      module: Bob.Job.BuildOTPChecker,
+      module: Bob.Job.OTPChecker,
       args: [:tags],
       period: {15, :min}
     ],
     [
-      module: Bob.Job.BuildOTPChecker,
+      module: Bob.Job.OTPChecker,
       args: [:branches],
       period: :day,
       time: {3, 0, 0}
     ],
     [
-      module: Bob.Job.BuildDockerChecker,
+      module: Bob.Job.DockerChecker,
       args: [],
       period: {15, :min}
     ]
