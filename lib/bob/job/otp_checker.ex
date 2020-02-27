@@ -1,4 +1,4 @@
-defmodule Bob.Job.BuildOTPChecker do
+defmodule Bob.Job.OTPChecker do
   @repo "erlang/otp"
   @linuxes ["ubuntu-14.04", "alpine-3.10"]
 

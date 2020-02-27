@@ -1,6 +1,6 @@
-ARG ALPINE
+ARG OS_VERSION
 
-FROM alpine:${ALPINE} AS build
+FROM alpine:${OS_VERSION} AS build
 
 ARG ERLANG
 
@@ -15,7 +15,7 @@ RUN find /otp -name src | xargs -r find | xargs rmdir -vp || true
 RUN scanelf --nobanner -E ET_EXEC -BF '%F' --recursive /otp | xargs -r strip --strip-all
 RUN scanelf --nobanner -E ET_DYN -BF '%F' --recursive /otp | xargs -r strip --strip-unneeded
 
-FROM alpine:${ALPINE} AS final
+FROM alpine:${OS_VERSION} AS final
 
 RUN apk add --update --no-cache \
     ncurses
