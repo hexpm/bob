@@ -1,10 +1,10 @@
 defmodule Bob.Job.BuildElixirGuides do
   require Logger
 
-  def run([event, ref_name | _]) do
+  def run([ref]) do
     directory = Bob.Directory.new()
     Logger.info("Using directory #{directory}")
-    Bob.Script.run({:script, "elixir/elixir_guides.sh"}, [event, ref_name], directory)
+    Bob.Script.run({:script, "elixir/elixir_guides.sh"}, [ref], directory)
   end
 
   def equal?(_, _), do: false

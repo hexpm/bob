@@ -2,7 +2,7 @@ defmodule Bob.Queue do
   use GenServer
   require Logger
 
-  def start_link() do
+  def start_link([]) do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
 
@@ -89,7 +89,7 @@ defmodule Bob.Queue do
       :ok
     catch
       kind, error ->
-        {:error, kind, error, System.stacktrace()}
+        {:error, kind, error, __STACKTRACE__}
     end
   end
 

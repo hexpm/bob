@@ -5,7 +5,7 @@ defmodule Bob.Schedule do
   @seconds_hour 60 * 60
   @seconds_day 60 * 60 * 24
 
-  def start_link() do
+  def start_link([]) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 

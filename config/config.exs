@@ -15,6 +15,21 @@ config :bob,
       time: {2, 0, 0}
     ],
     [
+      module: Bob.Job.ElixirChecker,
+      args: [],
+      period: {15, :min}
+    ],
+    [
+      module: Bob.Job.ElixirGuidesChecker,
+      args: [],
+      period: {15, :min}
+    ],
+    [
+      module: Bob.Job.HexChecker,
+      args: [],
+      period: {15, :min}
+    ],
+    [
       module: Bob.Job.OTPChecker,
       args: [:tags],
       period: {15, :min}

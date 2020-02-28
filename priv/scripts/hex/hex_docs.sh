@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# $1 = event
-# $2 = ref
+# $1 = ref
 
 set -euox pipefail
 
@@ -30,21 +29,19 @@ function push {
   fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/${version}"
 
   gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}/docs_config.js" -h "x-goog-meta-surrogate-control: public,max-age=604800" cp docs_config.js "gs://hexdocs.pm/${app}"
-  fastly_purge_hexdocs_path "${app}/docs_config.js"
+  fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/docs_config.js"
   popd
-
-  tar -czf "${app}-${version}.tar.gz" -C versioned-docs .
-  aws s3 cp "${app}-${version}.tar.gz" "s3://s3.hex.pm/docs/${app}-${version}.tar.gz" --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docs/${app}-${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM "docs/${app}-${version}"
 
   if [ -d unversioned-docs ]; then
     pushd unversioned-docs
     gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}" -h "x-goog-meta-surrogate-control: public,max-age=604800" cp -r . "gs://hexdocs.pm/${app}"
     fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}"
   fi
+
+  tar -czf "${app}-${version}.tar.gz" -C versioned-docs .
+  aws s3 cp "${app}-${version}.tar.gz" "s3://s3.hex.pm/docs/${app}-${version}.tar.gz" --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"docs/${app}-${version}\",\"surrogate-control\":\"public,max-age=604800\"}"
+  fastly_purge $BOB_FASTLY_SERVICE_HEXPM "docs/${app}-${version}"
 }
 
-if [ "$1" == "push" ]; then
-  build $2
-  push $2
-fi
+build $1
+push $1
