@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# $1 = event
-# $2 = ref
+# $1 = ref
 # $@ = otp_versions
 
 set -euox pipefail
@@ -104,7 +103,7 @@ function upload_docs {
     fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/${version}"
 
     gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}/docs_config.js" -h "x-goog-meta-surrogate-control: public,max-age=604800" cp docs_config.js "gs://hexdocs.pm/${app}"
-    fastly_purge_hexdocs_path "${app}/docs_config.js"
+    fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/docs_config.js"
 
     popd
 
@@ -126,37 +125,5 @@ function upload_docs {
   fi
 }
 
-# $1 = ref
-function delete {
-  ref=$(echo "${1}" | sed -e 's/\//-/g')
-
-  aws s3 cp s3://s3.hex.pm/builds/elixir/builds.txt builds.txt || true
-  touch builds.txt
-  sed -i "/^${1} /d" builds.txt
-  sed -i "/^${1}-otp-\d\+ /d" builds.txt
-  aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
-
-  aws s3 rm "s3://s3.hex.pm/builds/elixir/${ref}.zip"
-  aws s3 rm "s3://s3.hex.pm" --recursive --exclude "*" --include "builds/elixir/${ref}-otp-*.zip"
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
-
-  for app in "${APPS[@]}"; do
-    version=$(echo "${ref}" | sed -e 's/^v//g')
-
-    aws s3 rm "s3://s3.hex.pm/docs/${app}-${version}.tar.gz"
-    fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
-
-    gsutil -m rm -r "gs://hexdocs.pm/${app}/${version}"
-    fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/${version}"
-  done
-}
-
-case "$1" in
-  "push" | "create")
-    echo "Building $2 $3 ${@:4}"
-    push "$2" "$3" ${@:4}
-    ;;
-  "delete")
-    delete "$2"
-    ;;
-esac
+echo "Building $1 $2 ${@:3}"
+push "$1" "$2" ${@:3}

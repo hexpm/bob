@@ -15,21 +15,19 @@ defmodule Bob.Mixfile do
 
   def application() do
     [
-      mod: {Bob, []},
+      mod: {Bob.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
   end
 
   defp deps() do
     [
-      {:cowboy, "~> 1.0"},
       {:ex_aws_s3, "~> 2.0"},
       {:hackney, "~> 1.11"},
       {:jason, "~> 1.1"},
-      {:plug, "~> 1.0"},
-      {:poison, "~> 3.1"},
+      {:plug_cowboy, "~> 2.0"},
       {:porcelain, "~> 2.0"},
-      {:rollbax, "== 0.9.0"},
+      {:rollbax, "~> 0.11.0"},
       {:sweet_xml, "~> 0.5"}
     ]
   end

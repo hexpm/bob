@@ -8,10 +8,9 @@ defmodule Bob.Plug.Exception do
       fun.(conn)
     catch
       kind, error ->
-        stacktrace = System.stacktrace()
         status = Plug.Exception.status(error)
 
-        if status == 500, do: Bob.log_error(kind, error, stacktrace)
+        if status == 500, do: Bob.log_error(kind, error, __STACKTRACE__)
 
         send_resp(conn, status, "ERROR: #{status}")
     end

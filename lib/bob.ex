@@ -1,22 +1,4 @@
 defmodule Bob do
-  use Application
-
-  def start(_type, _args) do
-    opts = [port: port(), compress: true]
-
-    setup_docker()
-    File.mkdir_p!(tmp_dir())
-    Plug.Adapters.Cowboy.http(Bob.Router, [], opts)
-    Bob.Supervisor.start_link()
-  end
-
-  defp setup_docker() do
-    if path = System.get_env("BOB_DOCKER_CONFIG_PATH") do
-      File.mkdir_p!(Path.expand("~/.docker"))
-      File.cp!(path, Path.expand("~/.docker/config.json"))
-    end
-  end
-
   def log_error(kind, error, stacktrace) do
     formatted_banner = Exception.format_banner(kind, error, stacktrace)
     formatted_stacktrace = Exception.format_stacktrace(stacktrace)
@@ -24,14 +6,6 @@ defmodule Bob do
 
     IO.puts(:stderr, formatted_banner <> "\n" <> formatted_stacktrace)
     Rollbax.report(kind, exception, stacktrace)
-  end
-
-  defp port() do
-    if port = System.get_env("BOB_PORT") do
-      String.to_integer(port)
-    else
-      4003
-    end
   end
 
   def build_elixir(ref_name) do

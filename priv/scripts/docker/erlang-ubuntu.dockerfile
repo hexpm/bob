@@ -5,7 +5,7 @@ FROM ubuntu:${OS_VERSION} AS build
 ARG ERLANG
 
 RUN apt-get update
-RUN apt-get -y install wget pax-utils binutils
+RUN apt-get -y install wget pax-utils binutils openssl
 RUN wget -q -O /tmp/otp.tar.gz https://repo.hex.pm/builds/otp/ubuntu-14.04/OTP-${ERLANG}.tar.gz
 RUN mkdir /otp
 RUN tar zxf /tmp/otp.tar.gz -C /otp --strip-components=1
