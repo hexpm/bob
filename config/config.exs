@@ -25,7 +25,7 @@ config :bob,
       period: {15, :min}
     ],
     [
-      module: Bob.Job.HexChecker,
+      module: Bob.Job.HexDocsChecker,
       args: [],
       period: {15, :min}
     ],
