@@ -6,17 +6,31 @@ defmodule Bob.Application do
 
     setup_docker()
     setup_gsutil()
+    setup_tarsnap()
+    validate_jobs()
+
     File.mkdir_p!(Bob.tmp_dir())
+
+    # TODO: Do not start webserver if we are an agent
     Plug.Adapters.Cowboy.http(Bob.Router, [], opts)
 
     children = [
       {Task.Supervisor, [name: Bob.Tasks]},
       Bob.Queue,
-      Bob.Schedule
+      Bob.Runner,
+      {Bob.Schedule, [schedule()]}
     ]
 
     opts = [strategy: :one_for_one, name: Bob.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp port() do
+    if port = System.get_env("BOB_PORT") do
+      String.to_integer(port)
+    else
+      4003
+    end
   end
 
   defp setup_docker() do
@@ -33,11 +47,27 @@ defmodule Bob.Application do
     end
   end
 
-  defp port() do
-    if port = System.get_env("BOB_PORT") do
-      String.to_integer(port)
+  defp setup_tarsnap() do
+    if key = System.get_env("BOB_TARSNAP_KEY") do
+      File.mkdir_p!("/tarsnap")
+      File.write!("/tarsnap/key", key)
+    end
+  end
+
+  defp validate_jobs() do
+    validate_jobs(Application.get_env(:bob, :local_jobs))
+    validate_jobs(Application.get_env(:bob, :remote_jobs))
+  end
+
+  defp validate_jobs(jobs) do
+    true = Enum.all?(jobs, &Code.ensure_loaded?/1)
+  end
+
+  defp schedule() do
+    if Application.get_env(:bob, :master?) do
+      Application.get_env(:bob, :master_schedule)
     else
-      4003
+      Application.get_env(:bob, :agent_schedule)
     end
   end
 end

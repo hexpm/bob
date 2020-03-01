@@ -5,24 +5,30 @@ defmodule Bob.Schedule do
   @seconds_hour 60 * 60
   @seconds_day 60 * 60 * 24
 
-  def start_link([]) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  def start_link([schedule]) do
+    GenServer.start_link(__MODULE__, [schedule], name: __MODULE__)
   end
 
-  def init([]) do
-    env = Application.get_env(:bob, :schedule)
-
-    Enum.each(env, fn opts ->
+  def init([schedule]) do
+    Enum.each(schedule, fn opts ->
       ms = calc_when(opts[:time], opts[:period]) * 1000
-      message = {:run, opts[:module], opts[:args], opts[:time], opts[:period]}
+
+      message =
+        {:run, opts[:module], opts[:args], opts[:time], opts[:period],
+         Keyword.get(opts, :queue, true), Keyword.get(opts, :log, true)}
+
       :erlang.send_after(ms, self(), message)
     end)
 
     {:ok, []}
   end
 
-  def handle_info({:run, module, args, time, period} = message, _) do
-    Bob.Queue.run(module, args)
+  def handle_info({:run, module, args, time, period, queue?, log?} = message, _) do
+    if queue? do
+      Bob.Queue.queue(module, args || [])
+    else
+      Bob.Runner.run(module, args || [], log: log?)
+    end
 
     ms = calc_when(time, period) * 1000
     :erlang.send_after(ms, self(), message)
@@ -50,6 +56,7 @@ defmodule Bob.Schedule do
   defp calc_period({num, :day}), do: num * @seconds_day
   defp calc_period({num, :hour}), do: num * @seconds_hour
   defp calc_period({num, :min}), do: num * @seconds_min
+  defp calc_period({num, :sec}), do: num
 
   defp time_to_seconds(:day, {hour, min, sec}),
     do: @seconds_hour * hour + @seconds_min * min + sec

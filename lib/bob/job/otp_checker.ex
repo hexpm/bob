@@ -6,7 +6,7 @@ defmodule Bob.Job.OTPChecker do
     for linux <- @linuxes,
         {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/otp/#{linux}"),
         build_ref?(type, linux, ref_name),
-        do: Bob.Queue.run(Bob.Job.BuildOTP, [ref_name, ref, linux])
+        do: Bob.Queue.queue(Bob.Job.BuildOTP, [ref_name, ref, linux])
   end
 
   def equal?(_, _), do: true

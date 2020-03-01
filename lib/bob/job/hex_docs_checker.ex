@@ -4,7 +4,7 @@ defmodule Bob.Job.HexDocsChecker do
 
   def run([]) do
     Enum.each(diff(), fn {ref_name, _ref} ->
-      Bob.Queue.run(Bob.Job.BuildHexDocs, [ref_name])
+      Bob.Queue.queue(Bob.Job.BuildHexDocs, [ref_name])
     end)
   end
 

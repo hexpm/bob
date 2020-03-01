@@ -8,6 +8,7 @@ defmodule Bob.Job.BuildElixir do
     Bob.Script.run({:script, "elixir/elixir.sh"}, args, directory)
   end
 
+  def equal?(args, args), do: true
   def equal?(_, _), do: false
 
   def similar?(args, args), do: true
