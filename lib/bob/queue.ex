@@ -43,7 +43,7 @@ defmodule Bob.Queue do
         {:reply, :error, state}
 
       [args | rest_args] ->
-        {:reply, {:ok, args}, put_in(state.queue[module], rest_args)}
+        {:reply, {:ok, args}, put_in(state.queues[module], rest_args)}
     end
   end
 
