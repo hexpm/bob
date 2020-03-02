@@ -10,7 +10,6 @@ defmodule Bob.Job.OTPChecker do
   end
 
   defp build_ref?(_type, _linux, "OTP-18.0-rc2"), do: false
-  defp build_ref?(_type, _linux, "OTP_" <> _), do: false
   defp build_ref?(_type, _linux, "maint-r" <> _), do: false
   defp build_ref?(:tags, "alpine-3.10", "OTP-17" <> _), do: false
   defp build_ref?(:tags, "alpine-3.10", "OTP-18" <> _), do: false

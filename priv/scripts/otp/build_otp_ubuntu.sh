@@ -20,7 +20,7 @@ cd ${otp_untar_dir}
 
 ./otp_build autoconf
 ./configure --with-ssl --enable-dirty-schedulers
-make -j4
+make -j$(getconf _NPROCESSORS_ONLN)
 make release
 
 cd ../
