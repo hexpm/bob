@@ -4,7 +4,7 @@ defmodule Bob.Job.ElixirChecker do
   def run([]) do
     for {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/elixir"),
         build_ref?(ref_name),
-        do: Bob.Queue.run(Bob.Job.BuildElixir, [ref_name, ref])
+        do: Bob.Queue.queue(Bob.Job.BuildElixir, [ref_name, ref])
   end
 
   def equal?(_, _), do: true

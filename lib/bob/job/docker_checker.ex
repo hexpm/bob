@@ -14,6 +14,10 @@ defmodule Bob.Job.DockerChecker do
     elixir()
   end
 
+  def equal?(_, _), do: true
+
+  def similar?(_, _), do: true
+
   defp erlang() do
     tags = erlang_tags()
 
@@ -27,7 +31,7 @@ defmodule Bob.Job.DockerChecker do
     Enum.each(expected_tags -- tags, fn {ref, os, os_version} ->
       # Skip for now while we are testing
       unless os == "ubuntu" do
-        Bob.Queue.run(Bob.Job.BuildDockerErlang, [ref, os, os_version])
+        Bob.Queue.queue(Bob.Job.BuildDockerErlang, [ref, os, os_version])
       end
     end)
   end
@@ -71,7 +75,7 @@ defmodule Bob.Job.DockerChecker do
     Enum.each(diff_elixir_tags(builds, tags), fn {elixir, erlang, erlang_major, os, os_version} ->
       # Skip for now while we are testing
       unless os == "ubuntu" do
-        Bob.Queue.run(Bob.Job.BuildDockerElixir, [elixir, erlang, erlang_major, os, os_version])
+        Bob.Queue.queue(Bob.Job.BuildDockerElixir, [elixir, erlang, erlang_major, os, os_version])
       end
     end)
   end
@@ -103,8 +107,4 @@ defmodule Bob.Job.DockerChecker do
       {elixir, erlang, os, os_version} in tags
     end)
   end
-
-  def equal?(_, _), do: true
-
-  def similar?(_, _), do: true
 end
