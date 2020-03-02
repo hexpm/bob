@@ -31,7 +31,7 @@ defmodule Bob.Queue do
 
         true ->
           Logger.info("QUEUED #{inspect(module)} #{inspect(args)}")
-          update_in(state.queues[module], &((&1 || []) ++ args))
+          update_in(state.queues[module], &((&1 || []) ++ [args]))
       end
 
     {:reply, :ok, state}
