@@ -6,9 +6,4 @@ defmodule Bob.Job.BuildHexDocs do
     Logger.info("Using directory #{directory}")
     Bob.Script.run({:script, "hex/hex_docs.sh"}, [ref_name], directory)
   end
-
-  def equal?(_, _), do: false
-
-  def similar?(args, args), do: true
-  def similar?(_, _), do: false
 end

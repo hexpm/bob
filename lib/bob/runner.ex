@@ -10,27 +10,21 @@ defmodule Bob.Runner do
     {:ok, state}
   end
 
-  def run(module, args, opts \\ []) do
-    GenServer.call(__MODULE__, {:run, module, args, Keyword.get(opts, :log, true)})
+  def run(module, args, success_fun, failure_fun, opts \\ []) do
+    GenServer.call(
+      __MODULE__,
+      {:run, module, args, success_fun, failure_fun, Keyword.get(opts, :log, true)}
+    )
   end
 
   def state() do
     GenServer.call(__MODULE__, :state)
   end
 
-  def handle_call({:run, module, args, log?}, _from, state) do
-    state =
-      cond do
-        already_running?(state.tasks, module, args) ->
-          if log?, do: Logger.info("ALREADY RUNNING #{inspect(module)} #{inspect(args)}")
-          state
-
-        true ->
-          if log?, do: Logger.info("STARTING #{inspect(module)} #{inspect(args)}")
-          task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(module, args, log?) end)
-          state = put_in(state.running[module], true)
-          put_in(state.tasks[task.ref], {module, args})
-      end
+  def handle_call({:run, module, args, success_fun, failure_fun, log?}, _from, state) do
+    if log?, do: Logger.info("STARTING #{inspect(module)} #{inspect(args)}")
+    task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(module, args, log?) end)
+    state = put_in(state.tasks[task.ref], {module, args, success_fun, failure_fun})
 
     {:reply, :ok, state}
   end
@@ -40,18 +34,18 @@ defmodule Bob.Runner do
   end
 
   def handle_info({ref, result}, state) do
-    {module, args} = Map.fetch!(state.tasks, ref)
+    {module, args, success_fun, failure_fun} = Map.fetch!(state.tasks, ref)
 
     case result do
       :ok ->
-        :ok
+        success_fun.()
 
       {:error, kind, error, stacktrace} ->
+        failure_fun.()
         Logger.error("FAILED #{inspect(module)} #{inspect(args)}")
         Bob.log_error(kind, error, stacktrace)
     end
 
-    state = update_in(state.running, &Map.delete(&1, module))
     state = update_in(state.tasks, &Map.delete(&1, ref))
     {:noreply, state}
   end
@@ -72,13 +66,7 @@ defmodule Bob.Runner do
       {:error, kind, error, __STACKTRACE__}
   end
 
-  defp already_running?(tasks, module, args) do
-    Enum.any?(tasks, fn {_ref, {run_module, run_args}} ->
-      run_module == module and module.equal?(run_args, args)
-    end)
-  end
-
   defp new_state do
-    %{tasks: %{}, running: %{}}
+    %{tasks: %{}}
   end
 end

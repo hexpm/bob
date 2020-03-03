@@ -16,16 +16,28 @@ defmodule Bob.Router do
   plug(:match)
   plug(:dispatch)
 
-  post "dequeue" do
+  post "queue/start" do
     jobs =
       Enum.reduce(conn.params[:jobs], %{}, fn module, map ->
-        case Bob.Queue.dequeue(module) do
-          {:ok, args} -> Map.put(map, module, args)
+        case Bob.Queue.start(module) do
+          {:ok, {id, args}} -> Map.put(map, id, {module, args})
           :error -> map
         end
       end)
 
-    send_resp(conn, 200, Bob.Plug.ErlangFormat.encode_to_iodata!(%{jobs: jobs}))
+    conn
+    |> put_resp_header("content-type", "application/vnd.bob+erlang")
+    |> send_resp(200, Bob.Plug.ErlangFormat.encode_to_iodata!(%{jobs: jobs}))
+  end
+
+  post "queue/success" do
+    Bob.Queue.success(conn.params[:id])
+    send_resp(conn, 204, "")
+  end
+
+  post "queue/failure" do
+    Bob.Queue.failure(conn.params[:id])
+    send_resp(conn, 204, "")
   end
 
   defp secret(conn, _opts) do

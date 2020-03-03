@@ -11,13 +11,18 @@ defmodule Bob.Schedule do
 
   def init([schedule]) do
     Enum.each(schedule, fn opts ->
-      ms = calc_when(opts[:time], opts[:period]) * 1000
+      time =
+        if opts[:time] do
+          calc_when(opts[:time], opts[:period]) * 1000
+        else
+          0
+        end
 
       message =
         {:run, opts[:module], opts[:args], opts[:time], opts[:period],
          Keyword.get(opts, :queue, true), Keyword.get(opts, :log, true)}
 
-      :erlang.send_after(ms, self(), message)
+      Process.send_after(self(), message, time)
     end)
 
     {:ok, []}
@@ -25,13 +30,13 @@ defmodule Bob.Schedule do
 
   def handle_info({:run, module, args, time, period, queue?, log?} = message, _) do
     if queue? do
-      Bob.Queue.queue(module, args || [])
+      Bob.Queue.add(module, args || [])
     else
-      Bob.Runner.run(module, args || [], log: log?)
+      Bob.Runner.run(module, args || [], fn -> :ok end, fn -> :ok end, log: log?)
     end
 
-    ms = calc_when(time, period) * 1000
-    :erlang.send_after(ms, self(), message)
+    time = calc_when(time, period) * 1000
+    Process.send_after(self(), message, time)
     {:noreply, []}
   end
 
