@@ -20,7 +20,7 @@ defmodule Bob.Schedule do
 
       message =
         {:run, opts[:module], opts[:args], opts[:time], opts[:period],
-         Keyword.get(opts, :queue, true), Keyword.get(opts, :log, true)}
+         Keyword.get(opts, :queue, false), Keyword.get(opts, :log, true)}
 
       Process.send_after(self(), message, time)
     end)

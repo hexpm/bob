@@ -61,7 +61,7 @@ defmodule Bob.Queue do
       [args | rest_args] ->
         now = NaiveDateTime.utc_now()
         id = :erlang.unique_integer()
-        state = put_in(state.running_ids[id], {module, args, now})
+        state = put_in(state.running[id], {module, args, now})
         state = put_in(state.queues[module], rest_args)
         {:reply, {:ok, {id, args}}, state}
     end
