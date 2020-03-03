@@ -57,8 +57,9 @@ defmodule Bob.Runner do
   defp run_task(module, args, log?) do
     {time, _} = :timer.tc(fn -> module.run(args) end)
 
-    if log?,
-      do: Logger.info("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
+    if log? do
+      Logger.info("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
+    end
 
     :ok
   catch

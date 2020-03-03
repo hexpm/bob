@@ -40,6 +40,10 @@ defmodule Bob.Router do
     send_resp(conn, 204, "")
   end
 
+  match _ do
+    send_resp(conn, 404, "")
+  end
+
   defp secret(conn, _opts) do
     secret = Application.get_env(:bob, :agent_secret)
 
