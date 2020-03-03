@@ -4,13 +4,9 @@ defmodule Bob.Job.HexDocsChecker do
 
   def run([]) do
     Enum.each(diff(), fn {ref_name, _ref} ->
-      Bob.Queue.queue(Bob.Job.BuildHexDocs, [ref_name])
+      Bob.Queue.add(Bob.Job.BuildHexDocs, [ref_name])
     end)
   end
-
-  def equal?(_, _), do: true
-
-  def similar?(_, _), do: true
 
   defp build_ref?("v" <> version) do
     case Version.parse(version) do

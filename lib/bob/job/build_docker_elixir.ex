@@ -11,10 +11,4 @@ defmodule Bob.Job.BuildDockerElixir do
       directory
     )
   end
-
-  def equal?(args, args), do: true
-  def equal?(_, _), do: false
-
-  def similar?(args, args), do: true
-  def similar?(_, _), do: false
 end

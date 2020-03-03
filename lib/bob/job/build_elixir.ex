@@ -8,12 +8,6 @@ defmodule Bob.Job.BuildElixir do
     Bob.Script.run({:script, "elixir/elixir.sh"}, args, directory)
   end
 
-  def equal?(args, args), do: true
-  def equal?(_, _), do: false
-
-  def similar?(args, args), do: true
-  def similar?(_, _), do: false
-
   defp elixir_to_otp(ref) do
     case ref do
       "v0" <> _ -> ["17.3"]
