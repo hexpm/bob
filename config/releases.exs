@@ -8,7 +8,6 @@ jobs_fun = fn env ->
 end
 
 config :bob,
-  github_secret: System.fetch_env!("BOB_GITHUB_SECRET"),
   github_user: System.fetch_env!("BOB_GITHUB_USER"),
   github_token: System.fetch_env!("BOB_GITHUB_TOKEN"),
   agent_secret: System.fetch_env!("BOB_AGENT_SECRET"),
