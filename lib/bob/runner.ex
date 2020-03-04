@@ -7,25 +7,20 @@ defmodule Bob.Runner do
   end
 
   def init(state) do
+    send_timeout()
     {:ok, state}
   end
 
-  def run(module, args, success_fun, failure_fun, opts \\ []) do
-    GenServer.call(
-      __MODULE__,
-      {:run, module, args, success_fun, failure_fun, Keyword.get(opts, :log, true)}
-    )
+  def run(module, args) do
+    GenServer.call(__MODULE__, {:run, module, args})
   end
 
   def state() do
     GenServer.call(__MODULE__, :state)
   end
 
-  def handle_call({:run, module, args, success_fun, failure_fun, log?}, _from, state) do
-    if log?, do: Logger.info("STARTING #{inspect(module)} #{inspect(args)}")
-    task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(module, args, log?) end)
-    state = put_in(state.tasks[task.ref], {module, args, success_fun, failure_fun})
-
+  def handle_call({:run, module, args}, _from, state) do
+    state = start_job(nil, module, args, state)
     {:reply, :ok, state}
   end
 
@@ -34,19 +29,20 @@ defmodule Bob.Runner do
   end
 
   def handle_info({ref, result}, state) do
-    {module, args, success_fun, failure_fun} = Map.fetch!(state.tasks, ref)
+    {module, args, job_id} = Map.fetch!(state.tasks, ref)
 
     case result do
       :ok ->
-        success_fun.()
+        if job_id, do: Bob.RemoteQueue.success(job_id)
 
       {:error, kind, error, stacktrace} ->
-        failure_fun.()
+        if job_id, do: Bob.RemoteQueue.failure(job_id)
         Logger.error("FAILED #{inspect(module)} #{inspect(args)}")
         Bob.log_error(kind, error, stacktrace)
     end
 
     state = update_in(state.tasks, &Map.delete(&1, ref))
+    state = start_jobs(state)
     {:noreply, state}
   end
 
@@ -54,17 +50,41 @@ defmodule Bob.Runner do
     {:noreply, state}
   end
 
-  defp run_task(module, args, log?) do
+  def handle_info(:timeout, state) do
+    state = start_jobs(state)
+    send_timeout()
+    {:noreply, state}
+  end
+
+  defp run_task(module, args) do
     {time, _} = :timer.tc(fn -> module.run(args) end)
-
-    if log? do
-      Logger.info("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
-    end
-
+    Logger.info("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
     :ok
   catch
     kind, error ->
       {:error, kind, error, __STACKTRACE__}
+  end
+
+  defp start_jobs(state) do
+    max(Application.get_env(:bob, :parallel_jobs) - map_size(state.tasks), 0)
+    |> Bob.RemoteQueue.start()
+    |> Enum.reduce(state, fn {id, module, args}, state ->
+      start_job(id, module, args, state)
+    end)
+  end
+
+  defp start_job(id, module, args, state) do
+    Logger.info("STARTING #{inspect(module)} #{inspect(args)}")
+    task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(module, args) end)
+    put_in(state.tasks[task.ref], {module, args, id})
+  end
+
+  defp send_timeout() do
+    if Application.get_env(:bob, :master?) do
+      Process.send_after(self(), :timeout, 1000)
+    else
+      Process.send_after(self(), :timeout, 60000)
+    end
   end
 
   defp new_state do

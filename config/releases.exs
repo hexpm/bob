@@ -13,6 +13,7 @@ config :bob,
   agent_secret: System.fetch_env!("BOB_AGENT_SECRET"),
   master_url: System.fetch_env!("BOB_MASTER_URL"),
   master?: System.fetch_env!("BOB_WHO") == "master",
+  parallel_jobs: String.to_integer(System.fetch_env!("BOB_PARALLEL_JOBS")),
   local_jobs: jobs_fun.("BOB_LOCAL_JOBS"),
   remote_jobs: jobs_fun.("BOB_REMOTE_JOBS")
 
