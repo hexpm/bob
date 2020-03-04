@@ -20,7 +20,7 @@ defmodule Bob.Schedule do
 
       message =
         {:run, opts[:module], opts[:args], opts[:time], opts[:period],
-         Keyword.get(opts, :queue, false), Keyword.get(opts, :log, true)}
+         Keyword.get(opts, :queue, false)}
 
       Process.send_after(self(), message, time)
     end)
@@ -28,11 +28,11 @@ defmodule Bob.Schedule do
     {:ok, []}
   end
 
-  def handle_info({:run, module, args, time, period, queue?, log?} = message, _) do
+  def handle_info({:run, module, args, time, period, queue?} = message, _) do
     if queue? do
       Bob.Queue.add(module, args || [])
     else
-      Bob.Runner.run(module, args || [], fn -> :ok end, fn -> :ok end, log: log?)
+      Bob.Runner.run(module, args || [])
     end
 
     time = calc_when(time, period) * 1000

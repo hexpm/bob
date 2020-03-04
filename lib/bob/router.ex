@@ -17,13 +17,16 @@ defmodule Bob.Router do
   plug(:dispatch)
 
   post "queue/start" do
+    %{"jobs" => jobs, "num" => num} = conn.params
+
     jobs =
-      Enum.reduce(conn.params[:jobs], %{}, fn module, map ->
+      Stream.flat_map(jobs, fn module ->
         case Bob.Queue.start(module) do
-          {:ok, {id, args}} -> Map.put(map, id, {module, args})
-          :error -> map
+          {:ok, {id, args}} -> [{id, {module, args}}]
+          :error -> []
         end
       end)
+      |> Enum.take(num)
 
     conn
     |> put_resp_header("content-type", "application/vnd.bob+erlang")
