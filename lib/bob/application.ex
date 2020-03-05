@@ -50,7 +50,8 @@ defmodule Bob.Application do
   defp setup_tarsnap() do
     if key = System.get_env("BOB_TARSNAP_KEY") do
       File.mkdir_p!("/tarsnap")
-      File.write!("/tarsnap/key", key)
+      # Tarsnap requires a newline before EOF, we should fix this at the source
+      File.write!("/tarsnap/key", key <> "\n")
     end
   end
 
