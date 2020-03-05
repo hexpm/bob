@@ -56,6 +56,11 @@ defmodule Bob.Runner do
     {:noreply, state}
   end
 
+  # Hackney leaking messages
+  def handle_info(_, state) do
+    {:noreply, state}
+  end
+
   defp run_task(module, args) do
     {time, _} = :timer.tc(fn -> module.run(args) end)
     Logger.info("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
