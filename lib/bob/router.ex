@@ -18,7 +18,7 @@ defmodule Bob.Router do
 
   post "queue/start" do
     jobs =
-      Stream.flat_map(conn.params.jobs, fn module ->
+      Stream.flat_map(Stream.cycle(conn.params.jobs), fn module ->
         case Bob.Queue.start(module) do
           {:ok, {id, args}} -> [{id, {module, args}}]
           :error -> []

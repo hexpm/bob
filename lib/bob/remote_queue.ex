@@ -27,6 +27,7 @@ defmodule Bob.RemoteQueue do
   defp local_queue(num) do
     Application.get_env(:bob, :local_jobs)
     |> Enum.shuffle()
+    |> Stream.cycle()
     |> Stream.flat_map(fn module ->
       case Bob.Queue.start(module) do
         {:ok, {id, args}} -> [{{:local, id}, module, args}]
@@ -39,6 +40,7 @@ defmodule Bob.RemoteQueue do
   defp remote_queue(num) when num > 0 do
     Application.get_env(:bob, :remote_jobs)
     |> Enum.shuffle()
+    |> Stream.cycle()
     |> start_request(num)
     |> Enum.map(fn {id, {module, args}} ->
       {{:remote, id}, module, args}
