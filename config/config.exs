@@ -55,6 +55,7 @@ config :bob,
   tmp_dir: "tmp",
   persist_dir: "persist",
   master?: true,
+  parallel_jobs: 1,
   local_jobs: [],
   remote_jobs: []
 

@@ -1,13 +1,4 @@
 defmodule Bob.RemoteQueue do
-  def start(num) do
-    if Application.get_env(:bob, :master?) do
-      local_queue(num)
-    else
-      jobs = local_queue(num)
-      jobs ++ remote_queue(num - length(jobs))
-    end
-  end
-
   def success({:local, id}) do
     Bob.Queue.success(id)
   end
@@ -24,10 +15,10 @@ defmodule Bob.RemoteQueue do
     done_request(:failure, id)
   end
 
-  defp local_queue(num) do
+  def local_queue(num) do
     Application.get_env(:bob, :local_jobs)
     |> Enum.shuffle()
-    |> Stream.cycle()
+    |> cycle()
     |> Stream.flat_map(fn module ->
       case Bob.Queue.start(module) do
         {:ok, {id, args}} -> [{{:local, id}, module, args}]
@@ -37,19 +28,22 @@ defmodule Bob.RemoteQueue do
     |> Enum.take(num)
   end
 
-  defp remote_queue(num) when num > 0 do
+  def remote_queue(num) when num > 0 do
     Application.get_env(:bob, :remote_jobs)
     |> Enum.shuffle()
-    |> Stream.cycle()
+    |> cycle()
     |> start_request(num)
     |> Enum.map(fn {id, {module, args}} ->
       {{:remote, id}, module, args}
     end)
   end
 
-  defp remote_queue(_num) do
+  def remote_queue(_num) do
     []
   end
+
+  defp cycle([]), do: []
+  defp cycle(enum), do: Stream.cycle(enum)
 
   defp done_request(type, id) do
     url = Application.get_env(:bob, :master_url) <> "/queue/#{type}"

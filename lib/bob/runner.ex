@@ -2,12 +2,21 @@ defmodule Bob.Runner do
   use GenServer
   require Logger
 
+  @local_timeout 1_000
+  @remote_timeout 60_000
+
   def start_link([]) do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
 
   def init(state) do
-    send_timeout()
+    if Application.get_env(:bob, :master?) do
+      Process.send_after(self(), :local_timeout, 0)
+    else
+      Process.send_after(self(), :local_timeout, 0)
+      Process.send_after(self(), :remote_timeout, 0)
+    end
+
     {:ok, state}
   end
 
@@ -42,7 +51,7 @@ defmodule Bob.Runner do
     end
 
     state = update_in(state.tasks, &Map.delete(&1, ref))
-    state = start_jobs(state)
+    state = start_any_jobs(state)
     {:noreply, state}
   end
 
@@ -50,9 +59,15 @@ defmodule Bob.Runner do
     {:noreply, state}
   end
 
-  def handle_info(:timeout, state) do
-    state = start_jobs(state)
-    send_timeout()
+  def handle_info(:local_timeout, state) do
+    state = start_jobs(state, &Bob.RemoteQueue.local_queue/1)
+    Process.send_after(self(), :local_timeout, @local_timeout)
+    {:noreply, state}
+  end
+
+  def handle_info(:remote_timeout, state) do
+    state = start_jobs(state, &Bob.RemoteQueue.remote_queue/1)
+    Process.send_after(self(), :remote_timeout, @remote_timeout)
     {:noreply, state}
   end
 
@@ -70,9 +85,15 @@ defmodule Bob.Runner do
       {:error, kind, error, __STACKTRACE__}
   end
 
-  defp start_jobs(state) do
+  defp start_any_jobs(state) do
+    state
+    |> start_jobs(&Bob.RemoteQueue.local_queue/1)
+    |> start_jobs(&Bob.RemoteQueue.remote_queue/1)
+  end
+
+  defp start_jobs(state, fun) do
     max(Application.get_env(:bob, :parallel_jobs) - map_size(state.tasks), 0)
-    |> Bob.RemoteQueue.start()
+    |> fun.()
     |> Enum.reduce(state, fn {id, module, args}, state ->
       start_job(id, module, args, state)
     end)
@@ -82,14 +103,6 @@ defmodule Bob.Runner do
     Logger.info("STARTING #{inspect(module)} #{inspect(args)}")
     task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(module, args) end)
     put_in(state.tasks[task.ref], {module, args, id})
-  end
-
-  defp send_timeout() do
-    if Application.get_env(:bob, :master?) do
-      Process.send_after(self(), :timeout, 1000)
-    else
-      Process.send_after(self(), :timeout, 60000)
-    end
   end
 
   defp new_state do
