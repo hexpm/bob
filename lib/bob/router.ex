@@ -18,7 +18,7 @@ defmodule Bob.Router do
 
   post "queue/start" do
     jobs =
-      Stream.flat_map(Stream.cycle(conn.params.jobs), fn module ->
+      Stream.flat_map(cycle(conn.params.jobs, conn.params.num), fn module ->
         case Bob.Queue.start(module) do
           {:ok, {id, args}} -> [{id, {module, args}}]
           :error -> []
@@ -55,5 +55,14 @@ defmodule Bob.Router do
       |> send_resp(401, "")
       |> halt()
     end
+  end
+
+  defp cycle([], _times), do: []
+
+  defp cycle(enum, times) do
+    # Work around stream bug
+    enum
+    |> Stream.cycle()
+    |> Enum.take(Enum.count(enum) * times)
   end
 end

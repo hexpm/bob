@@ -15,10 +15,10 @@ defmodule Bob.RemoteQueue do
     done_request(:failure, id)
   end
 
-  def local_queue(num) do
+  def local_queue(num) when num > 0 do
     Application.get_env(:bob, :local_jobs)
     |> Enum.shuffle()
-    |> cycle()
+    |> cycle(num)
     |> Stream.flat_map(fn module ->
       case Bob.Queue.start(module) do
         {:ok, {id, args}} -> [{{:local, id}, module, args}]
@@ -28,10 +28,13 @@ defmodule Bob.RemoteQueue do
     |> Enum.take(num)
   end
 
+  def local_queue(_num) do
+    []
+  end
+
   def remote_queue(num) when num > 0 do
     Application.get_env(:bob, :remote_jobs)
     |> Enum.shuffle()
-    |> cycle()
     |> start_request(num)
     |> Enum.map(fn {id, {module, args}} ->
       {{:remote, id}, module, args}
@@ -42,8 +45,14 @@ defmodule Bob.RemoteQueue do
     []
   end
 
-  defp cycle([]), do: []
-  defp cycle(enum), do: Stream.cycle(enum)
+  defp cycle([], _times), do: []
+
+  defp cycle(enum, times) do
+    # Work around stream bug
+    enum
+    |> Stream.cycle()
+    |> Enum.take(Enum.count(enum) * times)
+  end
 
   defp done_request(type, id) do
     url = Application.get_env(:bob, :master_url) <> "/queue/#{type}"
@@ -53,6 +62,10 @@ defmodule Bob.RemoteQueue do
     body = Bob.Plug.ErlangFormat.encode_to_iodata!(%{id: id})
     {:ok, 204, _headers} = :hackney.request(:post, url, headers, body, [])
     :ok
+  end
+
+  defp start_request([], _num) do
+    %{}
   end
 
   defp start_request(remote_jobs, num) do
