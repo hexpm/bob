@@ -58,9 +58,10 @@ defmodule Bob.RemoteQueue do
     url = Application.get_env(:bob, :master_url) <> "/queue/#{type}"
     secret = Application.get_env(:bob, :agent_secret)
 
+    opts = [:with_body]
     headers = [{"authorization", secret}, {"content-type", "application/vnd.bob+erlang"}]
     body = Bob.Plug.ErlangFormat.encode_to_iodata!(%{id: id})
-    {:ok, 204, _headers} = :hackney.request(:post, url, headers, body, [])
+    {:ok, 204, _headers, ""} = :hackney.request(:post, url, headers, body, opts)
     :ok
   end
 
