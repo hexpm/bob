@@ -1,12 +1,10 @@
 defmodule Bob.Job.DockerChecker do
-  @erlang_build_regex ~r"^OTP-(\d+(?:\.\d+)?(?:\.\d+))?$"
-  @erlang_tag_regex ~r"^((\d+)(?:\.\d+)?(?:\.\d+)?)-([^-]+)-(.+)$"
-  @elixir_build_regex ~r"^v(\d+\.\d+\.\d+)-otp-(\d+)$"
-  @elixir_tag_regex ~r"^(.+)-erlang-(.+)-([^-]+)-(.+)$"
+  @erlang_tag_regex ~r"^(\d+(?:\.\d+)?(?:\.\d+)?)-([^-]+)-(.+)$"
+  @elixir_tag_regex ~r"^(.+)-erlang-([^-]+)-([^-]+)-(.+)$"
 
   @builds %{
-    "alpine-3.10" => %{"alpine" => ["3.11.2", "3.11.3"]},
-    "ubuntu-14.04" => %{"ubuntu" => ["bionic-20200219"]}
+    "alpine" => ["3.11.2", "3.11.3"],
+    "ubuntu" => ["bionic-20200219", "xenial-20200212", "trusty-20191217"]
   }
 
   def run([]) do
@@ -16,91 +14,125 @@ defmodule Bob.Job.DockerChecker do
 
   defp erlang() do
     tags = erlang_tags()
+    refs = erlang_refs()
 
     expected_tags =
-      for {build, operating_systems} <- @builds,
-          ref <- erlang_refs(build),
-          {operating_system, versions} <- operating_systems,
+      for {operating_system, versions} <- @builds,
+          ref <- refs,
+          build_erlang_ref?(operating_system, ref),
+          "OTP-" <> ref = ref,
           version <- versions,
           do: {ref, operating_system, version}
 
-    Enum.each(expected_tags -- tags, fn {ref, os, os_version} ->
-      # Skip for now while we are testing
-      unless os == "ubuntu" do
-        Bob.Queue.add(Bob.Job.BuildDockerErlang, [ref, os, os_version])
-      end
+    Enum.each(diff(expected_tags, tags), fn {ref, os, os_version} ->
+      Bob.Queue.add(Bob.Job.BuildDockerErlang, [ref, os, os_version])
     end)
   end
 
-  defp erlang_refs(build) do
-    "builds/otp/#{build}"
-    |> Bob.Repo.fetch_built_refs()
-    |> Map.keys()
-    |> Enum.map(&parse_erlang_build/1)
-    |> Enum.filter(& &1)
+  defp build_erlang_ref?(_os, "OTP-18.0-rc2"), do: false
+  defp build_erlang_ref?("alpine", "OTP-17" <> _), do: false
+  defp build_erlang_ref?("alpine", "OTP-18" <> _), do: false
+
+  defp build_erlang_ref?(_os, "OTP-" <> version) do
+    match?({:ok, %Version{pre: []}}, Version.parse(version)) or
+      match?({:ok, %Version{pre: []}}, Version.parse(version <> ".0"))
+  end
+
+  defp build_erlang_ref?(_os, _ref), do: false
+
+  defp erlang_refs() do
+    "erlang/otp"
+    |> Bob.GitHub.fetch_repo_refs()
+    |> Enum.map(fn {ref_name, _ref} -> ref_name end)
   end
 
   defp erlang_tags() do
     "hexpm/erlang"
     |> Bob.DockerHub.fetch_repo_tags()
     |> Enum.map(&parse_erlang_tag/1)
-    |> Enum.map(fn {erlang, _major, os, os_version} -> {erlang, os, os_version} end)
-  end
-
-  defp parse_erlang_build(build) do
-    case Regex.run(@erlang_build_regex, build, capture: :all_but_first) do
-      [version] -> version
-      nil -> nil
-    end
   end
 
   defp elixir() do
-    erlang_tags = Bob.DockerHub.fetch_repo_tags("hexpm/erlang")
-    elixir_builds = Map.keys(Bob.Repo.fetch_built_refs("builds/elixir"))
-    tags = Bob.DockerHub.fetch_repo_tags("hexpm/elixir")
+    erlang_tags = erlang_tags()
+    refs = elixir_refs()
+    tags = elixir_tags()
 
-    builds =
-      for elixir_build <- elixir_builds,
-          build_elixir?(elixir_build),
-          {elixir, elixir_erlang_major} = parse_elixir_build(elixir_build),
-          erlang_tag <- erlang_tags,
-          {erlang, erlang_major, os, os_version} = parse_erlang_tag(erlang_tag),
-          elixir_erlang_major == erlang_major,
-          do: {elixir, erlang, erlang_major, os, os_version}
+    expected_tags =
+      for ref <- refs,
+          "v" <> ref = ref,
+          {erlang, os, os_version} <- erlang_tags,
+          not skip_elixir?(ref, erlang),
+          compatible_elixir_and_erlang?(ref, erlang),
+          do: {ref, erlang, os, os_version}
 
-    Enum.each(diff_elixir_tags(builds, tags), fn {elixir, erlang, erlang_major, os, os_version} ->
-      # Skip for now while we are testing
-      unless os == "ubuntu" do
-        Bob.Queue.add(Bob.Job.BuildDockerElixir, [elixir, erlang, erlang_major, os, os_version])
-      end
+    Enum.each(diff(expected_tags, tags), fn {elixir, erlang, os, os_version} ->
+      Bob.Queue.add(Bob.Job.BuildDockerElixir, [elixir, erlang, os, os_version])
     end)
   end
 
-  defp build_elixir?(build) do
-    Regex.match?(@elixir_build_regex, build)
+  defp elixir_refs() do
+    "elixir-lang/elixir"
+    |> Bob.GitHub.fetch_repo_refs()
+    |> Enum.map(fn {ref_name, _ref} -> ref_name end)
+    |> Enum.filter(&build_elixir_ref?/1)
   end
 
-  defp parse_elixir_build(build) do
-    [elixir, erlang_major] = Regex.run(@elixir_build_regex, build, capture: :all_but_first)
-    {elixir, erlang_major}
+  defp elixir_tags() do
+    "hexpm/elixir"
+    |> Bob.DockerHub.fetch_repo_tags()
+    |> Enum.map(&parse_elixir_tag/1)
   end
+
+  defp build_elixir_ref?("v0." <> _), do: false
+
+  defp build_elixir_ref?("v" <> version) do
+    match?({:ok, %Version{pre: []}}, Version.parse(version))
+  end
+
+  defp build_elixir_ref?(_), do: false
 
   defp parse_erlang_tag(tag) do
-    [erlang, major, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
-    {erlang, major, os, os_version}
+    [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
+    {erlang, os, os_version}
   end
 
-  defp diff_elixir_tags(builds, tags) do
-    tags =
-      MapSet.new(tags, fn tag ->
-        [elixir, erlang, os, os_version] =
-          Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
+  defp parse_elixir_tag(tag) do
+    [elixir, erlang, os, os_version] = Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
+    {elixir, erlang, os, os_version}
+  end
 
-        {elixir, erlang, os, os_version}
-      end)
+  defp diff(expected, current) do
+    MapSet.difference(MapSet.new(expected), MapSet.new(current))
+    |> Enum.sort()
+  end
 
-    Enum.reject(builds, fn {elixir, erlang, _erlang_major, os, os_version} ->
-      {elixir, erlang, os, os_version} in tags
-    end)
+  defp compatible_elixir_and_erlang?(elixir, erlang) do
+    compatibles =
+      case elixir do
+        "1.0.5" -> ["17", "18"]
+        "1.0." <> _ -> ["17"]
+        "1.1." <> _ -> ["17", "18"]
+        "1.2." <> _ -> ["18"]
+        "1.3." <> _ -> ["18", "19"]
+        "1.4.5" -> ["18", "19", "20"]
+        "1.4." <> _ -> ["18", "19"]
+        "1.5." <> _ -> ["18", "19", "20"]
+        "1.6.6" -> ["19", "20", "21"]
+        "1.6." <> _ -> ["19", "20"]
+        "1.7." <> _ -> ["19", "20", "21", "22"]
+        "1.8." <> _ -> ["20", "21", "22"]
+        "1.9." <> _ -> ["20", "21", "22"]
+        "1.10." <> _ -> ["21", "22"]
+      end
+
+    Enum.any?(compatibles, &String.starts_with?(erlang, &1))
+  end
+
+  defp skip_elixir?(elixir, erlang) when elixir in ~w(1.0.0 1.0.1 1.0.2 1.0.3) do
+    String.starts_with?(erlang, "17.5")
+  end
+
+  defp skip_elixir?(_elixir, _erlang) do
+    false
   end
 end

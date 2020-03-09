@@ -10,5 +10,15 @@ tag=${erlang}-${os}-${os_version}
 
 docker login docker.io --username ${BOB_DOCKERHUB_USERNAME} --password ${BOB_DOCKERHUB_PASSWORD}
 
-docker build -t hexpm/erlang:${tag} --build-arg ERLANG=${erlang} --build-arg OS_VERSION=${os_version} -f ${SCRIPT_DIR}/docker/erlang-${os}.dockerfile ${SCRIPT_DIR}
+case "${os}" in
+  "alpine")
+    dockerfile="erlang-alpine.dockerfile"
+    ;;
+  "ubuntu")
+    split_os_version=(${os_version//-/ })
+    dockerfile="erlang-ubuntu-${split_os_version[0]}.dockerfile"
+    ;;
+esac
+
+docker build -t hexpm/erlang:${tag} --build-arg ERLANG=${erlang} --build-arg OS_VERSION=${os_version} -f ${SCRIPT_DIR}/docker/${dockerfile} ${SCRIPT_DIR}/docker
 docker push docker.io/hexpm/erlang:${tag}

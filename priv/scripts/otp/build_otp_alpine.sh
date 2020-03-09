@@ -50,7 +50,7 @@ gnuArch="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)"
   --enable-threads \
   --enable-dirty-schedulers
 
-make -j4
+make -j$(getconf _NPROCESSORS_ONLN)
 make release
 
 cd ../

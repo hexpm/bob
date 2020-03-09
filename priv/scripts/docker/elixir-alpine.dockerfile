@@ -1,17 +1,27 @@
 ARG OS_VERSION
 ARG ERLANG
 
-FROM alpine:${OS_VERSION} AS build
+FROM hexpm/erlang:${ERLANG}-alpine-${OS_VERSION} AS build
 
-ARG ERLANG_MAJOR
+RUN apk add --no-cache --update \
+  wget \
+  tar \
+  make
+
 ARG ELIXIR
 
-RUN apk add --no-cache --update wget zip
-RUN wget -q -O /tmp/elixir.zip https://repo.hex.pm/builds/elixir/v${ELIXIR}-otp-${ERLANG_MAJOR}.zip
-RUN unzip -d /elixir /tmp/elixir.zip
+RUN wget -nv "https://github.com/elixir-lang/elixir/archive/v${ELIXIR}.tar.gz"
+RUN mkdir /ELIXIR
+RUN tar -zxf "v${ELIXIR}.tar.gz" -C /ELIXIR --strip-components=1
+WORKDIR /ELIXIR
+RUN make install
 
-FROM hexpm/erlang:${ERLANG}-alpine-${OS_VERSION} AS final
+FROM alpine:${OS_VERSION} AS final
 
-RUN mkdir /elixir
-COPY --from=build /elixir /elixir
-ENV PATH=/elixir/bin:$PATH
+RUN apk add --update --no-cache \
+  ncurses \
+  $(if [ "${ERLANG:0:1}" = "1" ]; then echo "libressl"; else echo "openssl"; fi) \
+  unixodbc \
+  lksctp-tools
+
+COPY --from=build /usr/local /usr/local
