@@ -47,15 +47,20 @@ For lists of builds see:
 
 ## Docker images
 
-**NOTE: Docker images are currently considered experimental while they are being tested for production worthiness!**
-
-Docker images for Bob's Elixir and Erlang builds are built periodically. Bob checks for new Elixir and Erlang releases every 15 minutes and builds images for any new versions it discovers. The images are based on [Alpine Linux](https://alpinelinux.org/), they will usually build against the latest stable Alpine version, builds against older versions will not be provided.
+Docker images for Bob's Elixir and Erlang builds are built periodically. Bob checks for new Elixir and Erlang releases every 15 minutes and builds images for any new versions it discovers. The list of operating system distributions we base the images on can be found here: https://github.com/hexpm/bob/blob/master/lib/bob/job/docker_checker.ex#L5.
 
 Tagged images are never changed, that means `hexpm/erlang@22.0-alpine-3.11.2` will always target the tag `OTP-22.0` and won't update when `OTP-22.0.1` is released.
 
-Erlang builds are found at https://hub.docker.com/r/hexpm/erlang, they use the versioning scheme `${OTP_VER}-alpine-${ALPINE_VER}` for tags. Builds for all major releases since OTP 19 are provided. Images are not built for sub-patch releases, for example `OTP-22.1.8.1`.
+Erlang builds are found at https://hub.docker.com/r/hexpm/erlang, they use the versioning scheme `${OTP_VER}-${OS_NAME}-${OS_VER}` for tags. Builds for all major releases since OTP 19 are provided. Images are not built for sub-patch releases, for example `OTP-22.1.8.1`.
 
-Elixir builds are found at https://hub.docker.com/r/hexpm/elixir, they use the versioning scheme `${ELIXIR_VER}-erlang-${OTP_VER}-alpine-${ALPINE_VER}`. Builds for all major releases since Elixir 1.3.0 are provided. Images are built for all pairs of compatible Elixir and OTP versions.
+Elixir builds are found at https://hub.docker.com/r/hexpm/elixir, they use the versioning scheme `${ELIXIR_VER}-erlang-${OTP_VER}-${OS_NAME}-${OS_VER}`. Builds for all major releases since Elixir 1.0.0 are provided. Images are built for all pairs of compatible Elixir and OTP versions.
+
+### Examples of image names
+
+ * `hexpm/erlang:22.2.8-alpine-3.11.3`
+ * `hexpm/erlang:22.2-ubuntu-bionic-20200219`
+ * `hexpm/elixir:1.10.2-erlang-22.2.8-alpine-3.11.3`
+ * `hexpm/elixir:1.10.0-erlang-22.2-ubuntu-bionic-20200219`
 
 ## Hex S3 backups
 
