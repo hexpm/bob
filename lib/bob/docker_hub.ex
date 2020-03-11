@@ -12,7 +12,7 @@ defmodule Bob.DockerHub do
   end
 
   defp dockerhub_request(url) do
-    opts = [:with_body, timeout: 10_000]
+    opts = [:with_body, recv_timeout: 10_000]
     {:ok, 200, _headers, body} = :hackney.request(:get, url, [], "", opts)
     body = Jason.decode!(body)
 
