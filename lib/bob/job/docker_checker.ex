@@ -3,7 +3,7 @@ defmodule Bob.Job.DockerChecker do
   @elixir_tag_regex ~r"^(.+)-erlang-([^-]+)-([^-]+)-(.+)$"
 
   @builds %{
-    "alpine" => ["3.11.2", "3.11.3"],
+    "alpine" => ["3.11.3"],
     "ubuntu" => ["bionic-20200219", "xenial-20200212", "trusty-20191217"]
   }
 
