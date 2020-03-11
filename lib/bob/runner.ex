@@ -37,7 +37,7 @@ defmodule Bob.Runner do
     {:reply, state, state}
   end
 
-  def handle_info({ref, result}, state) do
+  def handle_info({ref, result}, state) when is_reference(ref) do
     {module, args, job_id} = Map.fetch!(state.tasks, ref)
 
     case result do
