@@ -16,6 +16,9 @@ function push {
 
   docker cp ${container}:/home/build/epub epub
 
+  docker rm -f ${container}
+  docker rmi -f ${image}
+
   pushd epub
   for file in *.epub
   do

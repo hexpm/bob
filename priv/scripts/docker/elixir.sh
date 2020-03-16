@@ -23,3 +23,4 @@ esac
 
 docker build -t hexpm/elixir:${tag} --build-arg ELIXIR=${elixir} --build-arg ERLANG=${erlang} --build-arg OS_VERSION=${os_version} -f ${SCRIPT_DIR}/docker/${dockerfile} ${SCRIPT_DIR}/docker
 docker push docker.io/hexpm/elixir:${tag}
+docker rmi -f docker.io/hexpm/elixir:${tag}

@@ -57,14 +57,15 @@ function build {
   tag="otp-${3}"
 
   docker build --build-arg otp_version=${3} -t ${image}:${tag} -f ${SCRIPT_DIR}/elixir/elixir.dockerfile ${SCRIPT_DIR}
-  docker rm ${container} || true
+  docker rm -f ${container} || true
   docker run -t -e ELIXIR_REF=${1} -e ELIXIR_SHA=${2} -e BUILD_DOCS=${4} --name=${container} ${image}:${tag}
 
   docker cp ${container}:/home/build/elixir.zip elixir.zip
   docker cp ${container}:/home/build/versioned-docs versioned-docs || true
   docker cp ${container}:/home/build/unversioned-docs unversioned-docs || true
 
-  docker rm ${container}
+  docker rm -f ${container}
+  docker rmi -f ${image}:${tag}
 }
 
 # $1 = ref

@@ -3,12 +3,6 @@ import Config
 config :bob,
   master_schedule: [
     [
-      module: Bob.Job.Clean,
-      period: :day,
-      time: {4, 0, 0},
-      queue: true
-    ],
-    [
       module: Bob.Job.Backup,
       period: :day,
       time: {2, 0, 0},
@@ -45,8 +39,7 @@ config :bob,
   agent_schedule: [
     [
       module: Bob.Job.Clean,
-      period: :day,
-      time: {4, 0, 0},
+      time: {1, :hour},
       queue: true
     ]
   ]
