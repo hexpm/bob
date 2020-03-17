@@ -21,9 +21,9 @@ defmodule Bob.Job.DockerChecker do
       for {operating_system, versions} <- @builds,
           ref <- refs,
           build_erlang_ref?(operating_system, ref),
-          "OTP-" <> ref = ref,
           version <- versions,
           build_erlang_ref?(operating_system, version, ref),
+          "OTP-" <> ref = ref,
           do: {ref, operating_system, version}
 
     Enum.each(diff(expected_tags, tags), fn {ref, os, os_version} ->
