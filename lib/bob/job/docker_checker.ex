@@ -4,7 +4,8 @@ defmodule Bob.Job.DockerChecker do
 
   @builds %{
     "alpine" => ["3.11.3"],
-    "ubuntu" => ["bionic-20200219", "xenial-20200212", "trusty-20191217"]
+    "ubuntu" => ["bionic-20200219", "xenial-20200212", "trusty-20191217"],
+    "debian" => ["buster-20200224", "stretch-20200224", "jessie-20200224"]
   }
 
   def run([]) do
