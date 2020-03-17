@@ -1,6 +1,8 @@
 ARG OS_VERSION
 
-FROM ubuntu:${OS_VERSION} AS build
+FROM debian:${OS_VERSION} AS build
+
+ARG ERLANG
 
 RUN apt-get update
 RUN apt-get -y --no-install-recommends install \
@@ -16,8 +18,6 @@ RUN apt-get -y --no-install-recommends install \
   wget \
   ca-certificates \
   pax-utils
-
-ARG ERLANG
 
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz"
 RUN mkdir /OTP
@@ -35,7 +35,9 @@ RUN find /usr/local -name src | xargs -r find | xargs rmdir -vp || true
 RUN scanelf --nobanner -E ET_EXEC -BF '%F' --recursive /usr/local | xargs -r strip --strip-all
 RUN scanelf --nobanner -E ET_DYN -BF '%F' --recursive /usr/local | xargs -r strip --strip-unneeded
 
-FROM ubuntu:${OS_VERSION} AS final
+FROM debian:${OS_VERSION} AS final
+
+ARG ERLANG
 
 RUN apt-get update && \
   apt-get -y --no-install-recommends install \
@@ -45,4 +47,3 @@ RUN apt-get update && \
 
 COPY --from=build /usr/local /usr/local
 ENV LANG=C.UTF-8
-

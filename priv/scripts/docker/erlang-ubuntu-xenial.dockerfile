@@ -37,8 +37,6 @@ RUN scanelf --nobanner -E ET_DYN -BF '%F' --recursive /usr/local | xargs -r stri
 
 FROM ubuntu:${OS_VERSION} AS final
 
-ARG ERLANG
-
 RUN apt-get update && \
   apt-get -y --no-install-recommends install \
     libodbc1 \
