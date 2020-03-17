@@ -23,6 +23,7 @@ defmodule Bob.Job.DockerChecker do
           build_erlang_ref?(operating_system, ref),
           "OTP-" <> ref = ref,
           version <- versions,
+          build_erlang_ref?(operating_system, version, ref),
           do: {ref, operating_system, version}
 
     Enum.each(diff(expected_tags, tags), fn {ref, os, os_version} ->
@@ -40,6 +41,11 @@ defmodule Bob.Job.DockerChecker do
   end
 
   defp build_erlang_ref?(_os, _ref), do: false
+
+  defp build_erlang_ref?("debian", "buster-" <> _, "OTP-17" <> _), do: false
+  defp build_erlang_ref?("debian", "buster-" <> _, "OTP-18" <> _), do: false
+  defp build_erlang_ref?("debian", "buster-" <> _, "OTP-19" <> _), do: false
+  defp build_erlang_ref?(_os, _os_version, _ref), do: true
 
   defp erlang_refs() do
     "erlang/otp"
