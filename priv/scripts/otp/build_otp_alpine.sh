@@ -20,9 +20,6 @@ cd ${otp_untar_dir}
 
 ./otp_build autoconf
 
-patch -p1 < ../patches/replace-glibc-check.patch || true
-patch -p1 < ../patches/safe-signal-handling.patch || true
-
 gnuArch="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)"
 
 ./configure \
@@ -48,7 +45,8 @@ gnuArch="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)"
   --without-typer \
   --with-ssl \
   --enable-threads \
-  --enable-dirty-schedulers
+  --enable-dirty-schedulers \
+  --disable-hipe
 
 make -j$(getconf _NPROCESSORS_ONLN)
 make release

@@ -20,7 +20,6 @@ RUN apk add --no-cache \
 RUN mkdir -p /home/build/out
 WORKDIR /home/build
 
-COPY otp/alpine-patches /home/build/patches
 COPY otp/build_otp_alpine.sh /home/build/build.sh
 RUN chmod +x /home/build/build.sh
 CMD ./build.sh
