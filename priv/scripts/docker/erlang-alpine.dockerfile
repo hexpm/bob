@@ -23,15 +23,11 @@ RUN apk add --no-cache \
   tar \
   binutils
 
-COPY alpine-patches /patches
-
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz"
 RUN mkdir /OTP
 RUN tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
 WORKDIR /OTP
 RUN ./otp_build autoconf
-RUN (patch -p1 < /patches/replace-glibc-check.patch || true)
-RUN (patch -p1 < /patches/safe-signal-handling.patch || true)
 RUN ./configure \
   --build="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)" \
   --without-javac \
@@ -55,7 +51,8 @@ RUN ./configure \
   --without-typer \
   --with-ssl \
   --enable-threads \
-  --enable-dirty-schedulers
+  --enable-dirty-schedulers \
+  --disable-hipe
 RUN make -j$(getconf _NPROCESSORS_ONLN)
 RUN make install
 RUN find /usr/local -regex '/usr/local/lib/erlang/\(lib/\|erts-\).*/\(man\|doc\|obj\|c_src\|emacs\|info\|examples\)' | xargs rm -rf
