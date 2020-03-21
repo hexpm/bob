@@ -1,10 +1,8 @@
 import Config
 
 jobs_fun = fn env ->
-  env
-  |> System.fetch_env!()
-  |> String.split(",", trim: true)
-  |> Enum.map(&Module.concat(Bob.Job, &1))
+  {result, _bindings} = Code.eval_string(System.fetch_env!(env))
+  result
 end
 
 config :bob,
@@ -23,4 +21,7 @@ config :ex_aws,
 
 config :rollbax,
   access_token: System.fetch_env!("BOB_ROLLBAR_ACCESS_TOKEN"),
-  custom: %{"bob-who" => System.fetch_env!("BOB_WHO")}
+  custom: %{
+    "bob-who" => System.fetch_env!("BOB_WHO"),
+    "bob-hostname" => System.fetch_env!("BOB_HOSTNAME")
+  }

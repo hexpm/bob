@@ -14,12 +14,12 @@ defmodule Bob.Queue do
     {:ok, state}
   end
 
-  def add(module, args) do
-    GenServer.call(__MODULE__, {:add, module, args})
+  def add(key, args) do
+    GenServer.call(__MODULE__, {:add, key, args})
   end
 
-  def start(module) do
-    GenServer.call(__MODULE__, {:start, module})
+  def start(key) do
+    GenServer.call(__MODULE__, {:start, key})
   end
 
   def success(id) do
@@ -34,36 +34,43 @@ defmodule Bob.Queue do
     GenServer.call(__MODULE__, :state)
   end
 
-  def handle_call({:add, module, args}, _from, state) do
+  def queue_sizes() do
+    GenServer.call(__MODULE__, :queue_sizes)
+  end
+
+  def handle_call({:add, key, args}, _from, state) do
     state =
       cond do
-        already_queued?(module, args, state) ->
-          Logger.info("ALREADY QUEUED #{inspect(module)} #{inspect(args)}")
+        already_running?(key, args, state) ->
           state
 
-        already_running?(module, args, state) ->
-          Logger.info("ALREADY RUNNING #{inspect(module)} #{inspect(args)}")
+        already_queued?(key, args, state) ->
           state
 
         true ->
-          Logger.info("QUEUED #{inspect(module)} #{inspect(args)}")
-          update_in(state.queues[module], &((&1 || []) ++ [args]))
+          Logger.info("QUEUED #{inspect(key)} #{inspect(args)}")
+          state = update_in(state.queue_sets[key], &MapSet.put(&1 || MapSet.new(), args))
+          update_in(state.queues[key], &:queue.in(args, &1 || :queue.new()))
       end
 
     {:reply, :ok, state}
   end
 
-  def handle_call({:start, module}, _from, state) do
-    case Map.get(state.queues, module, []) do
-      [] ->
-        {:reply, :error, state}
+  def handle_call({:start, key}, _from, state) do
+    queue = Map.get(state.queues, key, :queue.new())
 
-      [args | rest_args] ->
+    case :queue.out(queue) do
+      {{:value, args}, queue} ->
         now = NaiveDateTime.utc_now()
         id = :erlang.unique_integer()
-        state = put_in(state.running[id], {module, args, now})
-        state = put_in(state.queues[module], rest_args)
+
+        state = put_in(state.running[id], {key, args, now})
+        state = put_in(state.queues[key], queue)
+        state = update_in(state.queue_sets[key], &MapSet.delete(&1, args))
         {:reply, {:ok, {id, args}}, state}
+
+      {:empty, _queue} ->
+        {:reply, :error, state}
     end
   end
 
@@ -82,6 +89,11 @@ defmodule Bob.Queue do
     {:reply, state, state}
   end
 
+  def handle_call(:queue_sizes, _from, state) do
+    sizes = Enum.map(state.queue_sets, fn {key, set} -> {key, MapSet.size(set)} end)
+    {:reply, sizes, state}
+  end
+
   def handle_info(:timeout, state) do
     Process.send_after(self(), :timeout, @timeout_timer * 1000)
     now = NaiveDateTime.utc_now()
@@ -89,7 +101,7 @@ defmodule Bob.Queue do
     # Right now we just prune instead of retrying and adding back to the queue
     # under the assumption that a job will eventually be added back
     state =
-      Enum.reduce(state.running, state, fn {id, {_module, _args, created}}, state ->
+      Enum.reduce(state.running, state, fn {id, {_key, _args, created}}, state ->
         if NaiveDateTime.diff(now, created) > @timeout do
           remove_job(id, state)
         else
@@ -104,18 +116,17 @@ defmodule Bob.Queue do
     update_in(state.running, &Map.delete(&1, id))
   end
 
-  defp already_queued?(module, args, state) do
-    Map.get(state.queues, module, [])
-    |> Enum.any?(&(&1 == args))
+  defp already_queued?(key, args, state) do
+    args in Map.get(state.queue_sets, key, MapSet.new())
   end
 
-  defp already_running?(module, args, state) do
-    Enum.any?(state.running, fn {_id, {running_module, running_args, _created}} ->
-      module == running_module and args == running_args
+  defp already_running?(key, args, state) do
+    Enum.any?(state.running, fn {_id, {running_key, running_args, _created}} ->
+      key == running_key and args == running_args
     end)
   end
 
   defp new_state do
-    %{queues: %{}, running: %{}}
+    %{queues: %{}, running: %{}, queue_sets: %{}}
   end
 end

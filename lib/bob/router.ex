@@ -12,19 +12,21 @@ defmodule Bob.Router do
   plug(Bob.Plug.Status)
   # TODO: SSL?
   plug(:secret)
-  plug(Plug.Parsers, pass: ["application/vnd.bob+erlang"], parsers: [Bob.Plug.Parser])
+
+  plug(Plug.Parsers,
+    pass: ["application/json", "application/vnd.bob+erlang"],
+    parsers: [:json, Bob.Plug.Parser],
+    json_decoder: Jason
+  )
+
   plug(:match)
   plug(:dispatch)
 
   post "queue/start" do
     jobs =
-      Stream.flat_map(cycle(conn.params.jobs, conn.params.num), fn module ->
-        case Bob.Queue.start(module) do
-          {:ok, {id, args}} -> [{id, {module, args}}]
-          :error -> []
-        end
-      end)
-      |> Enum.take(conn.params.num)
+      conn.params.jobs
+      |> Bob.RemoteQueue.prioritize()
+      |> Bob.RemoteQueue.start_jobs(conn.params.num)
 
     conn
     |> put_resp_header("content-type", "application/vnd.bob+erlang")
@@ -55,14 +57,5 @@ defmodule Bob.Router do
       |> send_resp(401, "")
       |> halt()
     end
-  end
-
-  defp cycle([], _times), do: []
-
-  defp cycle(enum, times) do
-    # Work around stream bug
-    enum
-    |> Stream.cycle()
-    |> Enum.take(Enum.count(enum) * times)
   end
 end

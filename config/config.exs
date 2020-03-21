@@ -39,7 +39,7 @@ config :bob,
   agent_schedule: [
     [
       module: Bob.Job.Clean,
-      period: {1, :hour},
+      period: {6, :hour},
       queue: true
     ]
   ]

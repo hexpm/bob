@@ -20,16 +20,16 @@ defmodule Bob.Runner do
     {:ok, state}
   end
 
-  def run(module, args) do
-    GenServer.call(__MODULE__, {:run, module, args})
+  def run(key, args) do
+    GenServer.call(__MODULE__, {:run, key, args})
   end
 
   def state() do
     GenServer.call(__MODULE__, :state)
   end
 
-  def handle_call({:run, module, args}, _from, state) do
-    state = start_job(nil, module, args, state)
+  def handle_call({:run, key, args}, _from, state) do
+    state = start_job(nil, key, args, state)
     {:reply, :ok, state}
   end
 
@@ -38,7 +38,7 @@ defmodule Bob.Runner do
   end
 
   def handle_info({ref, result}, state) when is_reference(ref) do
-    {module, args, job_id} = Map.fetch!(state.tasks, ref)
+    {key, args, job_id} = Map.fetch!(state.tasks, ref)
 
     case result do
       :ok ->
@@ -46,7 +46,7 @@ defmodule Bob.Runner do
 
       {:error, kind, error, stacktrace} ->
         if job_id, do: Bob.RemoteQueue.failure(job_id)
-        Logger.error("FAILED #{inspect(module)} #{inspect(args)}")
+        Logger.error("FAILED #{inspect(key)} #{inspect(args)}")
         Bob.log_error(kind, error, stacktrace)
     end
 
@@ -76,14 +76,20 @@ defmodule Bob.Runner do
     {:noreply, state}
   end
 
-  defp run_task(module, args) do
-    {time, _} = :timer.tc(fn -> module.run(args) end)
-    Logger.info("COMPLETED #{inspect(module)} #{inspect(args)} (#{time / 1_000_000}s)")
+  defp run_task(key, args) do
+    {time, _} = :timer.tc(fn -> run_task_fun(key, args) end)
+    Logger.info("COMPLETED #{inspect(key)} #{inspect(args)} (#{time / 1_000_000}s)")
     :ok
   catch
     kind, error ->
       {:error, kind, error, __STACKTRACE__}
   end
+
+  defp run_task_fun({module, key}, args), do: apply(module, :run, [key | args])
+  defp run_task_fun(module, args), do: apply(module, :run, args)
+
+  defp apply_task({module, _key}, fun, args), do: apply(module, fun, args)
+  defp apply_task(module, fun, args), do: apply(module, fun, args)
 
   defp start_any_jobs(state) do
     state
@@ -92,17 +98,23 @@ defmodule Bob.Runner do
   end
 
   defp start_jobs(state, fun) do
-    max(Application.get_env(:bob, :parallel_jobs) - map_size(state.tasks), 0)
+    max(Application.get_env(:bob, :parallel_jobs) - current_weight(state), 0)
     |> fun.()
-    |> Enum.reduce(state, fn {id, module, args}, state ->
-      start_job(id, module, args, state)
+    |> Enum.reduce(state, fn {id, key, args}, state ->
+      start_job(id, key, args, state)
     end)
   end
 
-  defp start_job(id, module, args, state) do
-    Logger.info("STARTING #{inspect(module)} #{inspect(args)}")
-    task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(module, args) end)
-    put_in(state.tasks[task.ref], {module, args, id})
+  defp current_weight(state) do
+    state.tasks
+    |> Enum.map(fn {_ref, {key, _args, _id}} -> apply_task(key, :weight, []) end)
+    |> Enum.sum()
+  end
+
+  defp start_job(id, key, args, state) do
+    Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
+    task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(key, args) end)
+    put_in(state.tasks[task.ref], {key, args, id})
   end
 
   defp new_state do

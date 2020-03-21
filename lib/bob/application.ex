@@ -7,6 +7,7 @@ defmodule Bob.Application do
     setup_docker()
     setup_gsutil()
     setup_tarsnap()
+    auth_docker()
     validate_jobs()
 
     File.mkdir_p!(Bob.tmp_dir())
@@ -55,13 +56,30 @@ defmodule Bob.Application do
     end
   end
 
+  defp auth_docker() do
+    username = System.get_env("BOB_DOCKERHUB_USERNAME")
+    password = System.get_env("BOB_DOCKERHUB_PASSWORD")
+
+    if username && password do
+      {_, 0} =
+        System.cmd("docker", ~w(login docker.io --username #{username} --password #{password}),
+          stderr_to_stdout: true,
+          parallelism: true
+        )
+    end
+  end
+
   defp validate_jobs() do
     validate_jobs(Application.get_env(:bob, :local_jobs))
     validate_jobs(Application.get_env(:bob, :remote_jobs))
   end
 
   defp validate_jobs(jobs) do
-    true = Enum.all?(jobs, &Code.ensure_loaded?/1)
+    true =
+      Enum.all?(jobs, fn
+        {module, _key} -> Code.ensure_loaded?(module)
+        module -> Code.ensure_loaded?(module)
+      end)
   end
 
   defp schedule() do

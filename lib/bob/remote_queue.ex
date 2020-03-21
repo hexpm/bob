@@ -17,15 +17,9 @@ defmodule Bob.RemoteQueue do
 
   def local_queue(num) when num > 0 do
     Application.get_env(:bob, :local_jobs)
-    |> Enum.shuffle()
-    |> cycle(num)
-    |> Stream.flat_map(fn module ->
-      case Bob.Queue.start(module) do
-        {:ok, {id, args}} -> [{{:local, id}, module, args}]
-        :error -> []
-      end
-    end)
-    |> Enum.take(num)
+    |> prioritize()
+    |> start_jobs(num)
+    |> Enum.map(fn {id, module, args} -> {{:local, id}, module, args} end)
   end
 
   def local_queue(_num) do
@@ -34,25 +28,60 @@ defmodule Bob.RemoteQueue do
 
   def remote_queue(num) when num > 0 do
     Application.get_env(:bob, :remote_jobs)
-    |> Enum.shuffle()
     |> start_request(num)
-    |> Enum.map(fn {id, {module, args}} ->
-      {{:remote, id}, module, args}
-    end)
+    |> Enum.map(fn {id, module, args} -> {{:remote, id}, module, args} end)
   end
 
   def remote_queue(_num) do
     []
   end
 
-  defp cycle([], _times), do: []
-
-  defp cycle(enum, times) do
-    # Work around stream bug
-    enum
-    |> Stream.cycle()
-    |> Enum.take(Enum.count(enum) * times)
+  def prioritize(jobs) do
+    jobs
+    |> Enum.group_by(&apply_job(&1, :priority, []), & &1)
+    |> Enum.sort_by(fn {priority, _jobs} -> priority end)
+    |> Enum.map(fn {priority, jobs} -> {priority, Enum.shuffle(jobs)} end)
   end
+
+  # Don't do lower priority jobs if there is still higher priority jobs in queue.
+  # This would ensure lower priority jobs with lower weight cannot race ahead
+  # higher priority jobs with higher weight.
+  def start_jobs(modules, num) do
+    {started_jobs, _num} =
+      Enum.flat_map_reduce(modules, num, fn
+        {_priority, _modules}, 0 ->
+          {:halt, 0}
+
+        {_priority, jobs}, num ->
+          Enum.flat_map_reduce(Stream.cycle(jobs ++ [:end]), {num, false}, fn
+            _module, {0, _started?} ->
+              {:halt, 0}
+
+            :end, {num, true} ->
+              {[], {num, false}}
+
+            :end, {num, false} ->
+              {:halt, num}
+
+            module, {num, started?} ->
+              new_num = num - apply_job(module, :weight, [])
+
+              if new_num >= 0 do
+                case Bob.Queue.start(module) do
+                  {:ok, {id, args}} -> {[{id, module, args}], {new_num, true}}
+                  :error -> {[], {num, started?}}
+                end
+              else
+                {[], {num, started?}}
+              end
+          end)
+      end)
+
+    started_jobs
+  end
+
+  defp apply_job({module, _key}, fun, args), do: apply(module, fun, args)
+  defp apply_job(module, fun, args), do: apply(module, fun, args)
 
   defp done_request(type, id) do
     url = Application.get_env(:bob, :master_url) <> "/queue/#{type}"
