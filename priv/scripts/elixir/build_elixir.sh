@@ -17,8 +17,7 @@ pushd elixir
 git checkout "${ELIXIR_SHA}"
 erl +V
 make compile
-make Precompiled.zip || make release_zip
-mv *.zip ../elixir.zip
+zip -9 -r ../elixir.zip bin CHANGELOG.md lib/*/ebin lib/*/lib LICENSE Makefile man NOTICE README.md VERSION
 popd
 
 if [ "${BUILD_DOCS}" == "1" ]; then
