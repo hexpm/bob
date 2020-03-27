@@ -18,9 +18,16 @@ function push {
 
   otp_version=${otp_versions[0]}
   otp_string=$(otp_string ${otp_version})
-  build "$1" "$2" "${otp_version}" "1"
-  upload_build "$1" "${otp_string}"
-  upload_docs "$1"
+
+  if [ "${BUILD_DOCS:-1}" == "1" ]; then
+    build "$1" "$2" "${otp_version}" "1"
+    upload_build "$1" "${otp_string}"
+    upload_docs "$1"
+  else
+    build "$1" "$2" "${otp_version}" "0"
+    upload_build "$1" "${otp_string}"
+  fi
+
   update_builds_txt "$1" "$2" "${otp_string}"
 
   for otp_version in "${otp_versions[@]:1}"; do

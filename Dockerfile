@@ -1,4 +1,6 @@
-FROM hexpm/elixir:1.10.2-erlang-22.2.7-alpine-3.11.3 as build
+# Temporary change to use ARM images
+# FROM hexpm/elixir:1.10.2-erlang-22.2.7-alpine-3.11.3 as build
+FROM elixir:1.10.2-alpine as build
 
 # install build dependencies
 RUN apk add --no-cache --update git

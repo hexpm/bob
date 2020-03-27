@@ -2,11 +2,14 @@ defmodule Bob.Job.HexDocsChecker do
   @repo "hexpm/hex"
   @file_regex ~r"^docs/hex-(.*).tar.gz$"
 
-  def run([]) do
+  def run() do
     Enum.each(diff(), fn {ref_name, _ref} ->
       Bob.Queue.add(Bob.Job.BuildHexDocs, [ref_name])
     end)
   end
+
+  def priority(), do: 1
+  def weight(), do: 1
 
   defp build_ref?("v" <> version) do
     case Version.parse(version) do

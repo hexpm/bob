@@ -6,25 +6,11 @@ elixir=$1
 erlang=$2
 os=$3
 os_version=$4
+arch=$5
 
 tag=${elixir}-erlang-${erlang}-${os}-${os_version}
+erlang_major=$(echo "${erlang}" | awk 'match($0, /^[0-9][0-9]/) { print substr( $0, RSTART, RLENGTH )}')
 
-docker login docker.io --username ${BOB_DOCKERHUB_USERNAME} --password ${BOB_DOCKERHUB_PASSWORD}
-
-case "${os}" in
-  "alpine")
-    dockerfile="elixir-alpine.dockerfile"
-    ;;
-  "ubuntu")
-    split_os_version=(${os_version//-/ })
-    dockerfile="elixir-ubuntu-${split_os_version[0]}.dockerfile"
-    ;;
-  "debian")
-    split_os_version=(${os_version//-/ })
-    dockerfile="elixir-debian-${split_os_version[0]}.dockerfile"
-    ;;
-esac
-
-docker build -t hexpm/elixir:${tag} --build-arg ELIXIR=${elixir} --build-arg ERLANG=${erlang} --build-arg OS_VERSION=${os_version} -f ${SCRIPT_DIR}/docker/${dockerfile} ${SCRIPT_DIR}/docker
-docker push docker.io/hexpm/elixir:${tag}
-docker rmi -f docker.io/hexpm/elixir:${tag}
+docker build -t hexpm/elixir-${arch}:${tag} --build-arg ELIXIR=${elixir} --build-arg ERLANG=${erlang} --build-arg ERLANG_MAJOR=${erlang_major} --build-arg OS_VERSION=${os_version} --build-arg ARCH=${arch} -f ${SCRIPT_DIR}/docker/elixir-${os}.dockerfile ${SCRIPT_DIR}/docker
+docker push docker.io/hexpm/elixir-${arch}:${tag}
+docker rmi -f docker.io/hexpm/elixir-${arch}:${tag}

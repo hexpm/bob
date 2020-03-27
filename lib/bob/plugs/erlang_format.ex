@@ -9,7 +9,7 @@ defmodule Bob.Plug.ErlangFormat do
   end
 
   def decode(binary) do
-    term = Plug.Crypto.non_executable_binary_to_term(binary, [:safe])
+    term = Plug.Crypto.non_executable_binary_to_term(binary)
     {:ok, term}
   rescue
     ArgumentError ->

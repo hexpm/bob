@@ -2,10 +2,11 @@ ARG ARCH
 ARG OS_VERSION
 ARG ERLANG
 
-FROM alpine:${OS_VERSION} AS build
+FROM ubuntu:${OS_VERSION} AS build
 
-RUN apk add --no-cache --update \
+RUN apt-get update && apt-get -y --no-install-recommends install \
   wget \
+  ca-certificates \
   unzip \
   make
 
@@ -17,6 +18,6 @@ RUN unzip -d /ELIXIR elixir.zip
 WORKDIR /ELIXIR
 RUN make -o compile DESTDIR=/ELIXIR_LOCAL install
 
-FROM hexpm/erlang-${ARCH}:${ERLANG}-alpine-${OS_VERSION} AS final
+FROM hexpm/erlang-${ARCH}:${ERLANG}-ubuntu-${OS_VERSION} AS final
 
 COPY --from=build /ELIXIR_LOCAL/usr/local /usr/local

@@ -4,11 +4,22 @@ defmodule Bob.DockerHub do
   def fetch_repo_tags(repo) do
     (@dockerhub_url <> "v2/repositories/#{repo}/tags?page_size=100")
     |> dockerhub_request()
-    |> response_to_tags()
+    |> parse_response()
   end
 
-  defp response_to_tags(response) do
-    Enum.map(response, & &1["name"])
+  defp parse_response(response) do
+    Enum.flat_map(response, fn result ->
+      # Reject corrupt images
+      images = Enum.reject(result["images"], &(&1["digest"] in [nil, ""]))
+
+      if images == [] do
+        []
+      else
+        # DockerHub returns dupes sometimes?
+        archs = Enum.uniq(Enum.map(result["images"], & &1["architecture"]))
+        [{result["name"], archs}]
+      end
+    end)
   end
 
   defp dockerhub_request(url) do

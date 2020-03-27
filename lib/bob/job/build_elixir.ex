@@ -1,7 +1,7 @@
 defmodule Bob.Job.BuildElixir do
   require Logger
 
-  def run([ref_name, ref]) do
+  def run(ref_name, ref) do
     directory = Bob.Directory.new()
     args = [ref_name, ref] ++ Enum.reverse(elixir_to_otp(ref_name))
     Logger.info("Using directory #{directory}")
@@ -59,4 +59,7 @@ defmodule Bob.Job.BuildElixir do
       _ -> ["21.3", "22.2"]
     end
   end
+
+  def priority(), do: 2
+  def weight(), do: 3
 end
