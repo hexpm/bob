@@ -24,5 +24,12 @@ case "${os}" in
 esac
 
 docker build -t hexpm/erlang-${arch}:${tag} --build-arg ERLANG=${erlang} --build-arg OS_VERSION=${os_version} -f ${SCRIPT_DIR}/docker/${dockerfile} ${SCRIPT_DIR}/docker
-docker push docker.io/hexpm/erlang-${arch}:${tag}
+
+# This command have a tendancy to intermittently fail
+docker push docker.io/hexpm/erlang-${arch}:${tag} ||
+ (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
+ (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
+ (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
+ (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/erlang-${arch}:${tag})
+
 docker rmi -f docker.io/hexpm/erlang-${arch}:${tag}
