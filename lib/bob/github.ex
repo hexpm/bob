@@ -1,7 +1,7 @@
 defmodule Bob.GitHub do
   @github_url "https://api.github.com/"
 
-  def diff(repo, build_path, expand_fun \\ & [&1]) do
+  def diff(repo, build_path, expand_fun \\ &[&1]) do
     existing = Enum.flat_map(fetch_repo_refs(repo), expand_fun)
     built = Bob.Repo.fetch_built_refs(build_path)
 
