@@ -27,9 +27,10 @@ docker build -t hexpm/erlang-${arch}:${tag} --build-arg ERLANG=${erlang} --build
 
 # This command have a tendancy to intermittently fail
 docker push docker.io/hexpm/erlang-${arch}:${tag} ||
- (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
- (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
- (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
- (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/erlang-${arch}:${tag})
+  (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
+  (exit 0)
 
 docker rmi -f docker.io/hexpm/erlang-${arch}:${tag}

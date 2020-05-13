@@ -15,9 +15,10 @@ docker build -t hexpm/elixir-${arch}:${tag} --build-arg ELIXIR=${elixir} --build
 
 # This command have a tendancy to intermittently fail
 docker push docker.io/hexpm/elixir-${arch}:${tag} ||
-  (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
-  (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
-  (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
-  (sleep $((10 + $RANDOM % 20)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
+  (exit 0)
 
 docker rmi -f docker.io/hexpm/elixir-${arch}:${tag}

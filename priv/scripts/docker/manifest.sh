@@ -17,13 +17,15 @@ done
 # These commands have a tendancy to intermittently fail
 
 docker manifest create --amend hexpm/${kind}:${tag} ${arch_images} ||
-  (sleep $((10 + $RANDOM % 20)) && docker manifest create --amend hexpm/${kind}:${tag} ${arch_images}) ||
-  (sleep $((10 + $RANDOM % 20)) && docker manifest create --amend hexpm/${kind}:${tag} ${arch_images}) ||
-  (sleep $((10 + $RANDOM % 20)) && docker manifest create --amend hexpm/${kind}:${tag} ${arch_images}) ||
-  (sleep $((10 + $RANDOM % 20)) && docker manifest create --amend hexpm/${kind}:${tag} ${arch_images})
+  (sleep $((20 + $RANDOM % 40)) && docker manifest create --amend hexpm/${kind}:${tag} ${arch_images}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker manifest create --amend hexpm/${kind}:${tag} ${arch_images}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker manifest create --amend hexpm/${kind}:${tag} ${arch_images}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker manifest create --amend hexpm/${kind}:${tag} ${arch_images}) ||
+  (exit 0)
 
 docker manifest push --purge hexpm/${kind}:${tag} ||
-  (sleep $((10 + $RANDOM % 20)) && docker manifest push --purge hexpm/${kind}:${tag}) ||
-  (sleep $((10 + $RANDOM % 20)) && docker manifest push --purge hexpm/${kind}:${tag}) ||
-  (sleep $((10 + $RANDOM % 20)) && docker manifest push --purge hexpm/${kind}:${tag}) ||
-  (sleep $((10 + $RANDOM % 20)) && docker manifest push --purge hexpm/${kind}:${tag})
+  (sleep $((20 + $RANDOM % 40)) && docker manifest push --purge hexpm/${kind}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker manifest push --purge hexpm/${kind}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker manifest push --purge hexpm/${kind}:${tag}) ||
+  (sleep $((20 + $RANDOM % 40)) && docker manifest push --purge hexpm/${kind}:${tag}) ||
+  (exit 0)
