@@ -8,7 +8,7 @@ defmodule Bob.Job.BuildElixir do
     Bob.Script.run({:script, "elixir/elixir.sh"}, args, directory)
   end
 
-  defp elixir_to_otp(ref) do
+  def elixir_to_otp(ref) do
     case ref do
       "v0" <> _ -> ["17.3"]
       "v1.0.0" -> ["17.3"]
