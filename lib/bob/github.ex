@@ -2,15 +2,22 @@ defmodule Bob.GitHub do
   @github_url "https://api.github.com/"
 
   def diff(repo, build_path, expand_fun \\ &[&1]) do
-    existing = Enum.flat_map(fetch_repo_refs(repo), expand_fun)
+    existing =
+      Enum.flat_map(fetch_repo_refs(repo), fn {ref_name, ref} ->
+        Enum.map(expand_fun.(ref_name), &{&1, ref_name, ref})
+      end)
+
     built = Bob.Repo.fetch_built_refs(build_path)
 
-    Enum.filter(existing, fn {name, ref} ->
+    existing
+    |> Enum.filter(fn {name, ref_name, ref} ->
       case Map.fetch(built, name) do
         {:ok, ^ref} -> false
         _other -> true
       end
     end)
+    |> Enum.map(fn {_name, ref_name, ref} -> {ref_name, ref} end)
+    |> Enum.uniq()
   end
 
   def fetch_repo_refs(repo) do

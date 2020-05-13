@@ -23,7 +23,7 @@ defmodule Bob.Job.ElixirChecker do
     ref_otps =
       Enum.map(Bob.Job.BuildElixir.elixir_to_otp(ref), fn otp ->
         [major, _minor] = String.split(otp, ".", parts: 2)
-        "#{ref}-#{major}"
+        "#{ref}-otp-#{major}"
       end)
 
     [ref] ++ ref_otps
