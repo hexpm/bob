@@ -92,6 +92,8 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def expected_elixir_tags() do
+    # TODO: Base this on builds.txt instead
+
     refs = elixir_refs()
 
     for ref <- refs,
