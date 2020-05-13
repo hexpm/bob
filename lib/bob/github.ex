@@ -10,7 +10,7 @@ defmodule Bob.GitHub do
     built = Bob.Repo.fetch_built_refs(build_path)
 
     existing
-    |> Enum.filter(fn {name, ref_name, ref} ->
+    |> Enum.filter(fn {name, _ref_name, ref} ->
       case Map.fetch(built, name) do
         {:ok, ^ref} -> false
         _other -> true
