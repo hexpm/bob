@@ -5,9 +5,9 @@ defmodule Bob.Job.DockerChecker do
   @archs ["amd64", "arm64"]
 
   @builds %{
-    "alpine" => ["3.11.3"],
-    "ubuntu" => ["bionic-20200219", "xenial-20200212", "trusty-20191217"],
-    "debian" => ["buster-20200224", "stretch-20200224", "jessie-20200224"]
+    "alpine" => ["3.11.6"],
+    "ubuntu" => ["focal-20200423", "bionic-20200403", "xenial-20200326", "trusty-20191217"],
+    "debian" => ["buster-20200511", "stretch-20200511", "jessie-20200511"]
   }
 
   def run() do
@@ -39,7 +39,7 @@ defmodule Bob.Job.DockerChecker do
         arch <- @archs,
         build_erlang_ref?(arch, os, os_version, ref),
         "OTP-" <> erlang = ref,
-        do: {erlang, os, os_version, arch}
+        do: {{erlang, os, os_diff(os, os_version), arch}, {erlang, os, os_version, arch}}
   end
 
   defp build_erlang_ref?(_os, "OTP-18.0-rc2"), do: false
@@ -56,6 +56,9 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-17" <> _), do: false
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-18" <> _), do: false
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-19" <> _), do: false
+  defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-17" <> _), do: false
+  defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-18" <> _), do: false
+  defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-19" <> _), do: false
   defp build_erlang_ref?(_os, _os_version, _ref), do: true
 
   defp build_erlang_ref?("arm64", "ubuntu", "trusty-" <> _, "OTP-17" <> _), do: false
@@ -78,7 +81,7 @@ defmodule Bob.Job.DockerChecker do
     |> Bob.DockerHub.fetch_repo_tags()
     |> Enum.map(fn {tag, [^arch]} ->
       [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
-      {erlang, os, os_version, arch}
+      {erlang, os, os_diff(os, os_version), arch}
     end)
   end
 
@@ -102,7 +105,8 @@ defmodule Bob.Job.DockerChecker do
         {erlang, os, os_version, ^arch} <- erlang_tags(arch),
         not skip_elixir?(elixir, erlang),
         compatible_elixir_and_erlang?(elixir, erlang),
-        do: {elixir, erlang, os, os_version, arch}
+        key = {elixir, erlang, os, os_version, arch},
+        do: {key, key}
   end
 
   defp elixir_refs() do
@@ -123,7 +127,7 @@ defmodule Bob.Job.DockerChecker do
       [elixir, erlang, os, os_version] =
         Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
 
-      {elixir, erlang, os, os_version, arch}
+      {elixir, erlang, os, os_diff(os, os_version), arch}
     end)
   end
 
@@ -136,7 +140,15 @@ defmodule Bob.Job.DockerChecker do
   defp build_elixir_ref?(_), do: false
 
   defp diff(expected, current) do
-    MapSet.difference(MapSet.new(expected), MapSet.new(current))
+    current = MapSet.new(current)
+
+    Enum.flat_map(expected, fn {key, value} ->
+      if MapSet.member?(current, key) do
+        []
+      else
+        [value]
+      end
+    end)
     |> Enum.sort()
   end
 
@@ -215,5 +227,15 @@ defmodule Bob.Job.DockerChecker do
         Bob.Queue.add(Bob.Job.DockerManifest, [kind, key, expected_archs])
       end
     end)
+  end
+
+  defp os_diff("alpine", version) do
+    version = Version.parse!(version)
+    {version.major, version.minor}
+  end
+
+  defp os_diff(os, version) when os in ["ubuntu", "debian"] do
+    [version, _] = String.split(version, "-", parts: 2)
+    version
   end
 end
