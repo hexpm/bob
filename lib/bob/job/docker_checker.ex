@@ -39,7 +39,9 @@ defmodule Bob.Job.DockerChecker do
         arch <- @archs,
         build_erlang_ref?(arch, os, os_version, ref),
         "OTP-" <> erlang = ref,
-        do: {{erlang, os, os_diff(os, os_version), arch}, {erlang, os, os_version, arch}}
+        key = {erlang, os, os_diff(os, os_version), arch},
+        value = {erlang, os, os_version, arch},
+        do: {key, value}
   end
 
   defp build_erlang_ref?(_os, "OTP-18.0-rc2"), do: false
@@ -81,7 +83,9 @@ defmodule Bob.Job.DockerChecker do
     |> Bob.DockerHub.fetch_repo_tags()
     |> Enum.map(fn {tag, [^arch]} ->
       [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
-      {erlang, os, os_diff(os, os_version), arch}
+      key = {erlang, os, os_diff(os, os_version), arch}
+      value = {erlang, os, os_version, arch}
+      {key, value}
     end)
   end
 
@@ -105,8 +109,9 @@ defmodule Bob.Job.DockerChecker do
         {erlang, os, os_version, ^arch} <- erlang_tags(arch),
         not skip_elixir?(elixir, erlang),
         compatible_elixir_and_erlang?(elixir, erlang),
-        key = {elixir, erlang, os, os_version, arch},
-        do: {key, key}
+        key = {elixir, erlang, os, os_diff(os, os_version), arch},
+        value = {elixir, erlang, os, os_version, arch},
+        do: {key, value}
   end
 
   defp elixir_refs() do
@@ -127,7 +132,9 @@ defmodule Bob.Job.DockerChecker do
       [elixir, erlang, os, os_version] =
         Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
 
-      {elixir, erlang, os, os_diff(os, os_version), arch}
+      key = {elixir, erlang, os, os_diff(os, os_version), arch}
+      value = {elixir, erlang, os, os_version, arch}
+      {key, value}
     end)
   end
 
@@ -140,7 +147,7 @@ defmodule Bob.Job.DockerChecker do
   defp build_elixir_ref?(_), do: false
 
   defp diff(expected, current) do
-    current = MapSet.new(current)
+    current = MapSet.new(current, fn {key, _value} -> key end)
 
     Enum.flat_map(expected, fn {key, value} ->
       if MapSet.member?(current, key) do
@@ -214,8 +221,9 @@ defmodule Bob.Job.DockerChecker do
   end
 
   defp group_archs(enum) do
-    Enum.group_by(
-      enum,
+    enum
+    |> Enum.map(fn {_key, value} -> value end)
+    |> Enum.group_by(
       &Tuple.delete_at(&1, tuple_size(&1) - 1),
       &elem(&1, tuple_size(&1) - 1)
     )
@@ -224,7 +232,8 @@ defmodule Bob.Job.DockerChecker do
   defp diff_manifests(kind, expected, current) do
     Enum.each(Enum.sort(expected), fn {key, expected_archs} ->
       if expected_archs -- Map.get(current, key, []) != [] do
-        Bob.Queue.add(Bob.Job.DockerManifest, [kind, key, expected_archs])
+        # Bob.Queue.add(Bob.Job.DockerManifest, [kind, key, expected_archs])
+        IO.inspect({Bob.Job.DockerManifest, [kind, key, expected_archs]})
       end
     end)
   end
