@@ -103,15 +103,21 @@ defmodule Bob.Job.DockerChecker do
 
     refs = elixir_refs()
 
-    for ref <- refs,
-        "v" <> elixir = ref,
-        arch <- @archs,
-        {erlang, os, os_version, ^arch} <- erlang_tags(arch),
-        not skip_elixir?(elixir, erlang),
-        compatible_elixir_and_erlang?(elixir, erlang),
-        key = {elixir, erlang, os, os_diff(os, os_version), arch},
-        value = {elixir, erlang, os, os_version, arch},
-        do: {key, value}
+    tags =
+      for ref <- refs,
+          "v" <> elixir = ref,
+          arch <- @archs,
+          {_, {erlang, os, os_version, ^arch}} <- erlang_tags(arch),
+          not skip_elixir?(elixir, erlang),
+          compatible_elixir_and_erlang?(elixir, erlang),
+          key = {elixir, erlang, os, os_diff(os, os_version), arch},
+          value = {elixir, erlang, os, os_version, arch},
+          do: {key, value}
+
+    tags
+    |> Enum.sort(:desc)
+    |> Enum.uniq_by(fn {key, _value} -> key end)
+    |> Enum.map(fn {_key, value} -> {value, value} end)
   end
 
   defp elixir_refs() do
@@ -132,9 +138,8 @@ defmodule Bob.Job.DockerChecker do
       [elixir, erlang, os, os_version] =
         Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
 
-      key = {elixir, erlang, os, os_diff(os, os_version), arch}
-      value = {elixir, erlang, os, os_version, arch}
-      {key, value}
+      key = {elixir, erlang, os, os_version, arch}
+      {key, key}
     end)
   end
 
@@ -232,8 +237,7 @@ defmodule Bob.Job.DockerChecker do
   defp diff_manifests(kind, expected, current) do
     Enum.each(Enum.sort(expected), fn {key, expected_archs} ->
       if expected_archs -- Map.get(current, key, []) != [] do
-        # Bob.Queue.add(Bob.Job.DockerManifest, [kind, key, expected_archs])
-        IO.inspect({Bob.Job.DockerManifest, [kind, key, expected_archs]})
+        Bob.Queue.add(Bob.Job.DockerManifest, [kind, key, expected_archs])
       end
     end)
   end
