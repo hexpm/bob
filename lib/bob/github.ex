@@ -35,7 +35,10 @@ defmodule Bob.GitHub do
     token = Application.get_env(:bob, :github_token)
 
     opts = [:with_body, basic_auth: {user, token}]
-    {:ok, 200, headers, body} = :hackney.request(:get, url, [], "", opts)
+
+    {:ok, 200, headers, body} =
+      Bob.HTTP.retry("GitHub", fn -> :hackney.request(:get, url, [], "", opts) end)
+
     body = Jason.decode!(body)
 
     if url = next_link(headers) do

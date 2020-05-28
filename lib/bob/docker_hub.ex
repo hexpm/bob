@@ -24,7 +24,10 @@ defmodule Bob.DockerHub do
 
   defp dockerhub_request(url) do
     opts = [:with_body, recv_timeout: 10_000]
-    {:ok, 200, _headers, body} = :hackney.request(:get, url, [], "", opts)
+
+    {:ok, 200, _headers, body} =
+      Bob.HTTP.retry("DockerHub", fn -> :hackney.request(:get, url, [], "", opts) end)
+
     body = Jason.decode!(body)
 
     if url = body["next"] do
