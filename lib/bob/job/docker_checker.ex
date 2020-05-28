@@ -1,5 +1,5 @@
 defmodule Bob.Job.DockerChecker do
-  @erlang_tag_regex ~r"^(\d+(?:\.\d+)?(?:\.\d+)?)-([^-]+)-(.+)$"
+  @erlang_tag_regex ~r"^([^-]+)-([^-]+)-(.+)$"
   @elixir_tag_regex ~r"^(.+)-erlang-([^-]+)-([^-]+)-(.+)$"
 
   @archs ["amd64", "arm64"]
@@ -47,12 +47,7 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?(_os, "OTP-18.0-rc2"), do: false
   defp build_erlang_ref?("alpine", "OTP-17" <> _), do: false
   defp build_erlang_ref?("alpine", "OTP-18" <> _), do: false
-
-  defp build_erlang_ref?(_os, "OTP-" <> version) do
-    match?({:ok, %Version{pre: []}}, Version.parse(version)) or
-      match?({:ok, %Version{pre: []}}, Version.parse(version <> ".0"))
-  end
-
+  defp build_erlang_ref?(_os, "OTP-" <> version), do: not String.contains?(version, "-")
   defp build_erlang_ref?(_os, _ref), do: false
 
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-17" <> _), do: false
