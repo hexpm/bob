@@ -12,8 +12,8 @@ jobs:
       - name: Install OTP and Elixir
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.2
-          elixir-version: 1.10.0
+          otp-version: 23.0.1
+          elixir-version: 1.10.3
 
       - name: Install dependencies
         run: mix deps.get
@@ -31,8 +31,8 @@ jobs:
       - name: Install OTP and Elixir
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.2
-          elixir-version: 1.10.0
+          otp-version: 23.0.1
+          elixir-version: 1.10.3
 
       - name: Install dependencies
         run: |
