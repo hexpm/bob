@@ -90,7 +90,10 @@ defmodule Bob.RemoteQueue do
     opts = [:with_body]
     headers = [{"authorization", secret}, {"content-type", "application/vnd.bob+erlang"}]
     body = Bob.Plug.ErlangFormat.encode_to_iodata!(%{id: id})
-    {:ok, 204, _headers, ""} = :hackney.request(:post, url, headers, body, opts)
+
+    {:ok, 204, _headers, ""} =
+      Bob.HTTP.retry("BobMaster", fn -> :hackney.request(:post, url, headers, body, opts) end)
+
     :ok
   end
 
@@ -105,7 +108,10 @@ defmodule Bob.RemoteQueue do
     opts = [:with_body]
     headers = [{"authorization", secret}, {"content-type", "application/vnd.bob+erlang"}]
     body = Bob.Plug.ErlangFormat.encode_to_iodata!(%{jobs: remote_jobs, num: num})
-    {:ok, 200, _headers, body} = :hackney.request(:post, url, headers, body, opts)
+
+    {:ok, 200, _headers, body} =
+      Bob.HTTP.retry("BobMaster", fn -> :hackney.request(:post, url, headers, body, opts) end)
+
     {:ok, %{jobs: jobs}} = Bob.Plug.ErlangFormat.decode(body)
     jobs
   end
