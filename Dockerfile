@@ -5,7 +5,6 @@ FROM hexpm/elixir:1.10.3-erlang-23.0.1-alpine-3.11.6 as build
 RUN apk add --no-cache --update git
 
 # prepare build dir
-RUN mkdir /app
 WORKDIR /app
 
 # install hex + rebar
