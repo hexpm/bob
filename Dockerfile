@@ -33,7 +33,7 @@ RUN mix release
 FROM alpine:3.11.6 AS app
 RUN apk add --no-cache bash build-base coreutils curl docker gzip libffi-dev openssl openssl-dev python-dev py-pip tar tarsnap wget zip
 
-RUN pip install --upgrade awscli gsutil
+RUN pip install --no-cache-dir --upgrade awscli gsutil
 
 COPY etc/tarsnap.conf /etc/tarsnap/tarsnap.conf
 COPY etc/boto /app/.boto
