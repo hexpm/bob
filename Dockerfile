@@ -5,6 +5,7 @@ FROM hexpm/elixir:1.10.3-erlang-23.0.1-alpine-3.11.6 as build
 RUN apk add --no-cache --update git
 
 # prepare build dir
+RUN mkdir /app
 WORKDIR /app
 
 # install hex + rebar
@@ -31,9 +32,9 @@ RUN mix release
 
 # prepare release image
 FROM alpine:3.11.6 AS app
-RUN apk add --no-cache bash build-base coreutils curl docker gzip libffi-dev openssl openssl-dev python-dev py-pip tar tarsnap wget zip
+RUN apk add --no-cache --update bash build-base coreutils curl docker gzip libffi-dev openssl openssl-dev python-dev py-pip tar tarsnap wget zip
 
-RUN pip install --no-cache-dir --upgrade awscli gsutil
+RUN pip install --upgrade awscli gsutil
 
 COPY etc/tarsnap.conf /etc/tarsnap/tarsnap.conf
 COPY etc/boto /app/.boto
