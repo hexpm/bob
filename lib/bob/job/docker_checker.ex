@@ -5,9 +5,9 @@ defmodule Bob.Job.DockerChecker do
   @archs ["amd64", "arm64"]
 
   @builds %{
-    "alpine" => ["3.11.6"],
-    "ubuntu" => ["focal-20200423", "bionic-20200403", "xenial-20200326", "trusty-20191217"],
-    "debian" => ["buster-20200511", "stretch-20200511", "jessie-20200511"]
+    "alpine" => ["3.12.0"],
+    "ubuntu" => ["focal-20200703", "bionic-20200630", "xenial-20200619", "trusty-20191217"],
+    "debian" => ["buster-20200607", "stretch-20200607", "jessie-20200607"]
   }
 
   def run() do
