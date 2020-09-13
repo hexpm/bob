@@ -19,9 +19,8 @@ RUN apt-get -y --no-install-recommends install \
 
 ARG ERLANG
 
-RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz"
 RUN mkdir /OTP
-RUN tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
+RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
 WORKDIR /OTP
 RUN ./otp_build autoconf
 

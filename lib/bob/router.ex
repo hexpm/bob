@@ -11,6 +11,10 @@ defmodule Bob.Router do
   plug(Bob.Plug.Forwarded)
   plug(Bob.Plug.Status)
   # TODO: SSL?
+
+  plug(Plug.RequestId)
+  plug(Logster.Plugs.Logger, excludes: [:params])
+
   plug(:secret)
 
   plug(Plug.Parsers,

@@ -7,13 +7,11 @@ ARG elixir_version=v1.7.3
 RUN apt-get update
 RUN apt-get install -y git make wget zip
 
-RUN wget -nv -O otp.tar.gz https://repo.hex.pm/builds/otp/ubuntu-14.04/OTP-${otp_version}.tar.gz
 RUN mkdir -p /otp
-RUN tar zxf otp.tar.gz -C /otp --strip-components=1
+RUN wget -nv -O otp.tar.gz https://repo.hex.pm/builds/otp/ubuntu-14.04/OTP-${otp_version}.tar.gz && tar zxf otp.tar.gz -C /otp --strip-components=1
 RUN /otp/Install -minimal /otp
 
-RUN wget -nv -O elixir.zip https://repo.hex.pm/builds/elixir/${elixir_version}-otp-${otp_major}.zip
-RUN unzip -d /elixir elixir.zip
+RUN wget -nv -O elixir.zip https://repo.hex.pm/builds/elixir/${elixir_version}-otp-${otp_major}.zip && unzip -d /elixir elixir.zip
 
 ENV PATH=/otp/bin:/elixir/bin:$PATH
 ENV LANG=C.UTF-8

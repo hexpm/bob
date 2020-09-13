@@ -2,7 +2,7 @@
 FROM hexpm/elixir:1.10.3-erlang-23.0.1-alpine-3.11.6 as build
 
 # install build dependencies
-RUN apk add --no-cache --update git
+RUN apk add --no-cache git
 
 # prepare build dir
 WORKDIR /app

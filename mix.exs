@@ -28,7 +28,8 @@ defmodule Bob.Mixfile do
       {:plug_cowboy, "~> 2.0"},
       {:porcelain, "~> 2.0"},
       {:rollbax, "~> 0.11.0"},
-      {:sweet_xml, "~> 0.5"}
+      {:sweet_xml, "~> 0.5"},
+      {:logster, "~> 1.0"}
     ]
   end
 
