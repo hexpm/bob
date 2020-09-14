@@ -1,5 +1,4 @@
-# Temporary change to use ARM images
-FROM hexpm/elixir:1.10.3-erlang-23.0.1-alpine-3.11.6 as build
+FROM hexpm/elixir:1.10.4-erlang-23.0.4-alpine-3.12.0 as build
 
 # install build dependencies
 RUN apk add --no-cache git
@@ -30,8 +29,8 @@ COPY rel rel
 RUN mix release
 
 # prepare release image
-FROM alpine:3.11.6 AS app
-RUN apk add --no-cache bash build-base coreutils curl docker gzip libffi-dev openssl openssl-dev python-dev py-pip tar tarsnap wget zip
+FROM alpine:3.12.0 AS app
+RUN apk add --no-cache bash build-base coreutils curl docker gzip libffi-dev openssl openssl-dev python3-dev py3-pip tar tarsnap wget zip
 
 RUN pip install --no-cache-dir --upgrade awscli gsutil
 
