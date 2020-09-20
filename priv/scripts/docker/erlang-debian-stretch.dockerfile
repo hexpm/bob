@@ -4,6 +4,10 @@ FROM debian:${OS_VERSION} AS build
 
 ARG ERLANG
 
+ARG CFLAGS="-g -O2 -fpie -fstack-protector"
+ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
+ARG LDFLAGS="-pie -Wl,-z,relro,-z,now"
+
 RUN apt-get update
 RUN apt-get -y --no-install-recommends install \
   autoconf \

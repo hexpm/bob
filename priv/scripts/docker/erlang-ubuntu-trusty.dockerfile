@@ -19,6 +19,10 @@ RUN apt-get -y --no-install-recommends install \
 
 ARG ERLANG
 
+ARG CFLAGS="-g -O2 -fpie"
+ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
+ARG LDFLAGS="-pie -Wl,-z,relro,-z,now"
+
 RUN mkdir /OTP
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
 WORKDIR /OTP

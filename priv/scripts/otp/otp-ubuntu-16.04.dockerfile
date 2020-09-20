@@ -2,6 +2,10 @@ FROM ubuntu:16.04
 
 ENV UBUNTU_VERSION=16.04
 
+ARG CFLAGS="-g -O2 -fpie"
+ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
+ARG LDFLAGS="-pie -Wl,-z,relro,-z,now"
+
 RUN apt-get update
 
 RUN apt-get install -y \
