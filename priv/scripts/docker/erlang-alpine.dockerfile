@@ -21,8 +21,7 @@ RUN apk add --no-cache \
   perl-dev \
   wget \
   tar \
-  binutils \
-  libstdc++
+  binutils
 
 RUN mkdir /OTP
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
@@ -66,6 +65,7 @@ FROM alpine:${OS_VERSION} AS final
 ARG ERLANG
 
 RUN apk add --update --no-cache \
+  libstdc++ \
   ncurses \
   $(if [ "${ERLANG:0:1}" = "1" ]; then echo "libressl"; else echo "openssl"; fi) \
   unixodbc \
