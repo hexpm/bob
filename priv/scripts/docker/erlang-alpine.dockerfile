@@ -21,7 +21,8 @@ RUN apk add --no-cache \
   perl-dev \
   wget \
   tar \
-  binutils
+  binutils \
+  libstdc++
 
 RUN mkdir /OTP
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1

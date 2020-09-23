@@ -15,7 +15,8 @@ RUN apk add --no-cache \
     zlib-dev \
     autoconf \
     build-base \
-    perl-dev
+    perl-dev \
+    libstdc++
 
 RUN mkdir -p /home/build/out
 WORKDIR /home/build
