@@ -51,7 +51,8 @@ RUN ./configure \
   --with-ssl \
   --enable-threads \
   --enable-dirty-schedulers \
-  --disable-hipe
+  --disable-hipe \
+  --disable-jit
 RUN make -j$(getconf _NPROCESSORS_ONLN)
 RUN make install
 RUN find /usr/local -regex '/usr/local/lib/erlang/\(lib/\|erts-\).*/\(man\|doc\|obj\|c_src\|emacs\|info\|examples\)' | xargs rm -rf
