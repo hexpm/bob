@@ -46,8 +46,7 @@ gnuArch="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)"
   --with-ssl \
   --enable-threads \
   --enable-dirty-schedulers \
-  --disable-hipe \
-  --disable-jit
+  --disable-hipe
 
 make -j$(getconf _NPROCESSORS_ONLN)
 make release

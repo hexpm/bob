@@ -21,7 +21,8 @@ RUN apk add --no-cache \
   perl-dev \
   wget \
   tar \
-  binutils
+  binutils \
+  libstdc++
 
 RUN mkdir /OTP
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
@@ -51,8 +52,7 @@ RUN ./configure \
   --with-ssl \
   --enable-threads \
   --enable-dirty-schedulers \
-  --disable-hipe \
-  --disable-jit
+  --disable-hipe
 RUN make -j$(getconf _NPROCESSORS_ONLN)
 RUN make install
 RUN find /usr/local -regex '/usr/local/lib/erlang/\(lib/\|erts-\).*/\(man\|doc\|obj\|c_src\|emacs\|info\|examples\)' | xargs rm -rf
