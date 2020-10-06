@@ -8,8 +8,8 @@ defmodule Bob.Job.BuildElixir do
     Bob.Script.run({:script, "elixir/elixir.sh"}, args, directory)
   end
 
-  defp elixir_to_otp("v" <> version) do
-    version = fix_backport_version(version)
+  def elixir_to_otp(ref_name) do
+    version = ref_to_version(ref_name)
 
     cond do
       version_gte(version, "1.10.3") -> ["21.3", "22.3", "23.0"]
@@ -27,6 +27,8 @@ defmodule Bob.Job.BuildElixir do
     end
   end
 
+  defp version_gte("master", _base), do: true
+
   defp version_gte(version, base_version) do
     case Version.compare(version, base_version) do
       :lt -> false
@@ -34,15 +36,17 @@ defmodule Bob.Job.BuildElixir do
     end
   end
 
-  defp fix_backport_version(version) do
+  defp ref_to_version("v" <> version) do
     # Version.Parser cannot parse backport maintenance tags (eg 1.10)
     # as it doesn't have a patch number.
-    #  we add a large patch to be able to use `Version.compare/2`
+    # we add a large patch to be able to use `Version.compare/2`
     case String.match?(version, ~r/^\d+\.\d+$/) do
       true -> "#{version}.99999"
       _otherwise -> version
     end
   end
+
+  defp ref_to_version(_not_a_version), do: "master"
 
   def priority(), do: 2
   def weight(), do: 3

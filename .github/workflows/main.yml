@@ -39,6 +39,10 @@ jobs:
           mix deps.get
           mix deps.compile
 
+      - name: Check for compiler warnings
+        run: |
+          MIX_ENV=test mix compile --warnings-as-errors
+
       - name: Run tests
         run: |
           mix test
