@@ -162,7 +162,7 @@ defmodule Bob.Job.DockerChecker do
   defp compatible_elixir_and_erlang?(elixir_ref, erlang) do
     elixir_ref
     |> Bob.Job.BuildElixir.elixir_to_otp()
-    |> Enum.map(&List.first(String.split(&1, "."))
+    |> Enum.map(&List.first(String.split(&1, ".")))
     |> Enum.any?(&String.starts_with?(erlang, &1))
   end
 
