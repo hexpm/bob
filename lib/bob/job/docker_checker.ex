@@ -104,7 +104,7 @@ defmodule Bob.Job.DockerChecker do
           arch <- @archs,
           {_, {erlang, os, os_version, ^arch}} <- erlang_tags(arch),
           not skip_elixir?(elixir, erlang),
-          compatible_elixir_and_erlang?(elixir, erlang),
+          compatible_elixir_and_erlang?(ref, erlang),
           key = {elixir, erlang, os, os_diff(os, os_version), arch},
           value = {elixir, erlang, os, os_version, arch},
           do: {key, value}
@@ -159,29 +159,11 @@ defmodule Bob.Job.DockerChecker do
     |> Enum.sort()
   end
 
-  defp compatible_elixir_and_erlang?(elixir, erlang) do
-    compatibles =
-      case elixir do
-        "1.0.5" -> ["17", "18"]
-        "1.0." <> _ -> ["17"]
-        "1.1." <> _ -> ["17", "18"]
-        "1.2." <> _ -> ["18"]
-        "1.3." <> _ -> ["18", "19"]
-        "1.4.5" -> ["18", "19", "20"]
-        "1.4." <> _ -> ["18", "19"]
-        "1.5." <> _ -> ["18", "19", "20"]
-        "1.6.6" -> ["19", "20", "21"]
-        "1.6." <> _ -> ["19", "20"]
-        "1.7." <> _ -> ["19", "20", "21", "22"]
-        "1.8." <> _ -> ["20", "21", "22"]
-        "1.9." <> _ -> ["20", "21", "22"]
-        "1.10.0" -> ["21", "22"]
-        "1.10.1" -> ["21", "22"]
-        "1.10.2" -> ["21", "22"]
-        "1.10." <> _ -> ["21", "22", "23"]
-      end
-
-    Enum.any?(compatibles, &String.starts_with?(erlang, &1))
+  defp compatible_elixir_and_erlang?(elixir_ref, erlang) do
+    elixir_ref
+    |> Bob.Job.BuildElixir.elixir_to_otp()
+    |> Enum.map(&List.first(String.split(&1, "."))
+    |> Enum.any?(&String.starts_with?(erlang, &1))
   end
 
   defp skip_elixir?(elixir, erlang) when elixir in ~w(1.0.0 1.0.1 1.0.2 1.0.3) do
