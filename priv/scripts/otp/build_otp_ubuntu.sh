@@ -34,6 +34,10 @@ fi
 make -j$(getconf _NPROCESSORS_ONLN)
 make release
 
+if [ "${OTP_REF:0:3}" = "OTP" ] && [ "${OTP_REF:4:2}" -ge "23" ]; then
+  make release_docs DOC_TARGETS="chunks"
+fi
+
 cd ../
 mv otp-${OTP_REF}/release/x86_64-unknown-linux-gnu/ ${OTP_REF}
 rm ${OTP_REF}.tar.gz
