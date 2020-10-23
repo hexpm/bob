@@ -6,7 +6,13 @@ defmodule Bob.Job.DockerChecker do
 
   @builds %{
     "alpine" => ["3.12.1"],
-    "ubuntu" => ["groovy-20201022.1", "focal-20201008", "bionic-20200921", "xenial-20201014", "trusty-20191217"],
+    "ubuntu" => [
+      "groovy-20201022.1",
+      "focal-20201008",
+      "bionic-20200921",
+      "xenial-20201014",
+      "trusty-20191217"
+    ],
     "debian" => ["buster-20201012", "stretch-20201012", "jessie-20201012"]
   }
 
