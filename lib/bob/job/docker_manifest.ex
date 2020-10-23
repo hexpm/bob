@@ -22,5 +22,5 @@ defmodule Bob.Job.DockerManifest do
   end
 
   def priority(), do: 4
-  def weight(), do: 4
+  def weight(), do: 1
 end
