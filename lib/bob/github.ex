@@ -37,7 +37,7 @@ defmodule Bob.GitHub do
     opts = [:with_body, basic_auth: {user, token}]
 
     {:ok, 200, headers, body} =
-      Bob.HTTP.retry("GitHub", fn -> :hackney.request(:get, url, [], "", opts) end)
+      Bob.HTTP.retry("GitHub #{url}", fn -> :hackney.request(:get, url, [], "", opts) end)
 
     body = Jason.decode!(body)
 

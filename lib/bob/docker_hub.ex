@@ -26,7 +26,7 @@ defmodule Bob.DockerHub do
     opts = [:with_body, recv_timeout: 10_000]
 
     {:ok, 200, _headers, body} =
-      Bob.HTTP.retry("DockerHub", fn -> :hackney.request(:get, url, [], "", opts) end)
+      Bob.HTTP.retry("DockerHub #{url}", fn -> :hackney.request(:get, url, [], "", opts) end)
 
     body = Jason.decode!(body)
 

@@ -11,7 +11,7 @@ defmodule Bob.HTTP do
   defp retry(name, fun, times) do
     case fun.() do
       {:error, reason} ->
-        Logger.warn("#{name} API ERROR: #{inspect(reason)}")
+        Logger.warn("#{name} ERROR: #{inspect(reason)}")
 
         if times + 1 < @max_retry_times do
           sleep = trunc(:math.pow(3, times) * @base_sleep_time)
