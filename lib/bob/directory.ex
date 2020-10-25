@@ -1,5 +1,5 @@
 defmodule Bob.Directory do
-  @max_temp_dirs 100
+  @max_temp_dirs 1000
 
   def new() do
     clean_temp_dirs()
