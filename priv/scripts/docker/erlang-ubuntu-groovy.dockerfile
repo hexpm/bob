@@ -9,6 +9,7 @@ RUN apt-get -y --no-install-recommends install \
   autoconf \
   dpkg-dev \
   gcc \
+  gcc-9 \
   g++ \
   make \
   libncurses-dev \
@@ -25,7 +26,8 @@ WORKDIR /OTP
 RUN ./otp_build autoconf
 
 RUN ./otp_build autoconf
-RUN ./configure --with-ssl --enable-dirty-schedulers
+# Work around "LD: multiple definition of" errors on GCC 10, issue fixed in OTP 22.3
+RUN bash -c 'if [ "${ERLANG:0:1}" = "1" ] || [ "${ERLANG:0:2}" = "20" ] || [ "${ERLANG:0:2}" = "21" ] || [ "${ERLANG:0:2}" = "22" ] ; then CC=gcc-9 ./configure --with-ssl --enable-dirty-schedulers; else ./configure --with-ssl --enable-dirty-schedulers; fi'
 RUN make -j$(getconf _NPROCESSORS_ONLN)
 RUN make install
 RUN find /usr/local -regex '/usr/local/lib/erlang/\(lib/\|erts-\).*/\(man\|doc\|obj\|c_src\|emacs\|info\|examples\)' | xargs rm -rf
