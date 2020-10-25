@@ -19,7 +19,16 @@ chmod -R 777 ${otp_untar_dir}
 cd ${otp_untar_dir}
 
 ./otp_build autoconf
-./configure --with-ssl --enable-dirty-schedulers
+
+# Work around "LD: multiple definition of" errors on GCC 10, issue fixed in OTP 22.3
+if [ "${UBUNTU_VERSION}" = "20.04" ]; then
+  if [ "${OTP_REF:0:5}" = "OTP-1" ] || [ "${OTP_REF:0:6}" = "OTP-20" ] || [ "${OTP_REF:0:6}" = "OTP-21" ] || [ "${OTP_REF:0:6}" = "OTP-22" ]; then
+    CC=gcc-9 ./configure --with-ssl --enable-dirty-schedulers
+  else
+    ./configure --with-ssl --enable-dirty-schedulers
+  fi
+fi
+
 make -j$(getconf _NPROCESSORS_ONLN)
 make release
 

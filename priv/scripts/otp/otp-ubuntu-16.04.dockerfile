@@ -3,7 +3,6 @@ FROM ubuntu:16.04
 RUN apt-get update
 
 RUN apt-get install -y \
-  curl \
   wget \
   ca-certificates \
   gcc \
@@ -14,7 +13,7 @@ RUN apt-get install -y \
   libwxgtk3.0-dev \
   libgl1-mesa-dev \
   libglu1-mesa-dev \
-  libpng3 \
+  libpng-dev \
   libreadline-dev \
   libncurses-dev \
   libssl-dev \
