@@ -1,7 +1,7 @@
 defmodule Bob.HTTP do
   require Logger
 
-  @max_retry_times 3
+  @max_retry_times 10
   @base_sleep_time 100
 
   def retry(name, fun) do
