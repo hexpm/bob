@@ -19,8 +19,12 @@ defmodule Bob.Job.DockerChecker do
   def run() do
     erlang()
     elixir()
-    manifests()
+    manifest()
   end
+
+  def run(:erlang), do: erlang()
+  def run(:elixir), do: elixir()
+  def run(:manifest), do: manifest()
 
   def priority(), do: 1
   def weight(), do: 1
@@ -180,7 +184,7 @@ defmodule Bob.Job.DockerChecker do
     false
   end
 
-  def manifests() do
+  def manifest() do
     erlang_tags = group_archs(erlang_tags())
     erlang_manifest_tags = erlang_manifest_tags()
     diff_manifests("erlang", erlang_tags, erlang_manifest_tags)
