@@ -5,11 +5,11 @@ defmodule Bob.Job.BuildElixirTest do
 
   describe "elixir_to_otp/1" do
     test "version tags" do
-      assert BuildElixir.elixir_to_otp("v1.10.4") == ["21.3", "22.3", "23.0"]
+      assert BuildElixir.elixir_to_otp("v1.10.0") == ["21.3", "22.3"]
     end
 
     test "rc versions" do
-      assert BuildElixir.elixir_to_otp("v1.10.0-rc.0") == ["21.3", "22.3"]
+      assert BuildElixir.elixir_to_otp("v1.8.0-rc.0") == ["20.3", "21.3", "22.3"]
     end
 
     test "backport" do
