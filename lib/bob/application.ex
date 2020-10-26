@@ -57,10 +57,12 @@ defmodule Bob.Application do
   end
 
   defp auth_docker() do
-    username = System.get_env("BOB_DOCKERHUB_USERNAME")
-    password = System.get_env("BOB_DOCKERHUB_PASSWORD")
+    username = Application.get_env(:bob, :dockerhub_username)
+    password = Application.get_env(:bob, :dockerhub_password)
 
     if username && password do
+      Bob.DockerHub.auth(username, password)
+
       {_, 0} =
         System.cmd("docker", ~w(login docker.io --username #{username} --password #{password}),
           stderr_to_stdout: true,

@@ -8,6 +8,8 @@ end
 config :bob,
   github_user: System.fetch_env!("BOB_GITHUB_USER"),
   github_token: System.fetch_env!("BOB_GITHUB_TOKEN"),
+  dockerhub_username: System.get_env("BOB_DOCKERHUB_USERNAME"),
+  dockerhub_password: System.get_env("BOB_DOCKERHUB_PASSWORD"),
   agent_secret: System.fetch_env!("BOB_AGENT_SECRET"),
   master_url: System.fetch_env!("BOB_MASTER_URL"),
   master?: System.fetch_env!("BOB_WHO") == "master",

@@ -1,6 +1,21 @@
 defmodule Bob.DockerHub do
   @dockerhub_url "https://hub.docker.com/"
 
+  def auth(username, password) do
+    url = @dockerhub_url <> "v2/users/login/"
+    headers = [{"content-type", "application/json"}]
+    body = %{username: username, password: password}
+    opts = [:with_body, recv_timeout: 10_000]
+
+    {:ok, 200, _headers, body} =
+      Bob.HTTP.retry("DockerHub #{url}", fn ->
+        :hackney.request(:post, url, headers, Jason.encode!(body), opts)
+      end)
+
+    result = Jason.decode!(body)
+    Application.put_env(:bob, :dockerhub_token, result["token"])
+  end
+
   def fetch_repo_tags(repo) do
     (@dockerhub_url <> "v2/repositories/#{repo}/tags?page_size=100")
     |> dockerhub_request()
@@ -25,8 +40,15 @@ defmodule Bob.DockerHub do
   defp dockerhub_request(url) do
     opts = [:with_body, recv_timeout: 10_000]
 
+    headers =
+      if token = Application.get_env(:bob, :dockerhub_token) do
+        [{"authorization", "JWT #{token}"}]
+      else
+        []
+      end
+
     {:ok, 200, _headers, body} =
-      Bob.HTTP.retry("DockerHub #{url}", fn -> :hackney.request(:get, url, [], "", opts) end)
+      Bob.HTTP.retry("DockerHub #{url}", fn -> :hackney.request(:get, url, headers, "", opts) end)
 
     body = Jason.decode!(body)
 
