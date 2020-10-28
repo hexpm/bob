@@ -27,6 +27,8 @@ if [ "${UBUNTU_VERSION}" = "20.04" ]; then
   else
     ./configure --with-ssl --enable-dirty-schedulers
   fi
+else
+  ./configure --with-ssl --enable-dirty-schedulers
 fi
 
 make -j$(getconf _NPROCESSORS_ONLN)
