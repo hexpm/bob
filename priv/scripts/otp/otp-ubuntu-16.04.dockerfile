@@ -1,5 +1,7 @@
 FROM ubuntu:16.04
 
+ENV UBUNTU_VERSION=16.04
+
 RUN apt-get update
 
 RUN apt-get install -y \
