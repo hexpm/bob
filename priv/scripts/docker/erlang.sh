@@ -25,6 +25,9 @@ esac
 
 docker build -t hexpm/erlang-${arch}:${tag} --build-arg ERLANG=${erlang} --build-arg OS_VERSION=${os_version} -f ${SCRIPT_DIR}/docker/${dockerfile} ${SCRIPT_DIR}/docker
 
+# Smoke test
+docker run hexpm/erlang-${arch}:${tag} erl -s erlang halt
+
 # This command have a tendancy to intermittently fail
 docker push docker.io/hexpm/erlang-${arch}:${tag} ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
