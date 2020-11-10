@@ -15,7 +15,19 @@ image="bob-otp"
 tag=${linux}
 date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-docker build -t ${image}:${tag} -f ${SCRIPT_DIR}/otp/otp-${linux}.dockerfile ${SCRIPT_DIR}
+# Disable PIE for OTP prior to 21; see http://erlang.org/doc/apps/hipe/notes.html#hipe-3.18
+pie_cflags="-fpie"
+pie_ldflags="-pie"
+if [ "$(echo ${ref_name} | cut -d '-' -f 2 | cut -d '.' -f 1)" -le "20" ]; then
+  pie_cflags=""
+  pie_ldflags=""
+fi
+
+docker build \
+    -t ${image}:${tag} \
+    --build-arg PIE_CFLAGS=${pie_cflags} \
+    --build-arg PIE_LDFLAGS=${pie_ldflags} \
+    -f ${SCRIPT_DIR}/otp/otp-${linux}.dockerfile ${SCRIPT_DIR}
 docker rm ${container} || true
 docker run -t -e OTP_REF=${ref_name} --name=${container} ${image}:${tag}
 

@@ -4,7 +4,8 @@ FROM alpine:${OS_VERSION} AS build
 
 ARG ERLANG
 
-ARG CFLAGS="-g -O2 -fpie -fstack-clash-protection -fcf-protection=full"
+ARG PIE_CFLAGS="-fpie"
+ARG CFLAGS="-g -O2 -fstack-clash-protection -fcf-protection=full ${PIE_CFLAGS}"
 
 RUN apk --no-cache upgrade
 RUN apk add --no-cache \

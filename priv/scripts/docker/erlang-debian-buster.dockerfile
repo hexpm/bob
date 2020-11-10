@@ -19,9 +19,12 @@ RUN apt-get -y --no-install-recommends install \
 
 ARG ERLANG
 
-ARG CFLAGS="-g -O2 -fpie -fstack-protector -fstack-clash-protection -fcf-protection=full"
+ARG PIE_CFLAGS="-fpie"
+ARG CFLAGS="-g -O2 -fstack-protector -fstack-clash-protection -fcf-protection=full ${PIE_CFLAGS}"
 ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
-ARG LDFLAGS="-pie -Wl,-z,relro,-z,now"
+
+ARG PIE_LDFLAGS="-pie"
+ARG LDFLAGS="-Wl,-z,relro,-z,now ${PIE_LDFLAGS}"
 
 RUN mkdir /OTP
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
