@@ -14,6 +14,10 @@ defmodule Bob.Job.OTPChecker do
 
   defp build_ref?(_type, _linux, "OTP-18.0-rc2"), do: false
   defp build_ref?(_type, _linux, "maint-r" <> _), do: false
+  # TODO: Delete these files
+  defp build_ref?(_type, "ubuntu-20.04", "OTP-17" <> _), do: false
+  defp build_ref?(_type, "ubuntu-20.04", "OTP-18" <> _), do: false
+  defp build_ref?(_type, "ubuntu-20.04", "OTP-19" <> _), do: false
   defp build_ref?(:tags, _linux, "OTP-" <> _), do: true
   defp build_ref?(:branches, _linux, "maint" <> _), do: true
   defp build_ref?(:branches, _linux, "master" <> _), do: true
