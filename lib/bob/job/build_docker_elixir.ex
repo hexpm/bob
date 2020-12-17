@@ -10,6 +10,13 @@ defmodule Bob.Job.BuildDockerElixir do
       [elixir, erlang, os, os_version, arch],
       directory
     )
+
+    Bob.RemoteQueue.docker_add("elixir-#{arch}", tag(elixir, erlang, os, os_version))
+    Bob.RemoteQueue.add(Bob.Job.DockerManifest, ["elixir", [{elixir, erlang, os, os_version}]])
+  end
+
+  defp tag(elixir, erlang, os, os_version) do
+    "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
   end
 
   def priority(), do: 4

@@ -1,4 +1,12 @@
 defmodule Bob.RemoteQueue do
+  def add(module, args) do
+    request("/queue/add", %{module: module, args: args})
+  end
+
+  def docker_add(repo, tag) do
+    request("/docker/add", %{repo: repo, tag: tag})
+  end
+
   def success({:local, id}) do
     Bob.Queue.success(id)
   end
@@ -84,16 +92,7 @@ defmodule Bob.RemoteQueue do
   defp apply_job(module, fun, args), do: apply(module, fun, args)
 
   defp done_request(type, id) do
-    url = Application.get_env(:bob, :master_url) <> "/queue/#{type}"
-    secret = Application.get_env(:bob, :agent_secret)
-
-    opts = [:with_body]
-    headers = [{"authorization", secret}, {"content-type", "application/vnd.bob+erlang"}]
-    body = Bob.Plug.ErlangFormat.encode_to_iodata!(%{id: id})
-
-    {:ok, 204, _headers, ""} =
-      Bob.HTTP.retry("BobMaster", fn -> :hackney.request(:post, url, headers, body, opts) end)
-
+    request("/queue/#{type}", %{id: id})
     :ok
   end
 
@@ -102,17 +101,25 @@ defmodule Bob.RemoteQueue do
   end
 
   defp start_request(remote_jobs, num) do
-    url = Application.get_env(:bob, :master_url) <> "/queue/start"
+    {:ok, %{jobs: jobs}} = request("/queue/start", %{jobs: remote_jobs, num: num})
+    jobs
+  end
+
+  defp request(url, body) do
+    url = Application.get_env(:bob, :master_url) <> url
     secret = Application.get_env(:bob, :agent_secret)
 
     opts = [:with_body]
     headers = [{"authorization", secret}, {"content-type", "application/vnd.bob+erlang"}]
-    body = Bob.Plug.ErlangFormat.encode_to_iodata!(%{jobs: remote_jobs, num: num})
+    body = Bob.Plug.ErlangFormat.encode_to_iodata!(body)
 
-    {:ok, 200, _headers, body} =
-      Bob.HTTP.retry("BobMaster", fn -> :hackney.request(:post, url, headers, body, opts) end)
+    case Bob.HTTP.retry("BobMaster", fn -> :hackney.request(:post, url, headers, body, opts) end) do
+      {:ok, 200, _headers, body} ->
+        {:ok, body} = Bob.Plug.ErlangFormat.decode(body)
+        body
 
-    {:ok, %{jobs: jobs}} = Bob.Plug.ErlangFormat.decode(body)
-    jobs
+      {:ok, 204, _headers, ""} ->
+        {:ok, nil}
+    end
   end
 end

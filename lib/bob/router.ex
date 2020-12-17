@@ -38,12 +38,22 @@ defmodule Bob.Router do
   end
 
   post "queue/success" do
-    Bob.Queue.success(conn.params[:id])
+    Bob.Queue.success(conn.params.id)
     send_resp(conn, 204, "")
   end
 
   post "queue/failure" do
-    Bob.Queue.failure(conn.params[:id])
+    Bob.Queue.failure(conn.params.id)
+    send_resp(conn, 204, "")
+  end
+
+  post "queue/add" do
+    Bob.Queue.add(conn.params.module, conn.params.args)
+    send_resp(conn, 204, "")
+  end
+
+  post "docker/add" do
+    Bob.DockerHub.Cache.add(conn.params.repo, conn.params.tag)
     send_resp(conn, 204, "")
   end
 

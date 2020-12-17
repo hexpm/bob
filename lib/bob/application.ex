@@ -17,6 +17,7 @@ defmodule Bob.Application do
 
     children = [
       {Task.Supervisor, [name: Bob.Tasks]},
+      Bob.DockerHub.Cache,
       Bob.Queue,
       Bob.Runner,
       {Bob.Schedule, [schedule()]}
