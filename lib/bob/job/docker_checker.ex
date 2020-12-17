@@ -109,10 +109,10 @@ defmodule Bob.Job.DockerChecker do
     refs = elixir_refs()
 
     tags =
-      for ref <- refs,
-          "v" <> elixir = ref,
-          arch <- @archs,
+      for arch <- @archs,
           {_, {erlang, os, os_version, ^arch}} <- erlang_tags(arch),
+          ref <- refs,
+          "v" <> elixir = ref,
           not skip_elixir?(elixir, erlang),
           compatible_elixir_and_erlang?(ref, erlang),
           key = {elixir, erlang, os, os_diff(os, os_version), arch},
