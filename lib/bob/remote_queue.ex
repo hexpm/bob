@@ -116,7 +116,7 @@ defmodule Bob.RemoteQueue do
     case Bob.HTTP.retry("BobMaster", fn -> :hackney.request(:post, url, headers, body, opts) end) do
       {:ok, 200, _headers, body} ->
         {:ok, body} = Bob.Plug.ErlangFormat.decode(body)
-        body
+        {:ok, body}
 
       {:ok, 204, _headers, ""} ->
         {:ok, nil}
