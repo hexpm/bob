@@ -28,14 +28,20 @@ defmodule Bob.DockerHub do
     headers = headers()
     opts = [:with_body, recv_timeout: 10_000]
 
-    {:ok, 200, _headers, body} =
+    result =
       Bob.HTTP.retry("DockerHub #{url}", fn ->
         :hackney.request(:get, url, headers, "", opts)
       end)
 
-    body
-    |> Jason.decode!()
-    |> parse()
+    case result do
+      {:ok, 200, _headers, body} ->
+        body
+        |> Jason.decode!()
+        |> parse()
+
+      {:ok, 404, _headers, _body} ->
+        nil
+    end
   end
 
   def headers() do

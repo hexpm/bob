@@ -18,23 +18,23 @@ defmodule Bob.Job.DockerManifest do
     end
   end
 
-  defp key_to_tag("erlang", {erlang, os, os_version}) do
+  def key_to_tag("erlang", {erlang, os, os_version}) do
     "#{erlang}-#{os}-#{os_version}"
   end
 
-  defp key_to_tag("elixir", {elixir, erlang, os, os_version}) do
+  def key_to_tag("elixir", {elixir, erlang, os, os_version}) do
     "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
   end
 
   def priority(), do: 4
   def weight(), do: 4
 
-  defp get_archs(kind, tag) do
-    ["#{kind}-amd64", "#{kind}-arm64"]
-    |> Enum.map(&{&1, Bob.DockerHub.fetch_tag(&1, tag)})
+  def get_archs(kind, tag) do
+    ["amd64", "arm64"]
+    |> Enum.map(&{&1, Bob.DockerHub.fetch_tag("hexpm/#{kind}-#{&1}", tag)})
     |> Enum.flat_map(fn
-      {_repo, nil} -> []
-      {repo, _} -> [repo]
+      {_arch, nil} -> []
+      {arch, _} -> [arch]
     end)
   end
 end
