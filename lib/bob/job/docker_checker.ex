@@ -226,7 +226,7 @@ defmodule Bob.Job.DockerChecker do
   defp diff_manifests(kind, expected, current) do
     Enum.each(Enum.sort(expected), fn {key, expected_archs} ->
       if expected_archs -- Map.get(current, key, []) != [] do
-        Bob.Queue.add(Bob.Job.DockerManifest, [kind, key, expected_archs])
+        Bob.Queue.add(Bob.Job.DockerManifest, [kind, key])
       end
     end)
   end

@@ -12,7 +12,7 @@ defmodule Bob.Job.BuildDockerElixir do
     )
 
     Bob.RemoteQueue.docker_add("elixir-#{arch}", tag(elixir, erlang, os, os_version))
-    Bob.RemoteQueue.add(Bob.Job.DockerManifest, ["elixir", [{elixir, erlang, os, os_version}]])
+    Bob.RemoteQueue.add(Bob.Job.DockerManifest, ["elixir", {elixir, erlang, os, os_version}])
   end
 
   defp tag(elixir, erlang, os, os_version) do

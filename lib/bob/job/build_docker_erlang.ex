@@ -7,7 +7,7 @@ defmodule Bob.Job.BuildDockerErlang do
     Bob.Script.run({:script, "docker/erlang.sh"}, [erlang, os, os_version, arch], directory)
 
     Bob.RemoteQueue.docker_add("elixir-#{arch}", tag(erlang, os, os_version))
-    Bob.RemoteQueue.add(Bob.Job.DockerManifest, ["erlang", [{erlang, os, os_version}]])
+    Bob.RemoteQueue.add(Bob.Job.DockerManifest, ["erlang", {erlang, os, os_version}])
   end
 
   defp tag(erlang, os, os_version) do
