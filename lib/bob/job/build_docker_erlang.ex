@@ -6,7 +6,7 @@ defmodule Bob.Job.BuildDockerErlang do
     Logger.info("Using directory #{directory}")
     Bob.Script.run({:script, "docker/erlang.sh"}, [erlang, os, os_version, arch], directory)
 
-    Bob.RemoteQueue.docker_add("hexpm/erlang-#{arch}", tag(erlang, os, os_version))
+    Bob.RemoteQueue.docker_add("hexpm/erlang-#{arch}", tag(erlang, os, os_version), [arch])
     Bob.RemoteQueue.add(Bob.Job.DockerManifest, ["erlang", {erlang, os, os_version}])
   end
 

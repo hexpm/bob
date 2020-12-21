@@ -3,8 +3,8 @@ defmodule Bob.RemoteQueue do
     request("/queue/add", %{module: module, args: args})
   end
 
-  def docker_add(repo, tag) do
-    request("/docker/add", %{repo: repo, tag: tag})
+  def docker_add(repo, tag, archs) do
+    request("/docker/add", %{repo: repo, tag: tag, archs: archs})
   end
 
   def success({:local, id}) do

@@ -16,7 +16,7 @@ defmodule Bob.Job.DockerManifest do
         directory
       )
 
-      Bob.RemoteQueue.docker_add("hexpm/#{kind}", tag)
+      Bob.RemoteQueue.docker_add("hexpm/#{kind}", tag, archs)
     end
   end
 

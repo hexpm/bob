@@ -24,8 +24,8 @@ defmodule Bob.DockerHub.Cache do
     {:reply, :ok, Map.delete(locks, repo)}
   end
 
-  def add(repo, tag) do
-    :ets.insert(__MODULE__, {{:data, repo, tag}, true})
+  def add(repo, tag, archs) do
+    :ets.insert(__MODULE__, {{:data, repo, {tag, archs}}, true})
   end
 
   def lookup(repo, fun) do
