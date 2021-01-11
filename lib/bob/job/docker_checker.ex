@@ -5,7 +5,7 @@ defmodule Bob.Job.DockerChecker do
   @archs ["amd64", "arm64"]
 
   @builds %{
-    "alpine" => ["3.12.1"],
+    "alpine" => ["3.12.3"],
     "ubuntu" => [
       "groovy-20201022.1",
       "focal-20201008",
