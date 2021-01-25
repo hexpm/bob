@@ -17,6 +17,7 @@ defmodule Bob.Application do
 
     children = [
       {Task.Supervisor, [name: Bob.Tasks]},
+      Bob.DockerHub.Auth,
       Bob.DockerHub.Cache,
       Bob.Queue,
       Bob.Runner,
@@ -62,8 +63,6 @@ defmodule Bob.Application do
     password = Application.get_env(:bob, :dockerhub_password)
 
     if username && password do
-      Bob.DockerHub.auth(username, password)
-
       {_, 0} =
         System.cmd("docker", ~w(login docker.io --username #{username} --password #{password}),
           stderr_to_stdout: true,
