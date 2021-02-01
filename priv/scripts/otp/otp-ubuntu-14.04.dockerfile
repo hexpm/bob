@@ -2,6 +2,13 @@ FROM ubuntu:14.04
 
 ENV UBUNTU_VERSION=14.04
 
+ARG PIE_CFLAGS="-fpie"
+ARG CFLAGS="-g -O2 ${PIE_CFLAGS}"
+ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
+
+ARG PIE_LDFLAGS="-pie"
+ARG LDFLAGS="-Wl,-z,relro,-z,now ${PIE_LDFLAGS}"
+
 RUN apt-get update
 
 RUN apt-get install -y \
@@ -29,6 +36,10 @@ RUN apt-get install -y \
 
 RUN mkdir -p /home/build/out
 WORKDIR /home/build
+
+ENV CFLAGS=$CFLAGS
+ENV CPPFLAGS=$CPPFLAGS
+ENV LDFLAGS=$LDFLAGS
 
 COPY otp/build_otp_ubuntu.sh /home/build/build.sh
 RUN chmod +x /home/build/build.sh
