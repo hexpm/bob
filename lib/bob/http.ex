@@ -2,7 +2,8 @@ defmodule Bob.HTTP do
   require Logger
 
   @max_retry_times 10
-  @base_sleep_time 100
+  @error_sleep_time 100
+  @rate_limit_sleep_time 10_000
 
   def retry(name, fun) do
     retry(name, fun, 0)
@@ -14,11 +15,22 @@ defmodule Bob.HTTP do
         Logger.warn("#{name} ERROR: #{inspect(reason)}")
 
         if times + 1 < @max_retry_times do
-          sleep = trunc(:math.pow(3, times) * @base_sleep_time)
-          :timer.sleep(sleep)
+          sleep = trunc(:math.pow(3, times) * @error_sleep_time)
+          Process.sleep(sleep)
           retry(name, fun, times + 1)
         else
           {:error, reason}
+        end
+
+      {:ok, 429, _headers, _body} = result ->
+        Logger.warn("#{name} RATE LIMIT")
+
+        if times + 1 < @max_retry_times do
+          sleep = trunc(:math.pow(3, times) * @rate_limit_sleep_time)
+          Process.sleep(sleep)
+          retry(name, fun, times + 1)
+        else
+          result
         end
 
       result ->

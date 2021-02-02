@@ -19,7 +19,6 @@ function build {
   docker cp ${container}:/home/build/unversioned-docs unversioned-docs || true
 
   docker rm -f ${container}
-  docker rmi -f ${image}
 }
 
 # $1 = ref

@@ -1,12 +1,12 @@
-FROM ubuntu:14.04
+FROM ubuntu:20.04
 
 ARG otp_version
 
-RUN apt-get update
-RUN apt-get install -y git make wget zip
+RUN apt update
+RUN apt install -y git make wget zip
 
 RUN mkdir -p /otp
-RUN wget -nv -O otp.tar.gz https://repo.hex.pm/builds/otp/ubuntu-14.04/OTP-${otp_version}.tar.gz && tar zxf otp.tar.gz -C /otp --strip-components=1
+RUN wget -nv -O otp.tar.gz https://repo.hex.pm/builds/otp/ubuntu-20.04/OTP-${otp_version}.tar.gz && tar zxf otp.tar.gz -C /otp --strip-components=1
 RUN /otp/Install -minimal /otp
 
 ENV OTP_VERSION=$otp_version
