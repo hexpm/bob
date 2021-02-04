@@ -43,6 +43,7 @@ defmodule Bob.Job.DockerChecker do
 
     for {os, os_versions} <- @builds,
         ref <- refs,
+        not rc?(ref),
         build_erlang_ref?(os, ref),
         os_version <- os_versions,
         build_erlang_ref?(os, os_version, ref),
@@ -54,10 +55,14 @@ defmodule Bob.Job.DockerChecker do
         do: {key, value}
   end
 
-  defp build_erlang_ref?(_os, "OTP-18.0-rc2"), do: false
+  defp rc?("OTP-" <> version), do: String.contains?(version, "-")
+
   defp build_erlang_ref?("alpine", "OTP-17" <> _), do: false
   defp build_erlang_ref?("alpine", "OTP-18" <> _), do: false
-  defp build_erlang_ref?(_os, "OTP-" <> version), do: not String.contains?(version, "-")
+  defp build_erlang_ref?("alpine", "OTP-19" <> _), do: false
+  defp build_erlang_ref?("alpine", "OTP-20" <> _), do: false
+  defp build_erlang_ref?("alpine", version), do: build_alpine?(version)
+
   defp build_erlang_ref?(_os, _ref), do: false
 
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-17" <> _), do: false
@@ -72,6 +77,24 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("arm64", "ubuntu", "trusty-" <> _, "OTP-18" <> _), do: false
   defp build_erlang_ref?("arm64", "debian", "jessie-" <> _, _ref), do: false
   defp build_erlang_ref?(_arch, _os, _os_version, _ref), do: true
+
+  defp build_alpine?(version) do
+    version =
+      version
+      |> String.split(".")
+      |> Enum.map(&String.to_integer/1)
+
+    cond do
+      version >= [21] and version < [22] ->
+        not (version >= [21, 3] and version <= [21, 3, 8, 19])
+
+      version >= [22, 3] and version < [23] ->
+        true
+
+      version >= [23] ->
+        true
+    end
+  end
 
   defp erlang_refs() do
     "erlang/otp"
