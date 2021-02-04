@@ -1,7 +1,8 @@
 defmodule Bob.DockerHub.Cache do
   use GenServer
 
-  @timeout 5 * 60_000
+  @timeout 15 * 60_000
+  @timeout_grace_time 60_000
 
   def start_link([]) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
@@ -91,7 +92,7 @@ defmodule Bob.DockerHub.Cache do
     case :ets.lookup(__MODULE__, {:status, repo}) do
       [] ->
         try do
-          case GenServer.call(__MODULE__, {:lock, repo}, @timeout * 2) do
+          case GenServer.call(__MODULE__, {:lock, repo}, @timeout + @timeout_grace_time) do
             :aquired ->
               result = fun.()
 
