@@ -56,6 +56,7 @@ defmodule Bob.Job.DockerChecker do
   end
 
   defp rc?("OTP-" <> version), do: String.contains?(version, "-")
+  defp rc?(_other), do: false
 
   defp build_erlang_ref?("alpine", "OTP-17" <> _), do: false
   defp build_erlang_ref?("alpine", "OTP-18" <> _), do: false
