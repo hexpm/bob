@@ -31,12 +31,19 @@ if [ "$(echo ${erlang} | cut -d '.' -f 1)" -le "20" ]; then
   pie_ldflags=""
 fi
 
+# Disable -fcf-protection on non x86 architectures
+cf_protection="-fcf-protection=full"
+if [ "${arch}" != "amd64" ]; then
+  cf_protection=""
+fi
+
 docker build \
   -t hexpm/erlang-${arch}:${tag} \
   --build-arg ERLANG=${erlang} \
   --build-arg OS_VERSION=${os_version} \
   --build-arg PIE_CFLAGS=${pie_cflags} \
   --build-arg PIE_LDFLAGS=${pie_ldflags} \
+  --build-arg CF_PROTECTION=${cf_protection} \
   -f ${SCRIPT_DIR}/docker/${dockerfile} ${SCRIPT_DIR}/docker
 
 # Smoke test

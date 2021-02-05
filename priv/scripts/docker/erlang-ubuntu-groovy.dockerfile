@@ -24,8 +24,6 @@ RUN mkdir /OTP
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
 WORKDIR /OTP
 RUN ./otp_build autoconf
-
-RUN ./otp_build autoconf
 # Work around "LD: multiple definition of" errors on GCC 10, issue fixed in OTP 22.3
 RUN bash -c 'if [ "${ERLANG:0:1}" = "1" ] || [ "${ERLANG:0:2}" = "20" ] || [ "${ERLANG:0:2}" = "21" ] || [ "${ERLANG:0:2}" = "22" ] ; then CC=gcc-9 ./configure --with-ssl --enable-dirty-schedulers; else ./configure --with-ssl --enable-dirty-schedulers; fi'
 RUN make -j$(getconf _NPROCESSORS_ONLN)
