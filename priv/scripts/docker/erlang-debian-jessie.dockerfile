@@ -4,13 +4,6 @@ FROM debian:${OS_VERSION} AS build
 
 ARG ERLANG
 
-ARG PIE_CFLAGS="-fpie"
-ARG CFLAGS="-g -O2 -fstack-protector ${PIE_CFLAGS}"
-ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
-
-ARG PIE_LDFLAGS="-pie"
-ARG LDFLAGS="-Wl,-z,relro,-z,now ${PIE_LDFLAGS}"
-
 RUN apt-get update
 RUN apt-get -y --no-install-recommends install \
   autoconf \
@@ -31,7 +24,13 @@ RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar
 WORKDIR /OTP
 RUN ./otp_build autoconf
 
-RUN ./otp_build autoconf
+ARG PIE_CFLAGS
+ARG CFLAGS="-g -O2 -fstack-protector ${PIE_CFLAGS}"
+ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
+
+ARG PIE_LDFLAGS
+ARG LDFLAGS="-Wl,-z,relro,-z,now ${PIE_LDFLAGS}"
+
 RUN ./configure --with-ssl --enable-dirty-schedulers
 RUN make -j$(getconf _NPROCESSORS_ONLN)
 RUN make install

@@ -19,19 +19,19 @@ RUN apt-get -y --no-install-recommends install \
 
 ARG ERLANG
 
-ARG PIE_CFLAGS="-fpie"
-ARG CFLAGS="-g -O2 -fstack-protector -fstack-clash-protection -fcf-protection=full ${PIE_CFLAGS}"
-ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
-
-ARG PIE_LDFLAGS="-pie"
-ARG LDFLAGS="-Wl,-z,relro,-z,now ${PIE_LDFLAGS}"
-
 RUN mkdir /OTP
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
 WORKDIR /OTP
 RUN ./otp_build autoconf
 
-RUN ./otp_build autoconf
+ARG PIE_CFLAGS
+ARG CF_PROTECTION
+ARG CFLAGS="-g -O2 -fstack-protector -fstack-clash-protection ${CF_PROTECTION} ${PIE_CFLAGS}"
+ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
+
+ARG PIE_LDFLAGS
+ARG LDFLAGS="-Wl,-z,relro,-z,now ${PIE_LDFLAGS}"
+
 RUN ./configure --with-ssl --enable-dirty-schedulers
 RUN make -j$(getconf _NPROCESSORS_ONLN)
 RUN make install

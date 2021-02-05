@@ -4,9 +4,6 @@ FROM alpine:${OS_VERSION} AS build
 
 ARG ERLANG
 
-ARG PIE_CFLAGS="-fpie"
-ARG CFLAGS="-g -O2 -fstack-clash-protection -fcf-protection=full ${PIE_CFLAGS}"
-
 RUN apk --no-cache upgrade
 RUN apk add --no-cache \
   dpkg-dev \
@@ -30,6 +27,11 @@ RUN mkdir /OTP
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
 WORKDIR /OTP
 RUN ./otp_build autoconf
+
+ARG PIE_CFLAGS
+ARG CF_PROTECTION
+ARG CFLAGS="-g -O2 -fstack-clash-protection ${CF_PROTECTION} ${PIE_CFLAGS}"
+
 RUN ./configure \
   --build="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)" \
   --without-javac \
