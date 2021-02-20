@@ -4,16 +4,18 @@ defmodule Bob.Job.DockerChecker do
 
   @archs ["amd64", "arm64"]
 
+  # TODO: Automate picking the OS versions
+
   @builds %{
-    "alpine" => ["3.13.1"],
+    "alpine" => ["3.13.2"],
     "ubuntu" => [
-      "groovy-20201022.1",
-      "focal-20201008",
-      "bionic-20200921",
+      "groovy-20210115",
+      "focal-20210119",
+      "bionic-20210118",
       "xenial-20201014",
-      "trusty-20191217"
+      "trusty-20210114"
     ],
-    "debian" => ["buster-20201012", "stretch-20201012", "jessie-20201012"]
+    "debian" => ["buster-20210208", "stretch-20210208", "jessie-20210208"]
   }
 
   def run() do
@@ -63,8 +65,8 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("alpine", "OTP-19" <> _), do: false
   defp build_erlang_ref?("alpine", "OTP-20" <> _), do: false
   defp build_erlang_ref?("alpine", "OTP-" <> version), do: build_alpine?(version)
-
-  defp build_erlang_ref?(_os, _ref), do: true
+  defp build_erlang_ref?(_os, "OTP-" <> _), do: true
+  defp build_erlang_ref?(_os, _ref), do: false
 
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-17" <> _), do: false
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-18" <> _), do: false
