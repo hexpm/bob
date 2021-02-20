@@ -64,7 +64,7 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("alpine", "OTP-20" <> _), do: false
   defp build_erlang_ref?("alpine", "OTP-" <> version), do: build_alpine?(version)
 
-  defp build_erlang_ref?(_os, _ref), do: false
+  defp build_erlang_ref?(_os, _ref), do: true
 
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-17" <> _), do: false
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-18" <> _), do: false
