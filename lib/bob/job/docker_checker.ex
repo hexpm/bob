@@ -7,15 +7,21 @@ defmodule Bob.Job.DockerChecker do
   # TODO: Automate picking the OS versions
 
   @builds %{
-    "alpine" => ["3.13.2"],
-    "ubuntu" => [
-      "groovy-20210115",
-      "focal-20210119",
-      "bionic-20210118",
-      "xenial-20201014",
-      "trusty-20210114"
+    "alpine" => [
+      "3.13.2"
     ],
-    "debian" => ["buster-20210208", "stretch-20210208", "jessie-20210208"]
+    "ubuntu" => [
+      "groovy-20210215",
+      "focal-20210217",
+      "bionic-20210122",
+      "xenial-20210114",
+      "trusty-20191217"
+    ],
+    "debian" => [
+      "buster-20210208",
+      "stretch-20210208",
+      "jessie-20210208"
+    ]
   }
 
   def run() do
