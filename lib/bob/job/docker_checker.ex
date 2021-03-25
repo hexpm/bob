@@ -13,7 +13,7 @@ defmodule Bob.Job.DockerChecker do
     "ubuntu" => [
       "groovy-20210215",
       "focal-20210217",
-      "bionic-20210122",
+      "bionic-20210222",
       "xenial-20210114",
       "trusty-20191217"
     ],
