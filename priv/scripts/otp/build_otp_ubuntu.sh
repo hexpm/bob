@@ -39,6 +39,6 @@ if [ "${OTP_REF:0:3}" = "OTP" ] && [ "${OTP_REF:4:2}" -ge "23" ]; then
 fi
 
 cd ../
-mv otp-${OTP_REF}/release/x86_64-unknown-linux-gnu/ ${OTP_REF}
+mv otp-${OTP_REF}/release/*/ ${OTP_REF}
 rm ${OTP_REF}.tar.gz
 tar -zcf out/${OTP_REF}.tar.gz ${OTP_REF}
