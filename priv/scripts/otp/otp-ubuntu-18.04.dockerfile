@@ -1,9 +1,9 @@
 FROM ubuntu:18.04
 
 ENV UBUNTU_VERSION=18.04
+ARG OTP_REF
 
 RUN apt-get update
-
 RUN apt-get install -y \
   wget \
   ca-certificates \
@@ -18,8 +18,7 @@ RUN apt-get install -y \
   libpng-dev \
   libreadline-dev \
   libncurses-dev \
-  $(bash -c 'if [ "${ERLANG:0:1}" = "1" ]; then echo "libssl1.0-dev"; else echo "libssl-dev"; fi') \
-  libssh-dev \
+  $(bash -c 'if [ "${OTP_REF:0:5}" = "OTP-1" ]; then echo "libssl1.0-dev"; else echo "libssl-dev"; fi') \
   libxslt-dev \
   libffi-dev \
   libtool \

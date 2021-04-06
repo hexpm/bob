@@ -25,6 +25,7 @@ fi
 
 docker build \
     -t ${image}:${tag} \
+    --build-arg OTP_REF=${ref_name} \
     --build-arg PIE_CFLAGS=${pie_cflags} \
     --build-arg PIE_LDFLAGS=${pie_ldflags} \
     -f ${SCRIPT_DIR}/otp/otp-${linux}.dockerfile ${SCRIPT_DIR}

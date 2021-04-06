@@ -21,7 +21,6 @@ RUN apt-get install -y \
   libreadline-dev \
   libncurses-dev \
   libssl-dev \
-  libssh-dev \
   libxslt-dev \
   libffi-dev \
   libtool \
