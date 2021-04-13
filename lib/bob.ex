@@ -13,7 +13,7 @@ defmodule Bob do
     Bob.Queue.add(Bob.Job.BuildElixir, [ref_name, ref])
   end
 
-  def build_otp(ref_name, linux \\ "ubuntu-14.04") do
+  def build_otp(ref_name, linux) do
     ref = Bob.GitHub.fetch_repo_refs("erlang/otp") |> Map.new() |> Map.fetch!(ref_name)
     Bob.Queue.add(Bob.Job.BuildOTP, [ref_name, ref, linux])
   end
