@@ -211,7 +211,9 @@ defmodule Bob.Job.DockerChecker do
     |> Enum.any?(&String.starts_with?(erlang, &1))
   end
 
-  defp skip_elixir?(elixir, erlang) when elixir in ~w(1.0.0 1.0.1 1.0.2 1.0.3), do: String.starts_with?(erlang, "17.5")
+  defp skip_elixir?(elixir, erlang) when elixir in ~w(1.0.0 1.0.1 1.0.2 1.0.3),
+    do: String.starts_with?(erlang, "17.5")
+
   defp skip_elixir?("1.0.5", "18.0-rc1"), do: false
   defp skip_elixir?(_elixir, _erlang), do: false
 
