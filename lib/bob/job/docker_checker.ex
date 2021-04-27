@@ -186,7 +186,12 @@ defmodule Bob.Job.DockerChecker do
   defp build_elixir_ref?("v0." <> _), do: false
 
   defp build_elixir_ref?("v" <> version) do
-    match?({:ok, %Version{pre: []}}, Version.parse(version))
+    case Version.parse(version) do
+      # don't build RCs for < 1.12
+      {:ok, %Version{major: 1, minor: minor, pre: pre}} when minor < 12 and pre != [] -> false
+      {:ok, %Version{}} -> true
+      :error -> false
+    end
   end
 
   defp build_elixir_ref?(_), do: false
