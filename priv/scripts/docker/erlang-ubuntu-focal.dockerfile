@@ -19,9 +19,9 @@ RUN apt-get -y --no-install-recommends install \
   ca-certificates \
   pax-utils
 
-RUN mkdir /OTP
-RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP --strip-components=1
-WORKDIR /OTP
+RUN mkdir -p /OTP/subdir
+RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP/subdir --strip-components=1
+WORKDIR /OTP/subdir
 RUN ./otp_build autoconf
 RUN ./configure --with-ssl --enable-dirty-schedulers
 RUN make -j$(getconf _NPROCESSORS_ONLN)
