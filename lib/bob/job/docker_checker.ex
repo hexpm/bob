@@ -271,7 +271,7 @@ defmodule Bob.Job.DockerChecker do
 
   defp os_diff("alpine", version) do
     version = Version.parse!(version)
-    {version.major, version.minor}
+    {version.major, version.minor, version.patch}
   end
 
   defp os_diff(os, version) when os in ["ubuntu", "debian"] do
