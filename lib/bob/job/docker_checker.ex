@@ -4,27 +4,6 @@ defmodule Bob.Job.DockerChecker do
 
   @archs ["amd64", "arm64"]
 
-  # TODO: Automate picking the OS versions
-
-  @builds %{
-    "alpine" => [
-      "3.13.5",
-      "3.14.0"
-    ],
-    "ubuntu" => [
-      "groovy-20210325",
-      "focal-20210325",
-      "bionic-20210325",
-      "xenial-20210114",
-      "trusty-20191217"
-    ],
-    "debian" => [
-      "buster-20210326",
-      "stretch-20210326",
-      "jessie-20210326"
-    ]
-  }
-
   def run() do
     erlang()
     elixir()
@@ -50,7 +29,7 @@ defmodule Bob.Job.DockerChecker do
   def expected_erlang_tags() do
     refs = erlang_refs()
 
-    for {os, os_versions} <- @builds,
+    for {os, os_versions} <- Bob.DockerHub.OSVersions.get_os_versions(),
         ref <- refs,
         build_erlang_ref?(os, ref),
         os_version <- os_versions,
