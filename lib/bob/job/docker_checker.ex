@@ -8,7 +8,8 @@ defmodule Bob.Job.DockerChecker do
 
   @builds %{
     "alpine" => [
-      "3.13.5"
+      "3.13.5",
+      "3.14.0"
     ],
     "ubuntu" => [
       "groovy-20210325",
@@ -72,6 +73,14 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?(_os, "OTP-" <> _), do: true
   defp build_erlang_ref?(_os, _ref), do: false
 
+  defp build_erlang_ref?("alpine", os_version, ref) do
+    if Version.compare(os_version, "3.14.0") in [:gt, :eq] do
+      parse_otp_ref(ref) >= [23]
+    else
+      true
+    end
+  end
+
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-17" <> _), do: false
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-18" <> _), do: false
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-19" <> _), do: false
@@ -85,13 +94,8 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("arm64", "debian", "jessie-" <> _, _ref), do: false
   defp build_erlang_ref?(_arch, _os, _os_version, _ref), do: true
 
-  defp build_alpine?(version) do
-    version = hd(String.split(version, "-"))
-
-    version =
-      version
-      |> String.split(".")
-      |> Enum.map(&String.to_integer/1)
+  defp build_alpine?(ref) do
+    version = parse_otp_ref(ref)
 
     cond do
       version >= [21] and version < [22] ->
@@ -106,6 +110,19 @@ defmodule Bob.Job.DockerChecker do
       true ->
         false
     end
+  end
+
+  defp parse_otp_ref(ref) do
+    ref
+    |> String.split("-")
+    |> hd()
+    |> version_to_list()
+  end
+
+  defp version_to_list(version) do
+    version
+    |> String.split(".")
+    |> Enum.map(&String.to_integer/1)
   end
 
   defp erlang_refs() do
