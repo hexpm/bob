@@ -94,8 +94,8 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("arm64", "debian", "jessie-" <> _, _ref), do: false
   defp build_erlang_ref?(_arch, _os, _os_version, _ref), do: true
 
-  defp build_alpine?(ref) do
-    version = parse_otp_ref(ref)
+  defp build_alpine?(version) do
+    version = parse_otp_ref(version)
 
     cond do
       version >= [21] and version < [22] ->
@@ -111,6 +111,8 @@ defmodule Bob.Job.DockerChecker do
         false
     end
   end
+
+  defp parse_otp_ref("OTP-" <> version), do: parse_otp_ref(version)
 
   defp parse_otp_ref(ref) do
     ref
