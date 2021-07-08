@@ -8,8 +8,7 @@ defmodule Bob.Job.DockerChecker do
 
   @builds %{
     "alpine" => [
-      "3.13.5",
-      "3.14.0"
+      "3.13.5"
     ],
     "ubuntu" => [
       "groovy-20210325",
@@ -197,7 +196,7 @@ defmodule Bob.Job.DockerChecker do
 
   defp build_elixir_ref?(_), do: false
 
-  defp diff(expected, current) do
+  def diff(expected, current) do
     current = MapSet.new(current, fn {key, _value} -> key end)
 
     Enum.flat_map(expected, fn {key, value} ->
