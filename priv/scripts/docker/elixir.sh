@@ -23,5 +23,3 @@ docker push docker.io/hexpm/elixir-${arch}:${tag} ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
   (exit 0)
-
-docker rmi -f docker.io/hexpm/elixir-${arch}:${tag}
