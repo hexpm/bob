@@ -73,14 +73,7 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?(_os, "OTP-" <> _), do: true
   defp build_erlang_ref?(_os, _ref), do: false
 
-  defp build_erlang_ref?("alpine", os_version, ref) do
-    if Version.compare(os_version, "3.14.0") in [:gt, :eq] do
-      parse_otp_ref(ref) >= [23]
-    else
-      true
-    end
-  end
-
+  defp build_erlang_ref?("alpine", os_ver, "OTP-" <> ver), do: build_alpine?(os_ver, ver)
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-17" <> _), do: false
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-18" <> _), do: false
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-19" <> _), do: false
@@ -109,6 +102,19 @@ defmodule Bob.Job.DockerChecker do
 
       true ->
         false
+    end
+  end
+
+  defp build_alpine?(alpine_version, erlang_version) do
+    alpine_version = version_to_list(alpine_version)
+    erlang_version = parse_otp_ref(erlang_version)
+
+    cond do
+      alpine_version >= [3, 14] ->
+        erlang_version >= [23]
+
+      true ->
+        true
     end
   end
 
