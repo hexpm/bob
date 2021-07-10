@@ -111,7 +111,7 @@ defmodule Bob.Job.DockerChecker do
 
     cond do
       alpine_version >= [3, 14] ->
-        erlang_version >= [23]
+        erlang_version >= [23, 2, 2]
 
       true ->
         true
