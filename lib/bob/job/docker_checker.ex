@@ -19,9 +19,9 @@ defmodule Bob.Job.DockerChecker do
       "trusty-20191217"
     ],
     "debian" => [
-      "buster-20210326",
-      "stretch-20210326",
-      "jessie-20210326"
+      "bullseye-20210816"
+      "buster-20210816",
+      "stretch-20210816"
     ]
   }
 
