@@ -7,6 +7,7 @@ RUN apt-get -y --no-install-recommends install \
   autoconf \
   dpkg-dev \
   gcc \
+  gcc-9 \
   g++ \
   make \
   libncurses-dev \
@@ -33,6 +34,8 @@ ARG PIE_LDFLAGS
 ARG LDFLAGS="-Wl,-z,relro,-z,now ${PIE_LDFLAGS}"
 
 RUN ./configure --with-ssl --enable-dirty-schedulers
+# Work around "LD: multiple definition of" errors on GCC 10, issue fixed in OTP 22.3
+RUN bash -c 'if [ "${ERLANG:0:2}" = "20" ] || [ "${ERLANG:0:2}" = "21" ] || [ "${ERLANG:0:2}" = "22" ] ; then CC=gcc-9 ./configure --with-ssl --enable-dirty-schedulers; else ./configure --with-ssl --enable-dirty-schedulers; fi'
 RUN make -j$(getconf _NPROCESSORS_ONLN)
 RUN make install
 RUN bash -c 'if [ "${ERLANG:0:2}" -ge "23" ]; then make docs DOC_TARGETS=chunks; else true; fi'

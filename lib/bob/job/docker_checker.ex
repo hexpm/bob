@@ -76,7 +76,6 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("alpine", os_ver, "OTP-" <> ver), do: build_alpine?(os_ver, ver)
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-1" <> _), do: false
   defp build_erlang_ref?("debian", "bullseye-" <> _, "OTP-1" <> _), do: false
-  defp build_erlang_ref?("debian", "bullseye-" <> _, "OTP-20" <> _), do: false
   defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-1" <> _), do: false
   defp build_erlang_ref?(_os, _os_version, _ref), do: true
 
