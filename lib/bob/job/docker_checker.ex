@@ -19,9 +19,9 @@ defmodule Bob.Job.DockerChecker do
       "trusty-20191217"
     ],
     "debian" => [
-      "buster-20210326",
-      "stretch-20210326",
-      "jessie-20210326"
+      "bullseye-20210902",
+      "buster-202100902",
+      "stretch-20210902"
     ]
   }
 
@@ -74,17 +74,13 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?(_os, _ref), do: false
 
   defp build_erlang_ref?("alpine", os_ver, "OTP-" <> ver), do: build_alpine?(os_ver, ver)
-  defp build_erlang_ref?("debian", "buster-" <> _, "OTP-17" <> _), do: false
-  defp build_erlang_ref?("debian", "buster-" <> _, "OTP-18" <> _), do: false
-  defp build_erlang_ref?("debian", "buster-" <> _, "OTP-19" <> _), do: false
-  defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-17" <> _), do: false
-  defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-18" <> _), do: false
-  defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-19" <> _), do: false
+  defp build_erlang_ref?("debian", "buster-" <> _, "OTP-1" <> _), do: false
+  defp build_erlang_ref?("debian", "bullseye-" <> _, "OTP-1" <> _), do: false
+  defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-1" <> _), do: false
   defp build_erlang_ref?(_os, _os_version, _ref), do: true
 
   defp build_erlang_ref?("arm64", "ubuntu", "trusty-" <> _, "OTP-17" <> _), do: false
   defp build_erlang_ref?("arm64", "ubuntu", "trusty-" <> _, "OTP-18" <> _), do: false
-  defp build_erlang_ref?("arm64", "debian", "jessie-" <> _, _ref), do: false
   defp build_erlang_ref?(_arch, _os, _os_version, _ref), do: true
 
   defp build_alpine?(version) do
