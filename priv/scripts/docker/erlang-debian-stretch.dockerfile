@@ -9,6 +9,7 @@ RUN apt-get -y --no-install-recommends install \
   autoconf \
   dpkg-dev \
   gcc \
+  libc6-dev \
   g++ \
   make \
   libncurses-dev \
