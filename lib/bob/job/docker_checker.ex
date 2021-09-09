@@ -8,8 +8,8 @@ defmodule Bob.Job.DockerChecker do
 
   @builds %{
     "alpine" => [
-      "3.13.5",
-      "3.14.0"
+      "3.13.6",
+      "3.14.2"
     ],
     "ubuntu" => [
       "groovy-20210325",
