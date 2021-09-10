@@ -298,8 +298,15 @@ defmodule Bob.Job.DockerChecker do
     {version.major, version.minor}
   end
 
-  defp os_diff(os, version) when os in ["ubuntu", "debian"] do
+  defp os_diff("ubuntu", version) do
     [version, _] = String.split(version, "-", parts: 2)
     version
+  end
+
+  defp os_diff("debian", version) do
+    case String.split(version, "-", parts: 3) do
+      [version, _, "slim"] -> {"slim", version}
+      [version, _] -> {"debian", version}
+    end
   end
 end
