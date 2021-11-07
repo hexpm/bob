@@ -2,7 +2,7 @@
 
 set -euox pipefail
 
-git clone git://github.com/elixir-lang/elixir-lang.github.com.git --quiet --branch master
+git clone git://github.com/elixir-lang/elixir-lang.github.com.git --quiet --branch main
 
 pushd elixir-lang.github.com/_epub
 mix deps.get

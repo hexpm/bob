@@ -19,7 +19,7 @@ defmodule Bob do
   end
 
   def build_elixir_guides() do
-    Bob.Queue.add(Bob.Job.BuildElixirGuides, ["master"])
+    Bob.Queue.add(Bob.Job.BuildElixirGuides, ["main"])
   end
 
   def build_hex_docs(ref_name) do

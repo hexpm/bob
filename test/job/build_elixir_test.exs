@@ -16,8 +16,8 @@ defmodule Bob.Job.BuildElixirTest do
       assert BuildElixir.elixir_to_otp("v1.9.4") == BuildElixir.elixir_to_otp("v1.9")
     end
 
-    test "falls back to master" do
-      assert BuildElixir.elixir_to_otp("master") == BuildElixir.elixir_to_otp("some_other_tag")
+    test "falls back to main" do
+      assert BuildElixir.elixir_to_otp("main") == BuildElixir.elixir_to_otp("some_other_tag")
     end
   end
 end

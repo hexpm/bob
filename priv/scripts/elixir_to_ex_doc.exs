@@ -13,7 +13,7 @@ case elixir do
   "v1.1." <> _ -> "v0.12.0"
   "v1.1" -> "v0.12.0"
   "v1.0" <> _ -> "v0.12.0"
-  # All branches use master
-  _ -> "master"
+  # All branches use main
+  _ -> "main"
 end
 |> IO.puts
