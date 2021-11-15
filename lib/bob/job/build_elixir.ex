@@ -29,7 +29,7 @@ defmodule Bob.Job.BuildElixir do
     end
   end
 
-  defp version_gte("master", _base), do: true
+  defp version_gte("main", _base), do: true
 
   defp version_gte(version, base_version) do
     case Version.compare(version, base_version) do
@@ -48,7 +48,7 @@ defmodule Bob.Job.BuildElixir do
     end
   end
 
-  defp ref_to_version(_not_a_version), do: "master"
+  defp ref_to_version(_not_a_version), do: "main"
 
   def priority(), do: 2
   def weight(), do: 3

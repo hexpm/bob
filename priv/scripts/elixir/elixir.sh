@@ -79,6 +79,10 @@ function build {
 function upload_build {
   version=$(echo ${1} | sed -e 's/\//-/g')
   aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${version}${2}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+
+  if [ "${version}" == "main" ]; then
+    upload_build master "${2}"
+  fi
 }
 
 # $1 = ref
@@ -129,6 +133,10 @@ function upload_docs {
       popd
     done
     popd
+  fi
+
+  if [ "${version}" == "main" ]; then
+    upload_docs master
   fi
 }
 

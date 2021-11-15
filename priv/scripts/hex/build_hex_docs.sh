@@ -7,7 +7,7 @@ version=$(echo "${HEX_REF}" | sed 's/^v//g')
 git clone git://github.com/elixir-lang/ex_doc.git --quiet
 pushd ex_doc
 echo "Building ExDoc"
-ex_doc_version=master
+ex_doc_version=main
 git checkout "${ex_doc_version}"
 mix deps.get
 mix compile --no-elixir-version-check
