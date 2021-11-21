@@ -18,10 +18,6 @@ defmodule Bob do
     Bob.Queue.add(Bob.Job.BuildOTP, [ref_name, ref, linux])
   end
 
-  def build_elixir_guides() do
-    Bob.Queue.add(Bob.Job.BuildElixirGuides, ["main"])
-  end
-
   def build_hex_docs(ref_name) do
     Bob.Queue.add(Bob.Job.BuildHexDocs, [ref_name])
   end
