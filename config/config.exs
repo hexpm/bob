@@ -13,10 +13,6 @@ config :bob,
       period: {15, :min}
     ],
     [
-      module: Bob.Job.ElixirGuidesChecker,
-      period: {15, :min}
-    ],
-    [
       module: Bob.Job.HexDocsChecker,
       period: {15, :min}
     ],
