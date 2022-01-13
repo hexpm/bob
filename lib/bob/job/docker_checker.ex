@@ -12,10 +12,10 @@ defmodule Bob.Job.DockerChecker do
       "3.15.0"
     ],
     "ubuntu" => [
-      "groovy-20210325",
-      "focal-20210325",
-      "bionic-20210325",
-      "xenial-20210114",
+      "impish-20211102",
+      "focal-20211006",
+      "bionic-20210930",
+      "xenial-20210804",
       "trusty-20191217"
     ],
     "debian" => [
