@@ -171,6 +171,8 @@ defmodule Bob.Job.DockerChecker do
     tags =
       for arch <- @archs,
           {_, {erlang, os, os_version, ^arch}} <- erlang_tags(arch),
+          os_versions = @builds[os],
+          Enum.any?(os_versions, &(os_diff(os, os_version) == os_diff(os, &1))),
           ref <- refs,
           "v" <> elixir = ref,
           not skip_elixir?(elixir, erlang),
