@@ -4,7 +4,7 @@ set -euox pipefail
 
 version=$(echo "${HEX_REF}" | sed 's/^v//g')
 
-git clone git://github.com/elixir-lang/ex_doc.git --quiet
+git clone https://github.com/elixir-lang/ex_doc.git --quiet
 pushd ex_doc
 echo "Building ExDoc"
 ex_doc_version=main
@@ -13,7 +13,7 @@ mix deps.get
 mix compile --no-elixir-version-check
 popd
 
-git clone git://github.com/hexpm/hex.git --quiet --branch "${HEX_REF}"
+git clone https://github.com/hexpm/hex.git --quiet --branch "${HEX_REF}"
 pushd hex
 mix compile
 echo "Building docs"

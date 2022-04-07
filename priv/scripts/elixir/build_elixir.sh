@@ -11,7 +11,7 @@ if [ -z "${ELIXIR_REF}" ]; then
   exit 1
 fi
 
-git clone git://github.com/elixir-lang/elixir.git --quiet
+git clone https://github.com/elixir-lang/elixir.git --quiet
 
 pushd elixir
 git checkout "${ELIXIR_SHA}"
@@ -30,7 +30,7 @@ if [ "${BUILD_DOCS}" == "1" ]; then
   mkdir docs
   cp logo.png docs/logo.png
 
-  git clone git://github.com/elixir-lang/ex_doc.git --quiet
+  git clone https://github.com/elixir-lang/ex_doc.git --quiet
 
   pushd ex_doc
   tags=$(git tag)
