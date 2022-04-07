@@ -38,6 +38,7 @@ defmodule Bob.Application do
 
   defp setup_docker() do
     if config = System.get_env("BOB_DOCKER_CONFIG") do
+      config = fix_env_newlines(config)
       File.mkdir_p!(Path.expand("~/.docker"))
       File.write!(Path.expand("~/.docker/config.json"), config)
     end
@@ -45,6 +46,7 @@ defmodule Bob.Application do
 
   defp setup_gsutil() do
     if credentials = System.get_env("BOB_GCP_CREDENTIALS") do
+      credentials = fix_env_newlines(credentials)
       File.mkdir_p!("/boto")
       File.write!("/boto/keyfile.json", credentials)
     end
@@ -52,6 +54,7 @@ defmodule Bob.Application do
 
   defp setup_tarsnap() do
     if key = System.get_env("BOB_TARSNAP_KEY") do
+      key = fix_env_newlines(key)
       File.mkdir_p!("/tarsnap")
       # Tarsnap requires a newline before EOF, we should fix this at the source
       File.write!("/tarsnap/key", key <> "\n")
@@ -69,6 +72,13 @@ defmodule Bob.Application do
           parallelism: true
         )
     end
+  end
+
+  defp fix_env_newlines(string) do
+    # This is an artifact from using docker .env files which don't support \n
+    string
+    |> String.replace(~r"(?<!\\)\\n", "\n")
+    |> String.replace("\\\\n", "\\n")
   end
 
   defp validate_jobs() do
