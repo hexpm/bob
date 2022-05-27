@@ -12,7 +12,7 @@ defmodule Bob.Job.DockerChecker do
       "3.15.4"
     ],
     "ubuntu" => [
-      "impish-20211102",
+      "jammy-20220428",
       "focal-20211006",
       "bionic-20210930",
       "xenial-20210804",
@@ -80,7 +80,7 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-1" <> _), do: false
   defp build_erlang_ref?("debian", "bullseye-" <> _, "OTP-1" <> _), do: false
   defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-1" <> _), do: false
-  defp build_erlang_ref?("ubuntu", "impish-" <> _, "OTP-1" <> _), do: false
+  defp build_erlang_ref?("ubuntu", "jammy-" <> _, "OTP-" <> version), do: build_openssl_3?(version)
   defp build_erlang_ref?(_os, _os_version, _ref), do: true
 
   defp build_erlang_ref?("arm64", "ubuntu", "trusty-" <> _, "OTP-17" <> _), do: false
@@ -116,6 +116,11 @@ defmodule Bob.Job.DockerChecker do
       true ->
         true
     end
+  end
+
+  defp build_openssl_3?(erlang_version) do
+    erlang_version = parse_otp_ref(erlang_version)
+    erlang_version >= [24, 2]
   end
 
   defp parse_otp_ref("OTP-" <> version), do: parse_otp_ref(version)
