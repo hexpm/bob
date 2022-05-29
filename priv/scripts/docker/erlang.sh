@@ -47,7 +47,7 @@ docker build \
   -f ${SCRIPT_DIR}/docker/${dockerfile} ${SCRIPT_DIR}/docker
 
 # Smoke test
-docker run --rm hexpm/erlang-${arch}:${tag} erl -eval '{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell
+docker run --rm hexpm/erlang-${arch}:${tag} erl -eval 'application:ensure_all_started(ssl),{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell
 
 # This command have a tendancy to intermittently fail
 docker push docker.io/hexpm/erlang-${arch}:${tag} ||
