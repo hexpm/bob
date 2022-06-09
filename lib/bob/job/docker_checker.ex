@@ -9,7 +9,8 @@ defmodule Bob.Job.DockerChecker do
   @builds %{
     "alpine" => [
       "3.14.6",
-      "3.15.4"
+      "3.15.4",
+      "3.16.0"
     ],
     "ubuntu" => [
       "impish-20211102",
