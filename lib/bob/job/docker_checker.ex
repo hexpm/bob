@@ -23,7 +23,7 @@ defmodule Bob.Job.DockerChecker do
       "bullseye-20220622",
       "buster-20220622",
       "bullseye-20220622-slim",
-      "buster-20220622-slim",
+      "buster-20220622-slim"
     ]
   }
 
