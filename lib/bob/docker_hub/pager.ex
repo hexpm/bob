@@ -53,17 +53,18 @@ defmodule Bob.DockerHub.Pager do
           headers = Bob.DockerHub.headers()
           opts = [:with_body, recv_timeout: 10_000]
 
-          {:ok, 200, _headers, body} =
+          result =
             Bob.HTTP.retry("DockerHub #{url}", fn ->
               :hackney.request(:get, url, headers, "", opts)
             end)
 
-          body = Jason.decode!(body)
+          case result do
+            {:ok, 200, _headers, body} ->
+              body = Jason.decode!(body)
+              {:ok, Enum.flat_map(body["results"], &List.wrap(Bob.DockerHub.parse(&1)))}
 
-          if body["count"] == 0 do
-            :done
-          else
-            {:ok, Enum.flat_map(body["results"], &List.wrap(Bob.DockerHub.parse(&1)))}
+            {:ok, 404, _headers, _body} ->
+              :done
           end
         end)
 
