@@ -10,7 +10,6 @@ defmodule Bob.Job.ElixirChecker do
   def priority(), do: 1
   def weight(), do: 1
 
-  defp build_ref?("main"), do: true
   defp build_ref?("v0." <> _), do: false
 
   defp build_ref?("v" <> version) do
