@@ -22,8 +22,10 @@ defmodule Bob.Job.DockerChecker do
     "debian" => [
       "bullseye-20220801",
       "buster-20220801",
+      "bookworm-20220912",
       "bullseye-20220801-slim",
-      "buster-20220801-slim"
+      "buster-20220801-slim",
+      "bookworm-20220912-slim"
     ]
   }
 
