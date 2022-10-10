@@ -166,24 +166,22 @@ defmodule Bob.Job.DockerChecker do
     expected_tags = expected_elixir_tags()
 
     Enum.each(diff(expected_tags, tags), fn {elixir, erlang, os, os_version, arch} ->
-      Bob.Queue.add({Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version])
+      IO.inspect({{Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version]})
     end)
   end
 
   def expected_elixir_tags() do
-    # TODO: Base this on builds.txt instead
-
-    refs = elixir_refs()
+    refs = elixir_builds()
 
     tags =
       for arch <- @archs,
           {_, {erlang, os, os_version, ^arch}} <- erlang_tags(arch),
           os_versions = @builds[os],
           Enum.any?(os_versions, &(os_diff(os, os_version) == os_diff(os, &1))),
-          ref <- refs,
+          {ref, otp_major} <- refs,
           "v" <> elixir = ref,
           not skip_elixir?(elixir, erlang),
-          compatible_elixir_and_erlang?(ref, erlang),
+          compatible_elixir_and_erlang?(otp_major, erlang),
           key = {elixir, erlang, os, os_diff(os, os_version), arch},
           value = {elixir, erlang, os, os_version, arch},
           do: {key, value}
@@ -194,10 +192,11 @@ defmodule Bob.Job.DockerChecker do
     |> Enum.map(fn {_key, value} -> {value, value} end)
   end
 
-  defp elixir_refs() do
-    "elixir-lang/elixir"
-    |> Bob.GitHub.fetch_repo_refs()
-    |> Enum.map(fn {ref_name, _ref} -> ref_name end)
+  defp elixir_builds() do
+    "builds/elixir"
+    |> Bob.Repo.fetch_built_refs()
+    |> Enum.map(fn {build_name, _ref} -> build_name end)
+    |> Enum.map(&split_elixir_build/1)
     |> Enum.filter(&build_elixir_ref?/1)
   end
 
@@ -217,9 +216,17 @@ defmodule Bob.Job.DockerChecker do
     end)
   end
 
-  defp build_elixir_ref?("v0." <> _), do: false
+  defp split_elixir_build(build_name) do
+    case String.split(build_name, "-otp-") do
+      [elixir, major_otp] -> {elixir, major_otp}
+      [elixir] -> {elixir, nil}
+    end
+  end
 
-  defp build_elixir_ref?("v" <> version) do
+  defp build_elixir_ref?({"v0." <> _, _major_otp}), do: false
+  defp build_elixir_ref?({_, _major_otp = nil}), do: false
+
+  defp build_elixir_ref?({"v" <> version, _major_otp}) do
     case Version.parse(version) do
       # don't build RCs for < 1.12
       {:ok, %Version{major: 1, minor: minor, pre: pre}} when minor < 12 and pre != [] -> false
@@ -243,11 +250,8 @@ defmodule Bob.Job.DockerChecker do
     |> Enum.sort()
   end
 
-  defp compatible_elixir_and_erlang?(elixir_ref, erlang) do
-    elixir_ref
-    |> Bob.Job.BuildElixir.elixir_to_otp()
-    |> Enum.map(&List.first(String.split(&1, ".")))
-    |> Enum.any?(&String.starts_with?(erlang, &1))
+  defp compatible_elixir_and_erlang?(otp_major, erlang) do
+    String.starts_with?(erlang, otp_major <> ".")
   end
 
   defp skip_elixir?(elixir, erlang) when elixir in ~w(1.0.0 1.0.1 1.0.2 1.0.3),
