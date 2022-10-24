@@ -29,17 +29,6 @@ config :bob,
     ],
     [
       module: Bob.Job.DockerChecker,
-      args: [:erlang],
-      period: {15, :min}
-    ],
-    [
-      module: Bob.Job.DockerChecker,
-      args: [:elixir],
-      period: {15, :min}
-    ],
-    [
-      module: Bob.Job.DockerChecker,
-      args: [:manifest],
       period: {15, :min}
     ]
   ],
