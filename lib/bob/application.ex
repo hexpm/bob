@@ -75,10 +75,14 @@ defmodule Bob.Application do
   end
 
   defp fix_env_newlines(string) do
-    # This is an artifact from using docker .env files which don't support \n
-    string
-    |> String.replace(~r"(?<!\\)\\n", "\n")
-    |> String.replace("\\\\n", "\\n")
+    if System.get_env("BOB_FIX_ENV_NEWLINES") do
+      # This is an artifact from using docker .env files which don't support \n
+      string
+      |> String.replace(~r"(?<!\\)\\n", "\n")
+      |> String.replace("\\\\n", "\\n")
+    else
+      string
+    end
   end
 
   defp validate_jobs() do
