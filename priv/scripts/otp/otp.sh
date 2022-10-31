@@ -29,7 +29,7 @@ docker build \
     --build-arg PIE_CFLAGS=${pie_cflags} \
     --build-arg PIE_LDFLAGS=${pie_ldflags} \
     -f ${SCRIPT_DIR}/otp/otp-${linux}.dockerfile ${SCRIPT_DIR}
-docker rm ${container} || true
+docker rm -f ${container} || true
 docker run -t -e OTP_REF=${ref_name} --name=${container} ${image}:${tag}
 
 docker cp ${container}:/home/build/out/${ref_name}.tar.gz ${ref_name}.tar.gz

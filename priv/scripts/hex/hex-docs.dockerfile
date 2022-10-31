@@ -1,20 +1,9 @@
-FROM ubuntu:20.04
+FROM hexpm/elixir:1.14.1-erlang-25.1.2-ubuntu-jammy-20220428
 
-ARG otp_version=21.0
-ARG otp_major=21
-ARG elixir_version=v1.7.3
+ENV LANG=C.UTF-8
 
 RUN apt update
-RUN apt install -y git make wget zip
-
-RUN mkdir -p /otp
-RUN wget -nv -O otp.tar.gz https://repo.hex.pm/builds/otp/ubuntu-20.04/OTP-${otp_version}.tar.gz && tar zxf otp.tar.gz -C /otp --strip-components=1
-RUN /otp/Install -minimal /otp
-
-RUN wget -nv -O elixir.zip https://repo.hex.pm/builds/elixir/${elixir_version}-otp-${otp_major}.zip && unzip -d /elixir elixir.zip
-
-ENV PATH=/otp/bin:/elixir/bin:$PATH
-ENV LANG=C.UTF-8
+RUN apt install -y git
 
 RUN mix local.hex --force
 RUN mix local.rebar --force
