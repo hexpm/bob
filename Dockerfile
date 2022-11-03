@@ -30,7 +30,7 @@ RUN mix release
 
 # prepare release image
 FROM alpine:3.16.2 AS app
-RUN apk add --no-cache bash build-base coreutils curl docker gzip libffi-dev openssl openssl-dev python3-dev py3-pip rust tar tarsnap wget zip
+RUN apk add --no-cache bash build-base coreutils curl docker gzip libffi-dev openssl openssl-dev pigz python3-dev py3-pip rust tar tarsnap wget zip
 
 RUN pip install --no-cache-dir --upgrade awscli gsutil
 
