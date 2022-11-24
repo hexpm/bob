@@ -8,9 +8,9 @@ defmodule Bob.Job.DockerChecker do
 
   @builds %{
     "alpine" => [
-      "3.14.8",
       "3.15.6",
-      "3.16.3"
+      "3.16.3",
+      "3.17.0"
     ],
     "ubuntu" => [
       "jammy-20220428",
@@ -125,6 +125,9 @@ defmodule Bob.Job.DockerChecker do
     erlang_version = parse_otp_ref(erlang_version)
 
     cond do
+      alpine_version >= [3, 17] ->
+        build_openssl_3?(erlang_version)
+
       alpine_version >= [3, 14] ->
         erlang_version >= [23, 2, 2]
 
@@ -133,9 +136,13 @@ defmodule Bob.Job.DockerChecker do
     end
   end
 
+  defp build_openssl_3?(erlang_version) when is_list(erlang_version) do
+    erlang_version >= [24, 2]
+  end
+
   defp build_openssl_3?(erlang_version) do
     erlang_version = parse_otp_ref(erlang_version)
-    erlang_version >= [24, 2]
+    build_openssl_3?(erlang_version)
   end
 
   defp parse_otp_ref("OTP-" <> version), do: parse_otp_ref(version)
