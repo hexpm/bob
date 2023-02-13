@@ -8,9 +8,9 @@ defmodule Bob.Job.DockerChecker do
 
   @builds %{
     "alpine" => [
-      "3.15.6",
-      "3.16.3",
-      "3.17.0"
+      "3.15.7",
+      "3.16.4",
+      "3.17.2"
     ],
     "ubuntu" => [
       "jammy-20221130",
