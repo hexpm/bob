@@ -13,9 +13,9 @@ defmodule Bob.Job.DockerChecker do
       "3.17.2"
     ],
     "ubuntu" => [
-      "jammy-20221130",
-      "focal-20221130",
-      "bionic-20221130",
+      "jammy-20230126",
+      "focal-20230126",
+      "bionic-20230126",
       "xenial-20210804",
       "trusty-20191217"
     ],
