@@ -5,12 +5,23 @@ set -euox pipefail
 ref_name=$1
 ref=$2
 linux=$3
+arch=$4
 
 source ${SCRIPT_DIR}/utils.sh
 
-echo "Building $1 $2 $3"
+echo "Building $1 $2 $3 $4"
 
-container="otp-build-${linux}-${ref_name}"
+if [[ "$arch" == "arm64" ]]; then
+  container="otp-build-${linux}-${ref_name}-arm"
+  platform="--platform linux/arm64"
+elif [[ "$arch" == "amd64" ]]; then
+  container="otp-build-${linux}-${ref_name}"
+  platform="--platform linux/amd64"
+else
+  echo "Invalid architecture. Please specify either 'arm64' or 'amd64'."
+  exit 1
+fi
+
 image="bob-otp"
 tag=${linux}
 date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -23,7 +34,7 @@ if [ "$(echo ${ref_name} | cut -d '-' -f 2 | cut -d '.' -f 1)" -le "20" ]; then
   pie_ldflags=""
 fi
 
-docker build \
+docker buildx build ${platform} \
     -t ${image}:${tag} \
     --build-arg OTP_REF=${ref_name} \
     --build-arg PIE_CFLAGS=${pie_cflags} \
