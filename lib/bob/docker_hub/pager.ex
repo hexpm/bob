@@ -1,8 +1,8 @@
 defmodule Bob.DockerHub.Pager do
   use GenServer
 
-  @concurrency 10
-  @timeout 15 * 60_000
+  @concurrency 20
+  @timeout 60 * 60 * 1000
 
   def start_link(url) do
     GenServer.start_link(__MODULE__, url)
@@ -51,7 +51,7 @@ defmodule Bob.DockerHub.Pager do
         Task.async(fn ->
           url = String.replace(state.url, "${page}", Integer.to_string(state.page))
           headers = Bob.DockerHub.headers()
-          opts = [:with_body, recv_timeout: 10_000]
+          opts = [:with_body, recv_timeout: 20_000]
 
           result =
             Bob.HTTP.retry("DockerHub #{url}", fn ->

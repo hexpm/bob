@@ -1,7 +1,7 @@
 defmodule Bob.DockerHub.Cache do
   use GenServer
 
-  @timeout 15 * 60_000
+  @timeout 60 * 60_000
   @timeout_grace_time 60_000
 
   def start_link([]) do
@@ -96,7 +96,7 @@ defmodule Bob.DockerHub.Cache do
             :aquired ->
               result = fun.()
 
-              :ets.insert(__MODULE__, Enum.map(fun.(), &{{:data, repo, &1}, true}))
+              :ets.insert(__MODULE__, Enum.map(result, &{{:data, repo, &1}, true}))
               :ets.insert(__MODULE__, {{:status, repo}, true})
 
               result

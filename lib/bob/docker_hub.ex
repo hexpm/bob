@@ -26,7 +26,7 @@ defmodule Bob.DockerHub do
   def fetch_tag(repo, tag) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
     headers = headers()
-    opts = [:with_body, recv_timeout: 10_000]
+    opts = [:with_body, recv_timeout: 20_000]
 
     result =
       Bob.HTTP.retry("DockerHub #{url}", fn ->
