@@ -33,17 +33,17 @@ Documentation tarballs are also uploaded to `https://repo.hex.pm/docs/{APPLICATI
 
 ## Erlang builds
 
-Erlang builds compiled on Ubuntu 14.04 and Alpine 3.10 are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
+Erlang builds compiled on Ubuntu LTS versions are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
 
 After the builds complete they will be available at `https://repo.hex.pm/builds/otp/${OS_VER}/{REF}.tar.gz` where `{REF}` is the name of the git tag or branch. Examples of URLs are:
 
   * https://repo.hex.pm/builds/otp/ubuntu-20.04/master.tar.gz
-  * https://repo.hex.pm/builds/otp/alpine-3.10/OTP-22.tar.gz
+  * https://repo.hex.pm/builds/otp/ubuntu-22.04/master.tar.gz
 
 For lists of builds see:
 
   * https://repo.hex.pm/builds/otp/ubuntu-20.04/builds.txt
-  * https://repo.hex.pm/builds/otp/alpine-3.10/builds.txt
+  * https://repo.hex.pm/builds/otp/ubuntu-22.04/builds.txt
 
 ## Docker images
 
