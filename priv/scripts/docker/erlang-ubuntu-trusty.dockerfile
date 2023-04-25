@@ -48,7 +48,9 @@ RUN apt-get update && \
   apt-get -y --no-install-recommends install \
     libodbc1 \
     libssl1.0.0 \
-    libsctp1
+    libsctp1 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /usr/local /usr/local
 ENV LANG=C.UTF-8
