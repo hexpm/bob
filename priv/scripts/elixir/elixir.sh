@@ -40,8 +40,6 @@ function push {
   upload_build "$1" ""
   update_builds_txt "$1" "$2" ""
 
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
-
   PATH=${original_path}
 }
 
@@ -78,11 +76,13 @@ function build {
 # $2 = otp
 function upload_build {
   version=$(echo ${1} | sed -e 's/\//-/g')
-  aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${version}${2}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+  aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${version}${2}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds elixir-builds/${version}/${2}","surrogate-control":"public,max-age=604800"}'
 
   if [ "${version}" == "main" ]; then
     upload_build master "${2}"
   fi
+
+  fastly_purge $BOB_FASTLY_SERVICE_HEXPM "elixir-builds/${version}/${2}"
 }
 
 # $1 = ref
@@ -100,7 +100,9 @@ function update_builds_txt {
   echo -e "${1}${3} ${2} ${date} ${build_sha256} \n$(cat builds.txt)" > builds.txt
 
   sort -u -k1,1 -o builds.txt builds.txt
-  aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds","surrogate-control":"public,max-age=604800"}'
+  aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds elixir-builds-txt","surrogate-control":"public,max-age=604800"}'
+
+  fastly_purge $BOB_FASTLY_SERVICE_HEXPM "elixir-builds-txt"
 }
 
 # $1 = ref
@@ -111,10 +113,8 @@ function upload_docs {
   for app in "${APPS[@]}"; do
     pushd ${app}
     gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}/${version}" -h "x-goog-meta-surrogate-control: public,max-age=604800" cp -r . "gs://hexdocs.pm/${app}/${version}"
-    fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/${version}"
-
     gsutil -m -h "cache-control: public,max-age=3600" -h "x-goog-meta-surrogate-key: docspage/${app}/docs_config.js" -h "x-goog-meta-surrogate-control: public,max-age=604800" cp docs_config.js "gs://hexdocs.pm/${app}"
-    fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/docs_config.js"
+    fastly_purge $BOB_FASTLY_SERVICE_HEXDOCS "docspage/${app}/${version} docspage/${app}/docs_config.js"
 
     popd
 
