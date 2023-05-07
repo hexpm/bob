@@ -46,3 +46,4 @@ sort -u -k1,1 -o builds.txt builds.txt
 aws s3 cp builds.txt s3://s3.hex.pm/builds/otp/${linux}/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"otp-builds-txt","surrogate-control":"public,max-age=604800"}'
 
 fastly_purge $BOB_FASTLY_SERVICE_HEXPM "otp-builds-txt otp-builds-${linux}-${ref_name}"
+fastly_purge $BOB_FASTLY_SERVICE_BUILDS "otp-builds-txt otp-builds-${linux}-${ref_name}"
