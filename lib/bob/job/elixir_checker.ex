@@ -3,8 +3,10 @@ defmodule Bob.Job.ElixirChecker do
 
   def run() do
     for {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/elixir", &expand_ref/1),
-        build_ref?(ref_name),
-        do: Bob.Queue.add(Bob.Job.BuildElixir, [ref_name, ref])
+        build_ref?(ref_name) do
+      otps = Bob.Job.BuildElixir.elixir_to_otp(ref)
+      Bob.Queue.add(Bob.Job.BuildElixir, [ref_name, ref, otps])
+    end
   end
 
   def priority(), do: 1
