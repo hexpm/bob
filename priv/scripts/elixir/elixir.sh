@@ -40,8 +40,8 @@ function push {
   upload_build "$1" ""
   update_builds_txt "$1" "$2" ""
 
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds
-  fastly_purge $BOB_FASTLY_SERVICE_BUILDS builds
+  fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds/elixir/txt
+  fastly_purge $BOB_FASTLY_SERVICE_BUILDS builds/elixir/txt
 
   PATH=${original_path}
 }
@@ -79,14 +79,14 @@ function build {
 # $2 = otp
 function upload_build {
   version=$(echo ${1} | sed -e 's/\//-/g')
-  aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${version}${2}.zip" --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"elixir-builds/${version}/${2}","surrogate-control":"public,max-age=604800"}'
+  aws s3 cp elixir.zip "s3://s3.hex.pm/builds/elixir/${version}${2}.zip" --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"builds builds/elixir builds/elixir/${version}${2}\",\"surrogate-control\":\"public,max-age=604800\"}"
 
   if [ "${version}" == "main" ]; then
     upload_build master "${2}"
   fi
 
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM "elixir-builds/${version}/${2}"
-  fastly_purge $BOB_FASTLY_SERVICE_BUILDS "elixir-builds/${version}/${2}"
+  fastly_purge $BOB_FASTLY_SERVICE_HEXPM "builds/elixir/${version}${2}"
+  fastly_purge $BOB_FASTLY_SERVICE_BUILDS "builds/elixir/${version}${2}"
 }
 
 # $1 = ref
@@ -104,10 +104,7 @@ function update_builds_txt {
   echo -e "${1}${3} ${2} ${date} ${build_sha256} \n$(cat builds.txt)" > builds.txt
 
   sort -u -k1,1 -o builds.txt builds.txt
-  aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"elixir-builds-txt","surrogate-control":"public,max-age=604800"}'
-
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM "elixir-builds-txt"
-  fastly_purge $BOB_FASTLY_SERVICE_BUILDS "elixir-builds-txt"
+  aws s3 cp builds.txt s3://s3.hex.pm/builds/elixir/builds.txt --cache-control "public,max-age=3600" --metadata '{"surrogate-key":"builds builds/elixir builds/elixir/txt","surrogate-control":"public,max-age=604800"}'
 }
 
 # $1 = ref
