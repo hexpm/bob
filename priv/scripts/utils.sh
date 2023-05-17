@@ -17,6 +17,6 @@ function fastly_purge_request {
     -H "Accept: application/json" \
     -H "Content-Length: 0" \
     -H "surrogate-key: ${2}" \
-    "https://api.fastly.com/service/${1}"
+    "https://api.fastly.com/service/${1}/purge"
 }
 
