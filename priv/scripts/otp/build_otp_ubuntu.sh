@@ -32,10 +32,10 @@ else
 fi
 
 make -j$(getconf _NPROCESSORS_ONLN)
-make release
+make -j$(getconf _NPROCESSORS_ONLN) release
 
 if [ "${OTP_REF:0:3}" = "OTP" ] && [ "${OTP_REF:4:2}" -ge "23" ]; then
-  make release_docs DOC_TARGETS="chunks"
+  make -j$(getconf _NPROCESSORS_ONLN) release_docs DOC_TARGETS="chunks"
 fi
 
 cd ../

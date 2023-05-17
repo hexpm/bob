@@ -33,9 +33,9 @@ ARG LDFLAGS="-Wl,-z,relro,-z,now ${PIE_LDFLAGS}"
 
 RUN ./configure --with-ssl --enable-dirty-schedulers
 RUN make -j$(getconf _NPROCESSORS_ONLN)
-RUN make install
-RUN bash -c 'if [ "${ERLANG:0:2}" -ge "23" ]; then make docs DOC_TARGETS=chunks; else true; fi'
-RUN bash -c 'if [ "${ERLANG:0:2}" -ge "23" ]; then make install-docs DOC_TARGETS=chunks; else true; fi'
+RUN make -j$(getconf _NPROCESSORS_ONLN) install
+RUN bash -c 'if [ "${ERLANG:0:2}" -ge "23" ]; then make -j$(getconf _NPROCESSORS_ONLN) docs DOC_TARGETS=chunks; else true; fi'
+RUN bash -c 'if [ "${ERLANG:0:2}" -ge "23" ]; then make -j$(getconf _NPROCESSORS_ONLN) install-docs DOC_TARGETS=chunks; else true; fi'
 RUN find /usr/local -regex '/usr/local/lib/erlang/\(lib/\|erts-\).*/\(man\|obj\|c_src\|emacs\|info\|examples\)' | xargs rm -rf
 RUN find /usr/local -name src | xargs -r find | grep -v '\.hrl$' | xargs rm -v || true
 RUN find /usr/local -name src | xargs -r find | xargs rmdir -vp || true
@@ -54,4 +54,3 @@ RUN apt-get update && \
 
 COPY --from=build /usr/local /usr/local
 ENV LANG=C.UTF-8
-
