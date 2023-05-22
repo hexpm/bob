@@ -4,7 +4,9 @@ defmodule Bob.Script do
 
     {:ok, :ok} =
       File.open(Path.join(dir, "out.txt"), [:write, :delayed_write], fn log ->
-        run_script(action, args, dir, log)
+        {time, result} = :timer.tc(fn -> run_script(action, args, dir, log) end)
+        IO.write(log, "\nCOMPLETED #{time / 1_000_000}s\n")
+        result
       end)
   end
 
