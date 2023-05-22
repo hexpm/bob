@@ -9,4 +9,5 @@ defmodule Bob.Job.BuildHexDocs do
 
   def priority(), do: 2
   def weight(), do: 3
+  def concurrency(), do: :shared
 end

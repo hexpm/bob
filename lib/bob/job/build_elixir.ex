@@ -8,6 +8,10 @@ defmodule Bob.Job.BuildElixir do
     Bob.Script.run({:script, "elixir/elixir.sh"}, args, directory)
   end
 
+  def priority(), do: 2
+  def weight(), do: 3
+  def concurrency(), do: :shared
+
   def elixir_to_otp(ref_name) do
     version = ref_to_version(ref_name)
 
@@ -54,7 +58,4 @@ defmodule Bob.Job.BuildElixir do
   end
 
   defp ref_to_version(_not_a_version), do: "main"
-
-  def priority(), do: 2
-  def weight(), do: 3
 end

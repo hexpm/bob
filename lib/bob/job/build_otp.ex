@@ -9,4 +9,5 @@ defmodule Bob.Job.BuildOTP do
 
   def priority(), do: 2
   def weight(), do: 4
+  def concurrency(), do: :shared
 end

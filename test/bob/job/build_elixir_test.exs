@@ -1,5 +1,5 @@
 defmodule Bob.Job.BuildElixirTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Bob.Job.BuildElixir
 

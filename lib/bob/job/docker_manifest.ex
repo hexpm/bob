@@ -20,6 +20,10 @@ defmodule Bob.Job.DockerManifest do
     end
   end
 
+  def priority(), do: 4
+  def weight(), do: 4
+  def concurrency(), do: __MODULE__
+
   def key_to_tag("erlang", {erlang, os, os_version}) do
     "#{erlang}-#{os}-#{os_version}"
   end
@@ -27,9 +31,6 @@ defmodule Bob.Job.DockerManifest do
   def key_to_tag("elixir", {elixir, erlang, os, os_version}) do
     "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
   end
-
-  def priority(), do: 4
-  def weight(), do: 4
 
   def get_archs(kind, tag) do
     ["amd64", "arm64"]

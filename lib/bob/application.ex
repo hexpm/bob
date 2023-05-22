@@ -20,7 +20,7 @@ defmodule Bob.Application do
       Bob.DockerHub.Auth,
       Bob.DockerHub.Cache,
       Bob.Queue,
-      Bob.Runner,
+      runner_spec(),
       {Bob.Schedule, [schedule()]}
     ]
 
@@ -96,6 +96,12 @@ defmodule Bob.Application do
         {module, _key} -> Code.ensure_loaded?(module)
         module -> Code.ensure_loaded?(module)
       end)
+  end
+
+  if Mix.env() == :test do
+    defp runner_spec(), do: Supervisor.child_spec({Task, fn -> :ok end}, id: :runner)
+  else
+    defp runner_spec(), do: Bob.Runner
   end
 
   defp schedule() do

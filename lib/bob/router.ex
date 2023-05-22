@@ -30,7 +30,7 @@ defmodule Bob.Router do
     jobs =
       conn.params.jobs
       |> Bob.RemoteQueue.prioritize()
-      |> Bob.RemoteQueue.start_jobs(conn.params.num)
+      |> Bob.RemoteQueue.start_jobs(conn.params.max_weight, conn.params.weights)
 
     conn
     |> put_resp_header("content-type", "application/vnd.bob+erlang")

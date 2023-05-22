@@ -23,66 +23,55 @@ defmodule Bob.RemoteQueue do
     done_request(:failure, id)
   end
 
-  def local_queue(num) when num > 0 do
+  def local_queue(max_weight, weights) do
     Application.get_env(:bob, :local_jobs)
     |> prioritize()
-    |> start_jobs(num)
+    |> start_jobs(max_weight, weights)
     |> Enum.map(fn {id, module, args} -> {{:local, id}, module, args} end)
   end
 
-  def local_queue(_num) do
-    []
-  end
-
-  def remote_queue(num) when num > 0 do
+  def remote_queue(max_weight, weights) do
     Application.get_env(:bob, :remote_jobs)
-    |> start_request(num)
+    |> start_request(max_weight, weights)
     |> Enum.map(fn {id, module, args} -> {{:remote, id}, module, args} end)
-  end
-
-  def remote_queue(_num) do
-    []
   end
 
   def prioritize(jobs) do
     jobs
     |> Enum.group_by(&apply_job(&1, :priority, []), & &1)
     |> Enum.sort_by(fn {priority, _jobs} -> priority end)
-    |> Enum.map(fn {priority, jobs} -> {priority, Enum.shuffle(jobs)} end)
+    |> Enum.flat_map(fn {_priority, jobs} -> Enum.shuffle(jobs) end)
   end
 
   # Don't do lower priority jobs if there is still higher priority jobs in queue.
   # This would ensure lower priority jobs with lower weight cannot race ahead
   # higher priority jobs with higher weight.
-  def start_jobs(modules, num) do
-    {started_jobs, _num} =
-      Enum.flat_map_reduce(modules, num, fn
-        {_priority, _modules}, 0 ->
-          {:halt, 0}
+  def start_jobs(modules, max_weight, weights) do
+    {started_jobs, _weights} =
+      Enum.flat_map_reduce(Stream.cycle(modules ++ [:end]), {weights, false}, fn
+        :end, {weights, true} ->
+          {[], {weights, false}}
 
-        {_priority, jobs}, num ->
-          Enum.flat_map_reduce(Stream.cycle(jobs ++ [:end]), {num, false}, fn
-            _module, {0, _started?} ->
-              {:halt, 0}
+        :end, {weights, false} ->
+          {:halt, weights}
 
-            :end, {num, true} ->
-              {[], {num, false}}
+        module, {weights, started?} ->
+          concurrency_key = apply_job(module, :concurrency, [])
 
-            :end, {num, false} ->
-              {:halt, num}
+          new_weight = Map.get(weights, concurrency_key, 0) + apply_job(module, :weight, [])
 
-            module, {num, started?} ->
-              new_num = num - apply_job(module, :weight, [])
+          if new_weight <= max_weight do
+            case Bob.Queue.start(module) do
+              {:ok, {id, args}} ->
+                weights = Map.put(weights, concurrency_key, new_weight)
+                {[{id, module, args}], {weights, true}}
 
-              if new_num >= 0 do
-                case Bob.Queue.start(module) do
-                  {:ok, {id, args}} -> {[{id, module, args}], {new_num, true}}
-                  :error -> {[], {num, started?}}
-                end
-              else
-                {[], {num, started?}}
-              end
-          end)
+              :error ->
+                {[], {weights, started?}}
+            end
+          else
+            {[], {weights, started?}}
+          end
       end)
 
     started_jobs
@@ -96,12 +85,14 @@ defmodule Bob.RemoteQueue do
     :ok
   end
 
-  defp start_request([], _num) do
+  defp start_request([], _max_weight, _weights) do
     %{}
   end
 
-  defp start_request(remote_jobs, num) do
-    {:ok, %{jobs: jobs}} = request("/queue/start", %{jobs: remote_jobs, num: num})
+  defp start_request(remote_jobs, max_weight, weights) do
+    {:ok, %{jobs: jobs}} =
+      request("/queue/start", %{jobs: remote_jobs, max_weight: max_weight, weights: weights})
+
     jobs
   end
 

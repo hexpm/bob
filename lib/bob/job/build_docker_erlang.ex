@@ -16,4 +16,5 @@ defmodule Bob.Job.BuildDockerErlang do
 
   def priority(), do: 5
   def weight(), do: 4
+  def concurrency(), do: :shared
 end

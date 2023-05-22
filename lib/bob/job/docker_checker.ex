@@ -39,6 +39,7 @@ defmodule Bob.Job.DockerChecker do
 
   def priority(), do: 1
   def weight(), do: 1
+  def concurrency(), do: :shared
 
   def erlang() do
     tags = erlang_tags()

@@ -22,4 +22,5 @@ defmodule Bob.Job.BuildDockerElixir do
 
   def priority(), do: 4
   def weight(), do: 1
+  def concurrency(), do: :shared
 end

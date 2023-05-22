@@ -10,6 +10,7 @@ defmodule Bob.Job.HexDocsChecker do
 
   def priority(), do: 1
   def weight(), do: 1
+  def concurrency(), do: :shared
 
   defp build_ref?("v" <> version) do
     case Version.parse(version) do

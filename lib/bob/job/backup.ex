@@ -9,4 +9,5 @@ defmodule Bob.Job.Backup do
 
   def priority(), do: 1
   def weight(), do: 4
+  def concurrency(), do: :shared
 end

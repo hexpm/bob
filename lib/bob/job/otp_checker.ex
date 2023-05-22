@@ -11,6 +11,7 @@ defmodule Bob.Job.OTPChecker do
 
   def priority(), do: 1
   def weight(), do: 1
+  def concurrency(), do: :shared
 
   defp build_ref?(_linux, "OTP-18.0-rc2"), do: false
   defp build_ref?(_linux, "maint-r" <> _), do: false

@@ -8,4 +8,5 @@ defmodule Bob.Job.Clean do
 
   def priority(), do: 1
   def weight(), do: 2
+  def concurrency(), do: :shared
 end

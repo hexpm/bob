@@ -30,6 +30,10 @@ defmodule Bob.Queue do
     GenServer.call(__MODULE__, {:failure, id})
   end
 
+  def reset() do
+    GenServer.call(__MODULE__, :reset)
+  end
+
   def state() do
     GenServer.call(__MODULE__, :state)
   end
@@ -83,6 +87,10 @@ defmodule Bob.Queue do
     # under the assumption that a job will eventually be added back
     # Because of this the behaviour is the same as the success case
     {:reply, :ok, remove_job(id, state)}
+  end
+
+  def handle_call(:reset, _from, _state) do
+    {:reply, :ok, new_state()}
   end
 
   def handle_call(:state, _from, state) do

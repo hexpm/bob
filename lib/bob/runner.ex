@@ -60,13 +60,13 @@ defmodule Bob.Runner do
   end
 
   def handle_info(:local_timeout, state) do
-    state = start_jobs(state, &Bob.RemoteQueue.local_queue/1)
+    state = start_jobs(state, &Bob.RemoteQueue.local_queue/2)
     Process.send_after(self(), :local_timeout, @local_timeout)
     {:noreply, state}
   end
 
   def handle_info(:remote_timeout, state) do
-    state = start_jobs(state, &Bob.RemoteQueue.remote_queue/1)
+    state = start_jobs(state, &Bob.RemoteQueue.remote_queue/2)
     Process.send_after(self(), :remote_timeout, @remote_timeout)
     {:noreply, state}
   end
@@ -93,22 +93,23 @@ defmodule Bob.Runner do
 
   defp start_any_jobs(state) do
     state
-    |> start_jobs(&Bob.RemoteQueue.local_queue/1)
-    |> start_jobs(&Bob.RemoteQueue.remote_queue/1)
+    |> start_jobs(&Bob.RemoteQueue.local_queue/2)
+    |> start_jobs(&Bob.RemoteQueue.remote_queue/2)
   end
 
   defp start_jobs(state, fun) do
-    max(Application.get_env(:bob, :parallel_jobs) - current_weight(state), 0)
-    |> fun.()
-    |> Enum.reduce(state, fn {id, key, args}, state ->
-      start_job(id, key, args, state)
+    fun.(Application.get_env(:bob, :parallel_jobs), current_weight(state))
+    |> Enum.reduce(state, fn {id, module, args}, state ->
+      start_job(id, module, args, state)
     end)
   end
 
   defp current_weight(state) do
-    state.tasks
-    |> Enum.map(fn {_ref, {key, _args, _id}} -> apply_task(key, :weight, []) end)
-    |> Enum.sum()
+    Enum.reduce(state.tasks, %{}, fn {_ref, {module, _args, _id}}, weights ->
+      concurrency_key = apply_task(module, :concurrency, [])
+      weight = apply_task(module, :weight, [])
+      Map.update(weights, concurrency_key, weight, &(&1 + weight))
+    end)
   end
 
   defp start_job(id, key, args, state) do
