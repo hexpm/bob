@@ -1,6 +1,6 @@
 defmodule Bob.Job.OTPChecker do
   @repo "erlang/otp"
-  @linuxes ["ubuntu-14.04", "ubuntu-16.04", "ubuntu-18.04", "ubuntu-20.04", "ubuntu-22.04"]
+  @linuxes ["ubuntu-18.04", "ubuntu-20.04", "ubuntu-22.04"]
 
   def run(_type) do
     for linux <- @linuxes,
