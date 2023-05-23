@@ -20,10 +20,10 @@ defmodule Bob.Job.DockerChecker do
       "trusty-20191217"
     ],
     "debian" => [
-      "bullseye-20230227",
-      "bullseye-20230227-slim",
-      "buster-20230227",
-      "buster-20230227-slim"
+      "bullseye-20230522",
+      "bullseye-20230522-slim",
+      "buster-20230522",
+      "buster-20230522-slim"
     ]
   }
 
