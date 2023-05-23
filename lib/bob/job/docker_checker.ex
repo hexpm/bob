@@ -53,29 +53,30 @@ defmodule Bob.Job.DockerChecker do
   def expected_erlang_tags() do
     refs = erlang_refs()
 
-    Stream.flat_map(@builds, fn {os, os_versions} ->
-      Stream.flat_map(refs, fn ref ->
-        if build_erlang_ref?(os, ref) do
-          Stream.flat_map(os_versions, fn os_version ->
-            if build_erlang_ref?(os, os_version, ref) do
-              Stream.flat_map(@archs, fn arch ->
-                if build_erlang_ref?(arch, os, os_version, ref) do
-                  "OTP-" <> erlang = ref
-                  key = {erlang, os, os_diff(os, os_version), arch}
-                  value = {erlang, os, os_version, arch}
-                  [{key, value}]
-                else
-                  []
-                end
-              end)
-            else
-              []
-            end
-          end)
-        else
-          []
-        end
-      end)
+    @builds
+    |> Stream.flat_map(fn {os, os_versions} ->
+      Stream.map(os_versions, fn os_version -> {os, os_version} end)
+    end)
+    |> Stream.flat_map(fn {os, os_version} ->
+      Stream.map(refs, fn ref -> {os, os_version, ref} end)
+    end)
+    |> Stream.filter(fn {os, _os_version, ref} ->
+      build_erlang_ref?(os, ref)
+    end)
+    |> Stream.filter(fn {os, os_version, ref} ->
+      build_erlang_ref?(os, os_version, ref)
+    end)
+    |> Stream.flat_map(fn {os, os_version, ref} ->
+      Stream.map(@archs, fn arch -> {os, os_version, ref, arch} end)
+    end)
+    |> Stream.filter(fn {os, os_version, ref, arch} ->
+      build_erlang_ref?(arch, os, os_version, ref)
+    end)
+    |> Stream.map(fn {os, os_version, ref, arch} ->
+      "OTP-" <> erlang = ref
+      key = {erlang, os, os_diff(os, os_version), arch}
+      value = {erlang, os, os_version, arch}
+      {key, value}
     end)
   end
 
