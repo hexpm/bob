@@ -203,8 +203,7 @@ defmodule Bob.Job.DockerChecker do
              not skip_elixir_for_erlang?(erlang) and
              Enum.any?(os_versions, &(os_diff(os, os_version) == os_diff(os, &1))) do
           Stream.flat_map(refs, fn {"v" <> elixir, otp_major} ->
-            if not skip_elixir?(elixir) and
-                 compatible_elixir_and_erlang?(otp_major, erlang) do
+            if not skip_elixir?(elixir) and compatible_elixir_and_erlang?(otp_major, erlang) do
               key = {elixir, erlang, os, os_diff(os, os_version), arch}
               value = {elixir, erlang, os, os_version, arch}
               [{key, value}]
@@ -286,6 +285,8 @@ defmodule Bob.Job.DockerChecker do
   defp skip_elixir_for_erlang?(_erlang = "17." <> _), do: true
   defp skip_elixir_for_erlang?(_erlang = "18." <> _), do: true
   defp skip_elixir_for_erlang?(_erlang = "19." <> _), do: true
+  # Missing :code.add_pathsa/2
+  defp skip_elixir_for_erlang?(_erlang = "26.0-rc1"), do: true
   defp skip_elixir_for_erlang?(_erlang), do: false
 
   defp skip_elixir?(elixir) do
