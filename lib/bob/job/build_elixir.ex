@@ -9,7 +9,7 @@ defmodule Bob.Job.BuildElixir do
   end
 
   def priority(), do: 2
-  def weight(), do: 3
+  def weight(), do: 4
   def concurrency(), do: :shared
 
   def elixir_to_otp(ref_name) do

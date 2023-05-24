@@ -21,7 +21,7 @@ defmodule Bob.Job.DockerManifest do
   end
 
   def priority(), do: 4
-  def weight(), do: 4
+  def weight(), do: 2
   def concurrency(), do: __MODULE__
 
   def key_to_tag("erlang", {erlang, os, os_version}) do
