@@ -13,15 +13,18 @@ defmodule Bob.Job.DockerChecker do
       "3.18.0"
     ],
     "ubuntu" => [
+      # 22.04
       "jammy-20230126",
+      # 20.04
       "focal-20230126",
-      "bionic-20230126",
-      "xenial-20210804",
-      "trusty-20191217"
+      # 18.04
+      "bionic-20230126"
     ],
     "debian" => [
+      # 11
       "bullseye-20230522",
       "bullseye-20230522-slim",
+      # 10
       "buster-20230522",
       "buster-20230522-slim"
     ]
@@ -61,9 +64,7 @@ defmodule Bob.Job.DockerChecker do
               Stream.flat_map(@archs, fn arch ->
                 if build_erlang_ref?(arch, os, os_version, ref) do
                   "OTP-" <> erlang = ref
-                  key = {erlang, os, os_diff(os, os_version), arch}
-                  value = {erlang, os, os_version, arch}
-                  [{key, value}]
+                  [{erlang, os, os_version, arch}]
                 else
                   []
                 end
@@ -166,6 +167,19 @@ defmodule Bob.Job.DockerChecker do
     |> Bob.GitHub.fetch_repo_refs()
     |> Enum.map(fn {ref_name, _ref} -> ref_name end)
     |> Enum.sort(:desc)
+    |> Enum.dedup_by(&dedup_erlang_ref_by/1)
+  end
+
+  defp dedup_erlang_ref_by("OTP-" <> version) do
+    version
+    |> String.split(["-"])
+    |> List.first()
+    |> String.split(["."])
+    |> Enum.take(2)
+  end
+
+  defp dedup_erlang_ref_by(other) do
+    other
   end
 
   def erlang_tags() do
@@ -177,9 +191,7 @@ defmodule Bob.Job.DockerChecker do
     |> Bob.DockerHub.fetch_repo_tags()
     |> Stream.map(fn {tag, [^arch]} ->
       [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
-      key = {erlang, os, os_diff(os, os_version), arch}
-      value = {erlang, os, os_version, arch}
-      {key, value}
+      {erlang, os, os_version, arch}
     end)
   end
 
@@ -195,38 +207,51 @@ defmodule Bob.Job.DockerChecker do
   def expected_elixir_tags() do
     refs = elixir_builds()
 
-    Stream.flat_map(@archs, fn arch ->
-      Stream.flat_map(erlang_tags(arch), fn {_, {erlang, os, os_version, erlang_arch}} ->
-        os_versions = @builds[os]
-
-        if erlang_arch == arch and
-             not skip_elixir_for_erlang?(erlang) and
-             Enum.any?(os_versions, &(os_diff(os, os_version) == os_diff(os, &1))) do
-          Stream.flat_map(refs, fn {"v" <> elixir, otp_major} ->
-            if not skip_elixir?(elixir) and compatible_elixir_and_erlang?(otp_major, erlang) do
-              key = {elixir, erlang, os, os_diff(os, os_version), arch}
-              value = {elixir, erlang, os, os_version, arch}
-              [{key, value}]
-            else
-              []
-            end
-          end)
-        else
-          []
-        end
-      end)
+    Stream.flat_map(erlang_tags(), fn {erlang, os, os_version, erlang_arch} ->
+      if not skip_elixir_for_erlang?(erlang) and os_version in @builds[os] do
+        Stream.flat_map(refs, fn {"v" <> elixir, otp_major} ->
+          if not skip_elixir?(elixir) and compatible_elixir_and_erlang?(otp_major, erlang) do
+            [{elixir, erlang, os, os_version, erlang_arch}]
+          else
+            []
+          end
+        end)
+      else
+        []
+      end
     end)
-    |> Stream.uniq_by(fn {key, _value} -> key end)
-    |> Stream.map(fn {_key, value} -> {value, value} end)
   end
 
   defp elixir_builds() do
-    "builds/elixir"
-    |> Bob.Repo.fetch_built_refs()
-    |> Stream.map(fn {build_name, _ref} -> build_name end)
-    |> Stream.map(&split_elixir_build/1)
+    all_builds =
+      "builds/elixir"
+      |> Bob.Repo.fetch_built_refs()
+      |> Stream.map(fn {build_name, _ref} -> build_name end)
+      |> Stream.map(&split_elixir_build/1)
+      |> Enum.sort(:desc)
+
+    versions =
+      all_builds
+      |> Enum.reject(fn {_elixir, otp} -> otp end)
+      |> Enum.map(fn {elixir, _otp} -> elixir end)
+      |> Enum.dedup_by(&dedup_elixir_ref_by/1)
+      |> MapSet.new()
+
+    all_builds
+    |> Stream.filter(fn {elixir, _otp} -> elixir in versions end)
     |> Stream.filter(&build_elixir_ref?/1)
-    |> Enum.sort(:desc)
+  end
+
+  defp dedup_elixir_ref_by("v" <> version) do
+    version
+    |> String.split(["-"])
+    |> List.first()
+    |> String.split(["."])
+    |> Enum.take(2)
+  end
+
+  defp dedup_elixir_ref_by(other) do
+    other
   end
 
   def elixir_tags() do
@@ -240,8 +265,7 @@ defmodule Bob.Job.DockerChecker do
       [elixir, erlang, os, os_version] =
         Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
 
-      key = {elixir, erlang, os, os_version, arch}
-      {key, key}
+      {elixir, erlang, os, os_version, arch}
     end)
   end
 
@@ -267,13 +291,13 @@ defmodule Bob.Job.DockerChecker do
   defp build_elixir_ref?(_), do: false
 
   def diff(expected, current) do
-    current = MapSet.new(current, fn {key, _value} -> key end)
+    current = MapSet.new(current)
 
-    Stream.flat_map(expected, fn {key, value} ->
+    Stream.flat_map(expected, fn key ->
       if MapSet.member?(current, key) do
         []
       else
-        [value]
+        [key]
       end
     end)
   end
@@ -324,9 +348,8 @@ defmodule Bob.Job.DockerChecker do
   end
 
   defp group_archs(enum) do
-    enum
-    |> Enum.map(fn {_key, value} -> value end)
-    |> Enum.group_by(
+    Enum.group_by(
+      enum,
       &Tuple.delete_at(&1, tuple_size(&1) - 1),
       &elem(&1, tuple_size(&1) - 1)
     )
@@ -338,22 +361,5 @@ defmodule Bob.Job.DockerChecker do
         Bob.Queue.add(Bob.Job.DockerManifest, [kind, key])
       end
     end)
-  end
-
-  defp os_diff("alpine", version) do
-    version = Version.parse!(version)
-    {version.major, version.minor}
-  end
-
-  defp os_diff("ubuntu", version) do
-    [version, _] = String.split(version, "-", parts: 2)
-    version
-  end
-
-  defp os_diff("debian", version) do
-    case String.split(version, "-", parts: 3) do
-      [version, _, "slim"] -> {"slim", version}
-      [version, _] -> {"debian", version}
-    end
   end
 end
