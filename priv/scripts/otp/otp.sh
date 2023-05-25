@@ -24,11 +24,12 @@ if [ "$(echo ${ref_name} | cut -d '-' -f 2 | cut -d '.' -f 1)" -le "20" ]; then
 fi
 
 docker build \
-    -t ${image}:${tag} \
-    --build-arg OTP_REF=${ref_name} \
-    --build-arg PIE_CFLAGS=${pie_cflags} \
-    --build-arg PIE_LDFLAGS=${pie_ldflags} \
-    -f ${SCRIPT_DIR}/otp/otp-${linux}.dockerfile ${SCRIPT_DIR}
+  --ulimit nofile=1024:1024 \
+  -t ${image}:${tag} \
+  --build-arg OTP_REF=${ref_name} \
+  --build-arg PIE_CFLAGS=${pie_cflags} \
+  --build-arg PIE_LDFLAGS=${pie_ldflags} \
+  -f ${SCRIPT_DIR}/otp/otp-${linux}.dockerfile ${SCRIPT_DIR}
 docker rm -f ${container} || true
 docker run -t -e OTP_REF=${ref_name} --name=${container} ${image}:${tag}
 
