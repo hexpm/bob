@@ -4,6 +4,13 @@ FROM debian:${OS_VERSION} AS build
 
 ARG ERLANG
 
+# Debian Stretch Packages are no longer officially available and were
+# moved to archive.debian.org.
+# See: https://lists.debian.org/debian-devel-announce/2023/03/msg00006.html
+RUN sed -i -e 's/deb.debian.org/archive.debian.org/g' \
+           -e 's|security.debian.org|archive.debian.org/|g' \
+           -e '/stretch-updates/d' /etc/apt/sources.list
+
 RUN apt-get update
 RUN apt-get -y --no-install-recommends install \
   autoconf \
@@ -46,6 +53,13 @@ RUN scanelf --nobanner -E ET_DYN -BF '%F' --recursive /usr/local | xargs -r stri
 FROM debian:${OS_VERSION} AS final
 
 ARG ERLANG
+
+# Debian Stretch Packages are no longer officially available and were
+# moved to archive.debian.org.
+# See: https://lists.debian.org/debian-devel-announce/2023/03/msg00006.html
+RUN sed -i -e 's/deb.debian.org/archive.debian.org/g' \
+           -e 's|security.debian.org|archive.debian.org/|g' \
+           -e '/stretch-updates/d' /etc/apt/sources.list
 
 RUN apt-get update && \
   apt-get -y --no-install-recommends install \
