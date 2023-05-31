@@ -72,6 +72,7 @@ FROM alpine:${OS_VERSION} AS final
 ARG ERLANG
 
 RUN apk add --update --no-cache \
+  ca-certificates \
   libstdc++ \
   ncurses \
   $(if [ "${ERLANG:0:1}" = "1" ]; then echo "libressl"; else echo "openssl"; fi) \

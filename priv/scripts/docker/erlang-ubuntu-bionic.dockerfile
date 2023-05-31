@@ -40,6 +40,7 @@ ARG ERLANG
 
 RUN apt-get update && \
   apt-get -y --no-install-recommends install \
+    ca-certificates \
     libodbc1 \
     $(bash -c 'if [ "${ERLANG:0:1}" = "1" ]; then echo "libssl1.0.0"; else echo "libssl1.1"; fi') \
     libsctp1 && \

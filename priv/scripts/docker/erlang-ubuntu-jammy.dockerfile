@@ -40,6 +40,7 @@ ARG ERLANG
 
 RUN apt-get update && \
   apt-get -y --no-install-recommends install \
+    ca-certificates \
     libodbc1 \
     libssl3 \
     libsctp1 && \
