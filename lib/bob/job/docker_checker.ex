@@ -347,7 +347,7 @@ defmodule Bob.Job.DockerChecker do
     end)
   end
 
-  defp group_archs(enum) do
+  def group_archs(enum) do
     Enum.group_by(
       enum,
       &Tuple.delete_at(&1, tuple_size(&1) - 1),
@@ -355,7 +355,7 @@ defmodule Bob.Job.DockerChecker do
     )
   end
 
-  defp diff_manifests(kind, expected, current) do
+  def diff_manifests(kind, expected, current) do
     Enum.each(Enum.sort(expected), fn {key, expected_archs} ->
       if expected_archs -- Map.get(current, key, []) != [] do
         Bob.Queue.add(Bob.Job.DockerManifest, [kind, key])

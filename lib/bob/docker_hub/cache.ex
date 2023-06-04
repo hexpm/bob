@@ -85,7 +85,7 @@ defmodule Bob.DockerHub.Cache do
   end
 
   def add(repo, tag, archs) do
-    :ets.insert(__MODULE__, {{:data, repo, {tag, archs}}, true})
+    :ets.insert(__MODULE__, {{:data, repo, tag}, archs})
   end
 
   def lookup(repo, fun) do
@@ -96,7 +96,11 @@ defmodule Bob.DockerHub.Cache do
             :aquired ->
               result = fun.()
 
-              :ets.insert(__MODULE__, Enum.map(result, &{{:data, repo, &1}, true}))
+              :ets.insert(
+                __MODULE__,
+                Enum.map(result, fn {tag, archs} -> {{:data, repo, tag}, archs} end)
+              )
+
               :ets.insert(__MODULE__, {{:status, repo}, true})
 
               result
@@ -109,7 +113,8 @@ defmodule Bob.DockerHub.Cache do
         end
 
       [{_, true}] ->
-        :ets.select(__MODULE__, [{{{:data, repo, :"$1"}, true}, [], [:"$1"]}])
+        :ets.select(__MODULE__, [{{{:data, repo, :"$1"}, :"$2"}, [], [:"$$"]}])
+        |> Enum.map(&List.to_tuple/1)
     end
   end
 end
