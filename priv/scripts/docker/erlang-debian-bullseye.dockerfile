@@ -50,6 +50,7 @@ FROM debian:${OS_VERSION} AS final
 
 RUN apt-get update && \
   apt-get -y --no-install-recommends install \
+    ca-certificates \
     libodbc1 \
     libssl1.1 \
     libsctp1 && \
