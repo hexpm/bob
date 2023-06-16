@@ -44,7 +44,7 @@ touch builds.txt
 sed -i "/^${ref_name} /d" builds.txt
 echo -e "${ref_name} ${ref} $(date -u '+%Y-%m-%dT%H:%M:%SZ')\n$(cat builds.txt)" > builds.txt
 sort -u -k1,1 -o builds.txt builds.txt
-aws s3 cp builds.txt s3://s3.hex.pm/builds/otp/${linux}/builds.txt --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"builds builds/otp builds/otp/#{linux} builds/otp/#{linux}/txt\",\"surrogate-control\":\"public,max-age=604800\"}"
+aws s3 cp builds.txt s3://s3.hex.pm/builds/otp/${linux}/builds.txt --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"builds builds/otp builds/otp/${linux} builds/otp/${linux}/txt\",\"surrogate-control\":\"public,max-age=604800\"}"
 
 fastly_purge $BOB_FASTLY_SERVICE_HEXPM "builds/otp/${linux}/txt builds/otp/${linux}/${ref_name}"
 fastly_purge $BOB_FASTLY_SERVICE_BUILDS "builds/otp/${linux}/txt builds/otp/${linux}/${ref_name}"
