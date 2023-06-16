@@ -21,9 +21,6 @@ defmodule Bob.Job.DockerChecker do
       "bionic-20230126"
     ],
     "debian" => [
-      # 12
-      "bookworm-20230522",
-      "bookworm-20230522-slim",
       # 11
       "bullseye-20230522",
       "bullseye-20230522-slim",
@@ -97,9 +94,6 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-1" <> _), do: false
   defp build_erlang_ref?("debian", "bullseye-" <> _, "OTP-1" <> _), do: false
   defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-1" <> _), do: false
-
-  defp build_erlang_ref?("debian", "bookworm-" <> _, "OTP-" <> version),
-    do: build_openssl_3?(version)
 
   defp build_erlang_ref?("ubuntu", "jammy-" <> _, "OTP-" <> version),
     do: build_openssl_3?(version)
