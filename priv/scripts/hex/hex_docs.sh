@@ -11,7 +11,7 @@ function build {
   image="bob-hex-docs"
   container="hex-docs"
 
-  docker build -t ${image} -f ${SCRIPT_DIR}/hex/hex-docs.dockerfile ${SCRIPT_DIR}
+  docker build --ulimit nofile=1024:1024 -t ${image} -f ${SCRIPT_DIR}/hex/hex-docs.dockerfile ${SCRIPT_DIR}
   docker rm -f ${container} || true
   docker run -t -e HEX_REF=${1} --name=${container} ${image}
 
