@@ -228,13 +228,14 @@ defmodule Bob.Job.DockerChecker do
     end)
   end
 
-  defp elixir_builds() do
+  def elixir_builds() do
     all_builds =
       "builds/elixir"
       |> Bob.Repo.fetch_built_refs()
       |> Stream.map(fn {build_name, _ref} -> build_name end)
       |> Stream.map(&split_elixir_build/1)
-      |> Enum.sort(:desc)
+      |> Stream.filter(&build_elixir_ref?/1)
+      |> Enum.sort(&cmp_elixir_tags/2)
 
     versions =
       all_builds
@@ -244,8 +245,8 @@ defmodule Bob.Job.DockerChecker do
       |> MapSet.new()
 
     all_builds
+    |> Stream.reject(fn {_elixir, otp} -> otp == nil end)
     |> Stream.filter(fn {elixir, _otp} -> elixir in versions end)
-    |> Stream.filter(&build_elixir_ref?/1)
   end
 
   defp dedup_elixir_ref_by("v" <> version) do
@@ -282,8 +283,15 @@ defmodule Bob.Job.DockerChecker do
     end
   end
 
+  defp cmp_elixir_tags({"v" <> elixir_left, otp_left}, {"v" <> elixir_right, otp_right}) do
+    case Version.compare(elixir_left, elixir_right) do
+      :gt -> true
+      :eq -> otp_left > otp_right
+      :lt -> false
+    end
+  end
+
   defp build_elixir_ref?({"v0." <> _, _major_otp}), do: false
-  defp build_elixir_ref?({_, _major_otp = nil}), do: false
 
   defp build_elixir_ref?({"v" <> version, _major_otp}) do
     case Version.parse(version) do
