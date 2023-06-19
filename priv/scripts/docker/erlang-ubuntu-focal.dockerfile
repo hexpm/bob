@@ -2,8 +2,6 @@ ARG OS_VERSION
 
 FROM ubuntu:${OS_VERSION} AS build
 
-ARG ERLANG
-
 RUN apt-get update
 RUN apt-get -y --no-install-recommends install \
   autoconf \
@@ -18,6 +16,8 @@ RUN apt-get -y --no-install-recommends install \
   wget \
   ca-certificates \
   pax-utils
+
+ARG ERLANG
 
 RUN mkdir -p /OTP/subdir
 RUN wget -nv "https://github.com/erlang/otp/archive/OTP-${ERLANG}.tar.gz" && tar -zxf "OTP-${ERLANG}.tar.gz" -C /OTP/subdir --strip-components=1
@@ -35,8 +35,6 @@ RUN scanelf --nobanner -E ET_EXEC -BF '%F' --recursive /usr/local | xargs -r str
 RUN scanelf --nobanner -E ET_DYN -BF '%F' --recursive /usr/local | xargs -r strip --strip-unneeded
 
 FROM ubuntu:${OS_VERSION} AS final
-
-ARG ERLANG
 
 RUN apt-get update && \
   apt-get -y --no-install-recommends install \
