@@ -4,19 +4,19 @@ Bob performs automated tasks for the Elixir and Hex projects.
 
 ## Elixir builds
 
-Elixir builds are compiled on each git push to https://github.com/elixir-lang/elixir for any branch. After the build completes it will be available at `https://repo.hex.pm/builds/elixir/{REF}.zip` where `{REF}` is the git ref for that push. Examples of URLs are:
+Elixir builds are compiled on each git push to https://github.com/elixir-lang/elixir for any branch. After the build completes it will be available at `https://builds.hex.pm/builds/elixir/{REF}.zip` where `{REF}` is the git ref for that push. Examples of URLs are:
 
-  * https://repo.hex.pm/builds/elixir/main.zip
-  * https://repo.hex.pm/builds/elixir/v1.12.3.zip
+  * https://builds.hex.pm/builds/elixir/main.zip
+  * https://builds.hex.pm/builds/elixir/v1.12.3.zip
 
-These Elixir builds will be compiled against the oldest supported OTP version to ensure maximum compatibility for all users. We also build Elixir for every officially supported OTP version, if possible always use an Elixir compiled against the latest OTP version to get all available features in Elixir. These builds are available at `https://repo.hex.pm/builds/elixir/{REF}-otp-{OTP_MAJOR_VERSION}.zip`, examples are:
+These Elixir builds will be compiled against the oldest supported OTP version to ensure maximum compatibility for all users. We also build Elixir for every officially supported OTP version, if possible always use an Elixir compiled against the latest OTP version to get all available features in Elixir. These builds are available at `https://builds.hex.pm/builds/elixir/{REF}-otp-{OTP_MAJOR_VERSION}.zip`, examples are:
 
-  * https://repo.hex.pm/builds/elixir/main-otp-20.zip
-  * https://repo.hex.pm/builds/elixir/v1.12.3-otp-24.zip
+  * https://builds.hex.pm/builds/elixir/main-otp-20.zip
+  * https://builds.hex.pm/builds/elixir/v1.12.3-otp-24.zip
 
 Since these builds are only available for officially supported OTP versions it is recommended that you fall back to the non OTP versioned URL if you get a 404 error for your combination of Elixir and OTP versions. Check https://github.com/hexpm/bob/blob/main/lib/bob/job/build_elixir.ex to find which OTP versions we build against for particular Elixir versions.
 
-See https://repo.hex.pm/builds/elixir/builds.txt for a list of all builds.
+See https://builds.hex.pm/builds/elixir/builds.txt for a list of all builds.
 
 ## Elixir docs
 
@@ -35,15 +35,15 @@ Documentation tarballs are also uploaded to `https://repo.hex.pm/docs/{APPLICATI
 
 Erlang builds compiled on Ubuntu LTS versions are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
 
-After the builds complete they will be available at `https://repo.hex.pm/builds/otp/${OS_VER}/{REF}.tar.gz` where `{REF}` is the name of the git tag or branch. Examples of URLs are:
+After the builds complete they will be available at `https://builds.hex.pm/builds/otp/${OS_VER}/{REF}.tar.gz` where `{REF}` is the name of the git tag or branch. Examples of URLs are:
 
-  * https://repo.hex.pm/builds/otp/ubuntu-20.04/master.tar.gz
-  * https://repo.hex.pm/builds/otp/ubuntu-22.04/master.tar.gz
+  * https://builds.hex.pm/builds/otp/ubuntu-20.04/master.tar.gz
+  * https://builds.hex.pm/builds/otp/ubuntu-22.04/master.tar.gz
 
 For lists of builds see:
 
-  * https://repo.hex.pm/builds/otp/ubuntu-20.04/builds.txt
-  * https://repo.hex.pm/builds/otp/ubuntu-22.04/builds.txt
+  * https://builds.hex.pm/builds/otp/ubuntu-20.04/builds.txt
+  * https://builds.hex.pm/builds/otp/ubuntu-22.04/builds.txt
 
 ## Docker images
 
