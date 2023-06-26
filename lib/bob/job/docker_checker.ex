@@ -172,20 +172,33 @@ defmodule Bob.Job.DockerChecker do
     "erlang/otp"
     |> Bob.GitHub.fetch_repo_refs()
     |> Enum.map(fn {ref_name, _ref} -> ref_name end)
-    |> Enum.sort(:desc)
+    |> Enum.filter(&String.starts_with?(&1, "OTP-"))
+    |> Enum.sort(&cmp_erlang_tags/2)
     |> Enum.dedup_by(&dedup_erlang_ref_by/1)
+  end
+
+  defp cmp_erlang_tags("OTP-" <> left, "OTP-" <> right) do
+    left = version_components(left)
+    right = version_components(right)
+    left > right
   end
 
   defp dedup_erlang_ref_by("OTP-" <> version) do
     version
-    |> String.split(["-"])
-    |> List.first()
-    |> String.split(["."])
+    |> version_components()
     |> Enum.take(2)
   end
 
   defp dedup_erlang_ref_by(other) do
     other
+  end
+
+  defp version_components(version) do
+    version
+    |> String.split(["-"])
+    |> List.first()
+    |> String.split(["."])
+    |> Enum.map(&String.to_integer/1)
   end
 
   def erlang_tags() do
