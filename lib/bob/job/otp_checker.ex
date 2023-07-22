@@ -6,9 +6,9 @@ defmodule Bob.Job.OTPChecker do
   def run(_type) do
     for linux <- @linuxes,
         arch <- @arches,
-        {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/otp/#{linux}"),
+        {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/otp/#{linux}-#{arch}"),
         build_ref?(linux, ref_name),
-        do: Bob.Queue.add(Bob.Job.BuildOTP, [ref_name, ref, linux, arch])
+        do: Bob.Queue.add({Bob.Job.BuildOTP, arch}, [ref_name, ref, linux])
   end
 
   def priority(), do: 1
