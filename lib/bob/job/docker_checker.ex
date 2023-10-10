@@ -10,7 +10,7 @@ defmodule Bob.Job.DockerChecker do
     "alpine" => [
       "3.16.7",
       "3.17.5",
-      "3.18.3"
+      "3.18.4"
     ],
     "ubuntu" => [
       # 22.04
