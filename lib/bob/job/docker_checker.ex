@@ -14,22 +14,22 @@ defmodule Bob.Job.DockerChecker do
     ],
     "ubuntu" => [
       # 22.04
-      "jammy-20230804",
+      "jammy-20231004",
       # 20.04
-      "focal-20230801",
+      "focal-20231003",
       # 18.04
       "bionic-20230530"
     ],
     "debian" => [
       # 12
-      "bookworm-20230904",
-      "bookworm-20230904-slim",
+      "bookworm-20231009",
+      "bookworm-20231009-slim",
       # 11
-      "bullseye-20230904",
-      "bullseye-20230904-slim",
+      "bullseye-20231009",
+      "bullseye-20231009-slim",
       # 10
-      "buster-20230904",
-      "buster-20230904-slim"
+      "buster-20231009",
+      "buster-20231009-slim"
     ]
   }
 
