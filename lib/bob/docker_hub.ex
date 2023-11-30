@@ -16,7 +16,7 @@ defmodule Bob.DockerHub do
     Application.put_env(:bob, :dockerhub_token, result["token"])
   end
 
-  def fetch_repo_tags(repo) do
+  def fetch_repo_tags_from_cache(repo) do
     Bob.DockerHub.Cache.lookup(repo, fn ->
       (@dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100")
       |> dockerhub_request()
