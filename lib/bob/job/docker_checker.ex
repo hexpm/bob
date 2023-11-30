@@ -206,7 +206,7 @@ defmodule Bob.Job.DockerChecker do
 
   def erlang_tags(arch) do
     "hexpm/erlang-#{arch}"
-    |> Bob.DockerHub.fetch_repo_tags()
+    |> Bob.DockerHub.fetch_repo_tags_from_cache()
     |> Stream.map(fn {tag, [^arch]} ->
       [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
       {erlang, os, os_version, arch}
@@ -279,7 +279,7 @@ defmodule Bob.Job.DockerChecker do
 
   def elixir_tags(arch) do
     "hexpm/elixir-#{arch}"
-    |> Bob.DockerHub.fetch_repo_tags()
+    |> Bob.DockerHub.fetch_repo_tags_from_cache()
     |> Enum.map(fn {tag, [^arch]} ->
       [elixir, erlang, os, os_version] =
         Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
@@ -355,7 +355,7 @@ defmodule Bob.Job.DockerChecker do
 
   def erlang_manifest_tags() do
     "hexpm/erlang"
-    |> Bob.DockerHub.fetch_repo_tags()
+    |> Bob.DockerHub.fetch_repo_tags_from_cache()
     |> Map.new(fn {tag, archs} ->
       [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
       {{erlang, os, os_version}, archs}
@@ -364,7 +364,7 @@ defmodule Bob.Job.DockerChecker do
 
   def elixir_manifest_tags() do
     "hexpm/elixir"
-    |> Bob.DockerHub.fetch_repo_tags()
+    |> Bob.DockerHub.fetch_repo_tags_from_cache()
     |> Map.new(fn {tag, archs} ->
       [elixir, erlang, os, os_version] =
         Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
