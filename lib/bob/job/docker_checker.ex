@@ -8,28 +8,29 @@ defmodule Bob.Job.DockerChecker do
 
   @builds %{
     "alpine" => [
-      "3.16.7",
-      "3.17.5",
-      "3.18.4"
+      "3.16.8",
+      "3.17.6",
+      "3.18.5",
+      "3.19.0"
     ],
     "ubuntu" => [
       # 22.04
-      "jammy-20231004",
+      "jammy-20231128",
       # 20.04
-      "focal-20231003",
+      "focal-20231128",
       # 18.04
       "bionic-20230530"
     ],
     "debian" => [
       # 12
-      "bookworm-20231009",
-      "bookworm-20231009-slim",
+      "bookworm-20231120",
+      "bookworm-20231120-slim",
       # 11
-      "bullseye-20231009",
-      "bullseye-20231009-slim",
+      "bullseye-20231120",
+      "bullseye-20231120-slim",
       # 10
-      "buster-20231009",
-      "buster-20231009-slim"
+      "buster-20231120",
+      "buster-20231120-slim"
     ]
   }
 
