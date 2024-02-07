@@ -17,7 +17,7 @@ defmodule Bob.Job.DockerChecker do
       # 22.04
       "jammy-20240125",
       # 20.04
-      "focal-20240123",
+      "focal-20240123"
     ],
     "debian" => [
       # 12
