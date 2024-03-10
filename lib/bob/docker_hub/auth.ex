@@ -1,7 +1,7 @@
 defmodule Bob.DockerHub.Auth do
   use GenServer
 
-  @timeout 24 * 60 * 60 * 1000
+  @timeout 60 * 60 * 1000
 
   def start_link([]) do
     GenServer.start_link(__MODULE__, [])
