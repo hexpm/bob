@@ -8,29 +8,31 @@ defmodule Bob.Job.DockerChecker do
     [
       {"alpine",
        [
-         ~r/3\.19\.\d+/,
-         ~r/3\.18\.\d+/,
-         ~r/3\.17\.\d+/,
-         ~r/3\.16\.\d+/
+         ~r/^3\.19\.\d+$/,
+         ~r/^3\.18\.\d+$/,
+         ~r/^3\.17\.\d+$/,
+         ~r/^3\.16\.\d+$/
        ]},
       {"ubuntu",
        [
+         # 24.04
+         ~r/^noble-\d{8}$/,
          # 22.04
-         ~r/jammy-\d{8}/,
+         ~r/^jammy-\d{8}$/,
          # 20.04
-         ~r/focal-\d{8}/
+         ~r/^focal-\d{8}$/
        ]},
       {"debian",
        [
          # 12
-         ~r/bookworm-\d{8}$/,
-         ~r/bookworm-\d{8}-slim/,
+         ~r/^bookworm-\d{8}$/,
+         ~r/^bookworm-\d{8}-slim$/,
          # 11
-         ~r/bullseye-\d{8}$/,
-         ~r/bullseye-\d{8}-slim/,
+         ~r/^bullseye-\d{8}$/,
+         ~r/^bullseye-\d{8}-slim$/,
          # 10
-         ~r/buster-\d{8}$/,
-         ~r/buster-\d{8}-slim/
+         ~r/^buster-\d{8}$/,
+         ~r/^buster-\d{8}-slim$/
        ]}
     ]
     |> Task.async_stream(
