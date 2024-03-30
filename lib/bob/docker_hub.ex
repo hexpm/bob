@@ -17,6 +17,11 @@ defmodule Bob.DockerHub do
   end
 
   def fetch_repo_tags(repo) do
+    (@dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100")
+    |> dockerhub_request()
+  end
+
+  def fetch_repo_tags_from_cache(repo) do
     Bob.DockerHub.Cache.lookup(repo, fn ->
       (@dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100")
       |> dockerhub_request()
