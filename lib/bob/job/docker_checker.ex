@@ -129,6 +129,9 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("ubuntu", "jammy-" <> _, "OTP-" <> version),
     do: build_openssl_3?(version)
 
+  defp build_erlang_ref?("ubuntu", "noble-" <> _, "OTP-" <> version),
+    do: build_openssl_3?(version)
+
   defp build_erlang_ref?(_os, _os_version, _ref), do: true
 
   defp build_erlang_ref?("arm64", "ubuntu", "trusty-" <> _, "OTP-17" <> _), do: false
