@@ -1,6 +1,6 @@
 defmodule Bob.Job.OTPChecker do
   @repo "erlang/otp"
-  @linuxes ["ubuntu-20.04", "ubuntu-22.04"]
+  @linuxes ["ubuntu-20.04", "ubuntu-22.04", "ubuntu-24.04"]
 
   def run(_type) do
     for linux <- @linuxes,
@@ -19,6 +19,8 @@ defmodule Bob.Job.OTPChecker do
   defp build_ref?("ubuntu-20.04", "maint-" <> version), do: build_ubuntu_20?(version)
   defp build_ref?("ubuntu-22.04", "OTP-" <> version), do: build_ubuntu_22?(version)
   defp build_ref?("ubuntu-22.04", "maint-" <> version), do: build_ubuntu_22?(version)
+  defp build_ref?("ubuntu-24.04", "OTP-" <> version), do: build_ubuntu_22?(version)
+  defp build_ref?("ubuntu-24.04", "maint-" <> version), do: build_ubuntu_22?(version)
   defp build_ref?(_linux, "OTP-" <> _), do: true
   defp build_ref?(_linux, "maint" <> _), do: true
   defp build_ref?(_linux, "master" <> _), do: true
