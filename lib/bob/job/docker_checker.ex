@@ -50,7 +50,8 @@ defmodule Bob.Job.DockerChecker do
     tags =
       ("library/" <> repo)
       |> Bob.DockerHub.fetch_repo_tags()
-      |> Enum.map(&elem(&1, 0))
+      |> Enum.filter(fn {_tag, archs} -> Enum.all?(@archs, &(&1 in archs)) end)
+      |> Enum.map(fn {tag, _archs} -> tag end)
       |> Enum.sort(&(&1 >= &2))
 
     Enum.map(regexes, fn regex ->

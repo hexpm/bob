@@ -49,6 +49,22 @@ defmodule Bob.DockerHub do
     end
   end
 
+  def delete_tag(repo, tag) do
+    url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
+    headers = headers()
+    opts = [:with_body, recv_timeout: 20_000]
+
+    result =
+      Bob.HTTP.retry("DockerHub #{url}", fn ->
+        :hackney.request(:delete, url, headers, "", opts)
+      end)
+
+    case result do
+      {:ok, 204, _headers, _body} -> :ok
+      {:ok, 404, _headers, _body} -> :ok
+    end
+  end
+
   def headers() do
     if token = Application.get_env(:bob, :dockerhub_token) do
       [{"authorization", "JWT #{token}"}]
