@@ -13,7 +13,6 @@ defmodule Bob.Job.ElixirChecker do
   def weight(), do: 1
   def concurrency(), do: :shared
 
-  defp build_ref?("main"), do: true
   defp build_ref?("v0." <> _), do: false
 
   defp build_ref?("v" <> version) do

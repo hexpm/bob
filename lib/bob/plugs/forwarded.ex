@@ -22,7 +22,7 @@ defmodule Bob.Plug.Forwarded do
         parts = Enum.map(parts, &elem(&1, 0))
         List.to_tuple(parts)
       else
-        Logger.warn("Invalid IP: #{inspect(ip)}")
+        Logger.warning("Invalid IP: #{inspect(ip)}")
         nil
       end
     end

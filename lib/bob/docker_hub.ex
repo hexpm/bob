@@ -17,6 +17,11 @@ defmodule Bob.DockerHub do
   end
 
   def fetch_repo_tags(repo) do
+    (@dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100")
+    |> dockerhub_request()
+  end
+
+  def fetch_repo_tags_from_cache(repo) do
     Bob.DockerHub.Cache.lookup(repo, fn ->
       (@dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100")
       |> dockerhub_request()
@@ -41,6 +46,22 @@ defmodule Bob.DockerHub do
 
       {:ok, 404, _headers, _body} ->
         nil
+    end
+  end
+
+  def delete_tag(repo, tag) do
+    url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
+    headers = headers()
+    opts = [:with_body, recv_timeout: 20_000]
+
+    result =
+      Bob.HTTP.retry("DockerHub #{url}", fn ->
+        :hackney.request(:delete, url, headers, "", opts)
+      end)
+
+    case result do
+      {:ok, 204, _headers, _body} -> :ok
+      {:ok, 404, _headers, _body} -> :ok
     end
   end
 

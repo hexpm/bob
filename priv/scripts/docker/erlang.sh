@@ -40,6 +40,7 @@ fi
 docker build \
   --ulimit nofile=1024:1024 \
   -t hexpm/erlang-${arch}:${tag} \
+  --build-arg ARCH=${arch} \
   --build-arg ERLANG=${erlang} \
   --build-arg OS_VERSION=${os_version} \
   --build-arg PIE_CFLAGS=${pie_cflags} \

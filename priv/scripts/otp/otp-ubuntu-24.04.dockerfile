@@ -1,13 +1,7 @@
-FROM ubuntu:14.04
+FROM ubuntu:24.04
 
-ENV UBUNTU_VERSION=14.04
-
-ARG PIE_CFLAGS="-fpie"
-ARG CFLAGS="-g -O2 ${PIE_CFLAGS}"
-ARG CPPFLAGS="-D_FORTIFY_SOURCE=2"
-
-ARG PIE_LDFLAGS="-pie"
-ARG LDFLAGS="-Wl,-z,relro,-z,now ${PIE_LDFLAGS}"
+ARG DEBIAN_FRONTEND=noninteractive
+ENV UBUNTU_VERSION=24.04
 
 RUN apt-get update
 
@@ -19,10 +13,10 @@ RUN apt-get install -y \
   make \
   automake \
   autoconf \
-  libwxgtk2.8-dev \
+  libwxgtk3.2-dev \
   libgl1-mesa-dev \
   libglu1-mesa-dev \
-  libpng3 \
+  libpng-dev \
   libreadline-dev \
   libncurses-dev \
   libssl-dev \
@@ -35,10 +29,6 @@ RUN apt-get install -y \
 
 RUN mkdir -p /home/build/out
 WORKDIR /home/build
-
-ENV CFLAGS=$CFLAGS
-ENV CPPFLAGS=$CPPFLAGS
-ENV LDFLAGS=$LDFLAGS
 
 COPY otp/build_otp_ubuntu.sh /home/build/build.sh
 RUN chmod +x /home/build/build.sh
