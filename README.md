@@ -35,15 +35,33 @@ Documentation tarballs are also uploaded to `https://repo.hex.pm/docs/{APPLICATI
 
 Erlang builds compiled on Ubuntu LTS versions are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
 
-After the builds complete they will be available at `https://builds.hex.pm/builds/otp/${OS_VER}/{REF}.tar.gz` where `{REF}` is the name of the git tag or branch. Examples of URLs are:
+After the builds complete they will be available at `https://builds.hex.pm/builds/otp/${ARCH}/${OS_VER}/${REF}.tar.gz` where `${ARCH}` is the CPU architecture, `${OS_VER}` is the OS name and version, and `${REF}` is the name of the git tag or branch.
 
-  * https://builds.hex.pm/builds/otp/ubuntu-20.04/master.tar.gz
-  * https://builds.hex.pm/builds/otp/ubuntu-22.04/master.tar.gz
+Supported architectures:
+
+  * `amd64`
+  * `arm64`
+
+Supported OS versions:
+
+  * `ubuntu-20.04`
+  * `ubuntu-22.04`
+  * `ubuntu-24.04`
+
+Examples of URLs are:
+
+  * https://builds.hex.pm/builds/otp/amd64/ubuntu-20.04/master.tar.gz
+  * https://builds.hex.pm/builds/otp/arm64/ubuntu-22.04/OTP-26.0.tar.gz
+  * https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/maint.tar.gz
 
 For lists of builds see:
 
-  * https://builds.hex.pm/builds/otp/ubuntu-20.04/builds.txt
-  * https://builds.hex.pm/builds/otp/ubuntu-22.04/builds.txt
+  * https://builds.hex.pm/builds/otp/amd64/ubuntu-20.04/builds.txt
+  * https://builds.hex.pm/builds/otp/amd64/ubuntu-22.04/builds.txt
+  * https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt
+  * https://builds.hex.pm/builds/otp/arm64/ubuntu-20.04/builds.txt
+  * https://builds.hex.pm/builds/otp/arm64/ubuntu-22.04/builds.txt
+  * https://builds.hex.pm/builds/otp/arm64/ubuntu-24.04/builds.txt
 
 ## Docker images
 
@@ -54,6 +72,11 @@ Tagged images are never changed, that means `hexpm/erlang@22.0-alpine-3.11.2` wi
 Erlang builds are found at https://hub.docker.com/r/hexpm/erlang, they use the versioning scheme `${OTP_VER}-${OS_NAME}-${OS_VER}` for tags. Builds for all releases since OTP 17 are provided.
 
 Elixir builds are found at https://hub.docker.com/r/hexpm/elixir, they use the versioning scheme `${ELIXIR_VER}-erlang-${OTP_VER}-${OS_NAME}-${OS_VER}`. Builds for all major releases since Elixir 1.0.0 are provided. Images are built for all pairs of compatible Elixir and OTP versions.
+
+Builds are provided for the following OS and architectures using the docker `OS/ARCH` scheme:
+
+* `linux/amd64`
+* `linux/arm64/v8`
 
 ### Examples of image names
 
