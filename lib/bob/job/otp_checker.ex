@@ -21,8 +21,8 @@ defmodule Bob.Job.OTPChecker do
   defp build_ref?("ubuntu-20.04", "maint-" <> version), do: build_ubuntu_20?(version)
   defp build_ref?("ubuntu-22.04", "OTP-" <> version), do: build_ubuntu_22?(version)
   defp build_ref?("ubuntu-22.04", "maint-" <> version), do: build_ubuntu_22?(version)
-  defp build_ref?("ubuntu-24.04", "OTP-" <> version), do: build_ubuntu_22?(version)
-  defp build_ref?("ubuntu-24.04", "maint-" <> version), do: build_ubuntu_22?(version)
+  defp build_ref?("ubuntu-24.04", "OTP-" <> version), do: build_ubuntu_24?(version)
+  defp build_ref?("ubuntu-24.04", "maint-" <> version), do: build_ubuntu_24?(version)
   defp build_ref?(_linux, "OTP-" <> _), do: true
   defp build_ref?(_linux, "maint" <> _), do: true
   defp build_ref?(_linux, "master" <> _), do: true
@@ -37,6 +37,19 @@ defmodule Bob.Job.OTPChecker do
     # OpenSSL 3.0 compatibility
     erlang_version = parse_otp_ref(erlang_version)
     erlang_version >= [24, 2]
+  end
+
+  defp build_ubuntu_24?(erlang_version) do
+    dev_version? = length(String.split(erlang_version, "-")) > 1
+
+    # WX compatibility
+    case parse_otp_ref(erlang_version) do
+      [25, 0] ->
+        not dev_version?
+
+      version ->
+        version >= [24, 3, 4]
+    end
   end
 
   defp parse_otp_ref(ref) do
