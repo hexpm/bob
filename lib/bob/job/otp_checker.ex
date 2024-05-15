@@ -1,12 +1,14 @@
 defmodule Bob.Job.OTPChecker do
   @repo "erlang/otp"
   @linuxes ["ubuntu-20.04", "ubuntu-22.04", "ubuntu-24.04"]
+  @arches ["amd64", "arm64"]
 
   def run(_type) do
     for linux <- @linuxes,
-        {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/otp/#{linux}"),
+        arch <- @arches,
+        {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/otp/#{arch}/#{linux}"),
         build_ref?(linux, ref_name),
-        do: Bob.Queue.add(Bob.Job.BuildOTP, [ref_name, ref, linux])
+        do: Bob.Queue.add({Bob.Job.BuildOTP, arch}, [ref_name, ref, linux])
   end
 
   def priority(), do: 1
