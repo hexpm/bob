@@ -11,6 +11,7 @@ source ${SCRIPT_DIR}/utils.sh
 
 echo "Building $1 $2 $3 $4"
 
+container="otp-build-${linux}-${ref_name}"
 image="bob-otp"
 tag=${linux}
 date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
