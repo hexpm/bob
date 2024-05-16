@@ -39,12 +39,14 @@ docker cp ${container}:/home/build/out/${ref_name}.tar.gz ${ref_name}.tar.gz
 
 docker rm -f ${container}
 
+build_sha256=$(sha256sum ${ref_name}.tar.gz | cut -d ' ' -f 1)
+
 aws s3 cp ${ref_name}.tar.gz s3://s3.hex.pm/builds/otp/${arch}/${linux}/${ref_name}.tar.gz --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"builds builds/otp builds/otp/${arch} builds/otp/${arch}/${linux} builds/otp/${arch}/${linux}/${ref_name}\",\"surrogate-control\":\"public,max-age=604800\"}"
 
 aws s3 cp s3://s3.hex.pm/builds/otp/${arch}/${linux}/builds.txt builds.txt || true
 touch builds.txt
 sed -i "/^${ref_name} /d" builds.txt
-echo -e "${ref_name} ${ref} $(date -u '+%Y-%m-%dT%H:%M:%SZ')\n$(cat builds.txt)" > builds.txt
+echo -e "${ref_name} ${ref} $(date -u '+%Y-%m-%dT%H:%M:%SZ') ${build_sha256}\n$(cat builds.txt)" > builds.txt
 sort -u -k1,1 -o builds.txt builds.txt
 aws s3 cp builds.txt s3://s3.hex.pm/builds/otp/${arch}/${linux}/builds.txt --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"builds builds/otp builds/otp/${arch} builds/otp/${arch}/${linux} builds/otp/${arch}/${linux}/txt\",\"surrogate-control\":\"public,max-age=604800\"}"
 
