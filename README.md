@@ -56,12 +56,14 @@ Examples of URLs are:
 
 For lists of builds see:
 
-  * https://builds.hex.pm/builds/otp/amd64/ubuntu-20.04/builds.txt
-  * https://builds.hex.pm/builds/otp/amd64/ubuntu-22.04/builds.txt
-  * https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt
-  * https://builds.hex.pm/builds/otp/arm64/ubuntu-20.04/builds.txt
-  * https://builds.hex.pm/builds/otp/arm64/ubuntu-22.04/builds.txt
-  * https://builds.hex.pm/builds/otp/arm64/ubuntu-24.04/builds.txt
+  * `amd64`:
+    * https://builds.hex.pm/builds/otp/amd64/ubuntu-20.04/builds.txt
+    * https://builds.hex.pm/builds/otp/amd64/ubuntu-22.04/builds.txt
+    * https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt
+  * `arm64`:
+    * https://builds.hex.pm/builds/otp/arm64/ubuntu-20.04/builds.txt
+    * https://builds.hex.pm/builds/otp/arm64/ubuntu-22.04/builds.txt
+    * https://builds.hex.pm/builds/otp/arm64/ubuntu-24.04/builds.txt
 
 ## Docker images
 
