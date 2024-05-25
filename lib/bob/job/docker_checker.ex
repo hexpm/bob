@@ -202,14 +202,44 @@ defmodule Bob.Job.DockerChecker do
     |> Bob.GitHub.fetch_repo_refs()
     |> Enum.map(fn {ref_name, _ref} -> ref_name end)
     |> Enum.filter(&String.starts_with?(&1, "OTP-"))
-    |> Enum.sort(&cmp_erlang_tags/2)
+    |> Enum.sort(&(cmp_erlang_tags(&1, &2) != :lt))
     |> Enum.dedup_by(&dedup_erlang_ref_by/1)
   end
 
   defp cmp_erlang_tags("OTP-" <> left, "OTP-" <> right) do
-    left = version_components(left)
-    right = version_components(right)
-    left > right
+    cmp_erlang_components(to_matchable(left), to_matchable(right))
+  end
+
+  defp cmp_erlang_components({[left | lefts], left_pre}, {[right | rights], right_pre}) do
+    cond do
+      left > right -> :gt
+      left < right -> :lt
+      true -> cmp_erlang_components({lefts, left_pre}, {rights, right_pre})
+    end
+  end
+
+  defp cmp_erlang_components({[], left_pre}, {[], right_pre}) do
+    cond do
+      left_pre == [] and right_pre != [] -> :gt
+      left_pre != [] and right_pre == [] -> :lt
+      left_pre > right_pre -> :gt
+      left_pre < right_pre -> :lt
+      true -> :eq
+    end
+  end
+
+  defp cmp_erlang_components({[], _left_pre}, {_rights, _right_pre}) do
+    :lt
+  end
+
+  defp cmp_erlang_components({_lefts, _left_pre}, {[], _right_pre}) do
+    :gt
+  end
+
+  defp to_matchable(string) do
+    destructure [version, pre], String.split(string, "-", parts: 2)
+    components = String.split(version, ".")
+    {components, pre || []}
   end
 
   defp dedup_erlang_ref_by("OTP-" <> version) do

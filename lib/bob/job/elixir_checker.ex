@@ -21,7 +21,7 @@ defmodule Bob.Job.ElixirChecker do
 
   defp build_ref?(_), do: false
 
-  defp expand_ref(ref) do
+  def expand_ref(ref) do
     ref_otps =
       Enum.map(Bob.Job.BuildElixir.elixir_to_otp(ref), fn otp ->
         [major, _minor] = String.split(otp, ".", parts: 2)
