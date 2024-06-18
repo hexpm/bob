@@ -238,7 +238,9 @@ defmodule Bob.Job.DockerChecker do
 
   defp to_matchable(string) do
     destructure [version, pre], String.split(string, "-", parts: 2)
-    components = String.split(version, ".")
+    components = version
+                 |> String.split(".")
+                 |> Enum.map(&String.to_integer/1)
     {components, pre || []}
   end
 
