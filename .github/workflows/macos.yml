@@ -12,7 +12,6 @@ on:
         required: true
       openssl-version:
         default: "3.1.6"
-concurrency: builds_txt
 jobs:
   schedule:
     name: "Schedule nightly"
@@ -32,6 +31,8 @@ jobs:
     name: "Build OTP macOS ${{ matrix.arch }}"
     if: github.event.inputs
     runs-on: macos-latest
+    concurrency:
+      group: "builds/otp/${{ matrix.arch }}/macos/builds.txt"
     env:
       OTP_REF_NAME: ${{ inputs.otp-ref-name }}
       OPENSSL_VERSION: ${{ inputs.openssl-version }}
