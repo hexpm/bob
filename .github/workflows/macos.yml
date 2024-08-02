@@ -1,0 +1,16 @@
+name: Build macOS
+on:
+  schedule:
+    # Run every 5 minute
+    - cron: '*/5 * * * *'
+jobs:
+  schedule:
+    if: github.event.schedule
+    name: Schedule
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          latest_sha=$(gh api repos/erlang/otp/commits/master --jq .sha)
+          echo "Latest SHA: $latest_sha"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
