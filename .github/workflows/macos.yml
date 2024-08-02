@@ -11,9 +11,6 @@ on:
       otp-ref:
       openssl-version:
         default: "3.1.6"
-
-  # TODO: remove push: before merging
-  push:
 concurrency: builds_txt
 jobs:
   schedule:
@@ -32,12 +29,10 @@ jobs:
     if: github.event.inputs
     runs-on: macos-latest
     env:
-      # TODO: Remove ` || ...` before merging.
-      OTP_REF_NAME: ${{ inputs.otp-ref-name || 'OTP-27.0.1' }}
-      OPENSSL_VERSION: ${{ inputs.openssl-version || '3.1.6' }}
+      OTP_REF_NAME: ${{ inputs.otp-ref-name }}
+      OPENSSL_VERSION: ${{ inputs.openssl-version }}
       OTP_DIR: /tmp/builds/otp-${{ inputs.otp-ref-name || 'OTP-27.0.1' }}-openssl-${{ inputs.openssl-version || '3.1.6' }}-macos-${{ matrix.arch }}
-      # TODO: use {{ github.sha }}
-      OTP_REF: ${{ inputs.otp-ref || 'ee9628e7ed09ef02e767994a6da5b7a225316aaa' }}
+      OTP_REF: ${{ inputs.otp-ref }}
     strategy:
       matrix:
         arch: [amd64, arm64]
