@@ -7,8 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       otp-ref-name:
-        default: "OTP-27.0.1"
+        required: true
       otp-ref:
+        required: true
       openssl-version:
         default: "3.1.6"
 concurrency: builds_txt
