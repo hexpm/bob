@@ -83,7 +83,7 @@ jobs:
             ${tgz} \
             "${s3_base_url}/${tgz}" \
             --cache-control "public,max-age=3600" \
-            --metadata '{"surrogate-key":"builds builds/otp ${surrogate_key}","surrogate-control":"public,max-age=604800"}'
+            --metadata "{\"surrogate-key\":\"builds builds/otp ${surrogate_key}\",\"surrogate-control\":\"public,max-age=604800\"}"
 
           purge_key ${surrogate_key}
 
@@ -102,7 +102,7 @@ jobs:
             builds.txt \
             ${s3_base_url}/builds.txt \
             --cache-control "public,max-age=3600" \
-            --metadata '{"surrogate-key":"builds builds/otp ${surrogate_key}","surrogate-control":"public,max-age=604800"}'
+            --metadata "{\"surrogate-key\":\"builds builds/otp ${surrogate_key}\",\"surrogate-control\":\"public,max-age=604800\"}"
 
           purge_key ${surrogate_key}
         env:
