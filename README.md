@@ -33,10 +33,7 @@ Documentation tarballs are also uploaded to `https://repo.hex.pm/docs/{APPLICATI
 
 ## Erlang builds
 
-Erlang builds compiled on Ubuntu LTS versions and macOS are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
-
-> [!WARNING]
-> macOS builds are currently in beta and can change anytime. Only OTP 27+ is supported. Builds are triggered manually at the moment.
+Erlang builds compiled on Ubuntu LTS versions are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
 
 After the builds complete they will be available at `https://builds.hex.pm/builds/otp/${ARCH}/${OS_VER}/${REF}.tar.gz` where `${ARCH}` is the CPU architecture, `${OS_VER}` is the OS name and version, and `${REF}` is the name of the git tag or branch.
 
@@ -45,19 +42,17 @@ Supported architectures:
   * `amd64`
   * `arm64`
 
-Supported OS/versions:
+Supported OS versions:
 
   * `ubuntu-20.04`
   * `ubuntu-22.04`
   * `ubuntu-24.04`
-  * `macos`
 
 Examples of URLs are:
 
   * https://builds.hex.pm/builds/otp/amd64/ubuntu-20.04/master.tar.gz
   * https://builds.hex.pm/builds/otp/arm64/ubuntu-22.04/OTP-26.0.tar.gz
   * https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/maint.tar.gz
-  * https://builds.hex.pm/builds/otp/arm64/macos/OTP-27.0.1.tar.gz
 
 For lists of builds see:
 
@@ -65,13 +60,10 @@ For lists of builds see:
     * https://builds.hex.pm/builds/otp/amd64/ubuntu-20.04/builds.txt
     * https://builds.hex.pm/builds/otp/amd64/ubuntu-22.04/builds.txt
     * https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt
-    * https://builds.hex.pm/builds/otp/amd64/macos/builds.txt
-
   * `arm64`:
     * https://builds.hex.pm/builds/otp/arm64/ubuntu-20.04/builds.txt
     * https://builds.hex.pm/builds/otp/arm64/ubuntu-22.04/builds.txt
     * https://builds.hex.pm/builds/otp/arm64/ubuntu-24.04/builds.txt
-    * https://builds.hex.pm/builds/otp/arm64/macos/builds.txt
 
 ## Docker images
 
