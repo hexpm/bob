@@ -1,16 +1,33 @@
 name: Build macOS
 on:
   schedule:
-    # Run every 5 minute
-    - cron: '*/5 * * * *'
+    # Run hourly
+    - cron: '0 * * * *'
+
+  workflow_dispatch:
+    inputs:
+      otp-ref-name:
+        default: "OTP-27.0.1"
+      otp-ref:
+      openssl-version:
+        default: "3.1.6"
 jobs:
   schedule:
     if: github.event.schedule
-    name: Schedule
+    name: "Schedule"
     runs-on: ubuntu-latest
     steps:
       - run: |
-          latest_sha=$(gh api repos/erlang/otp/commits/master --jq .sha)
-          echo "Latest SHA: $latest_sha"
+          ref=$(gh api repos/erlang/otp/commits/master --jq .sha)
+          gh workflow run --repo hexpm/bob macos.yml --field otp-ref-name=master --field otp-ref=$ref
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    if: github.event.inputs
+    name: "Build OTP macOS"
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo ${{ inputs.otp-ref-name }}
+          echo ${{ inputs.otp-ref }}
