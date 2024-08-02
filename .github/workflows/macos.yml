@@ -22,6 +22,9 @@ jobs:
       - run: |
           ref=$(gh api repos/erlang/otp/commits/master --jq .sha)
           gh workflow run --repo hexpm/bob macos.yml --field otp-ref-name=master --field otp-ref=$ref
+
+          ref=$(gh api repos/erlang/otp/commits/maint --jq .sha)
+          gh workflow run --repo hexpm/bob macos.yml --field otp-ref-name=maint --field otp-ref=$ref
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
