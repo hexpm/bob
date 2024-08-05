@@ -36,7 +36,7 @@ jobs:
     env:
       OTP_REF_NAME: ${{ inputs.otp-ref-name }}
       OPENSSL_VERSION: ${{ inputs.openssl-version }}
-      OTP_DIR: /tmp/builds/otp-${{ inputs.otp-ref-name || 'OTP-27.0.1' }}-openssl-${{ inputs.openssl-version || '3.1.6' }}-macos-${{ matrix.arch }}
+      OTP_DIR: /tmp/builds/otp-${{ inputs.otp-ref-name }}-${{ inputs.otp-ref }}-openssl-${{ inputs.openssl-version }}-macos-${{ matrix.arch }}
       OTP_REF: ${{ inputs.otp-ref }}
     strategy:
       matrix:
@@ -52,11 +52,11 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ env.OTP_DIR }}
-          key: otp-${{ env.OTP_REF_NAME }}-openssl-${{ env.OPENSSL_VERSION }}-macos-${{ matrix.arch }}
+          key: otp-${{ env.OTP_REF }}-openssl-${{ env.OPENSSL_VERSION }}-macos-${{ matrix.arch }}
 
       - name: Build
         run: |
-          sh priv/scripts/otp/build_otp_macos.sh "${{ env.OTP_REF_NAME }}" "${{ env.OTP_REF_NAME }}" "${{ matrix.arch }}"
+          sh priv/scripts/otp/build_otp_macos.sh "${{ env.OTP_REF_NAME }}" "${{ env.OTP_REF }}" "${{ matrix.arch }}"
 
       - name: Upload
         run: |
