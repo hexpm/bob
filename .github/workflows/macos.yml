@@ -28,7 +28,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build:
-    name: "Build OTP macOS ${{ matrix.arch }}"
+    name: "Build OTP macOS ${{ inputs.otp-ref-name }} ${{ matrix.arch }}"
     if: github.event.inputs
     runs-on: macos-latest
     concurrency:

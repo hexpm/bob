@@ -77,7 +77,7 @@ build_otp() {
   local src_dir=/tmp/builds/src-otp-${ref_name}
   local test_cmd="erl -noshell -eval 'io:format(\"~s~s~n\", [erlang:system_info(system_version), erlang:system_info(system_architecture)]), ok = crypto:start(), io:format(\"crypto ok~n\"), halt().'"
 
-  if [[ "$ref_name" == *maint-* || "$ref_name" == *master* ]]; then
+  if [[ "$ref_name" == *maint-* || "$ref_name" == maint || "$ref_name" == master ]]; then
     rm -rf ${rel_dir} ${src_dir}
   fi
 
