@@ -50,7 +50,8 @@ RUN apt-get update && \
     ca-certificates \
     libodbc1 \
     libssl1.1 \
-    libsctp1 && \
+    libsctp1 \
+    netbase && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

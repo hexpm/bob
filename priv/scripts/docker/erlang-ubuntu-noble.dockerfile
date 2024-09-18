@@ -44,7 +44,8 @@ RUN if [ "${ARCH}" = "amd64" ]; then \
         ca-certificates \
         libodbc2 \
         libssl3t \
-        libsctp1; \
+        libsctp1 \
+        netbase; \
         apt-get clean; \
         rm -rf /var/lib/apt/lists/*; \
     elif [ "${ARCH}" = "arm64" ]; then \
@@ -53,7 +54,8 @@ RUN if [ "${ARCH}" = "amd64" ]; then \
         ca-certificates \
         libodbc2 \
         libssl3t64 \
-        libsctp1; \
+        libsctp1 \
+        netbase; \
         apt-get clean; \
         rm -rf /var/lib/apt/lists/*; \
     fi
