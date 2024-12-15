@@ -1,11 +1,10 @@
 defmodule Bob do
-  def log_error(kind, error, stacktrace) do
-    formatted_banner = Exception.format_banner(kind, error, stacktrace)
+  def log_error(exception, stacktrace) do
+    formatted_banner = Exception.format_banner(:error, exception, stacktrace)
     formatted_stacktrace = Exception.format_stacktrace(stacktrace)
-    exception = Exception.normalize(kind, error, stacktrace)
 
     IO.puts(:stderr, formatted_banner <> "\n" <> formatted_stacktrace)
-    Rollbax.report(kind, exception, stacktrace)
+    Sentry.capture_exception(exception, stacktrace: stacktrace)
   end
 
   def build_elixir(ref_name) do

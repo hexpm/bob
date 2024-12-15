@@ -6,7 +6,6 @@ config :bob,
 
 config :logger, level: :info
 
-config :rollbax,
-  environment: to_string(Mix.env()),
-  enabled: true,
-  enable_crash_reports: true
+config :sentry,
+  enable_source_code_context: true,
+  root_source_code_paths: [File.cwd!()]

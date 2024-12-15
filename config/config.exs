@@ -58,6 +58,4 @@ config :porcelain, driver: Porcelain.Driver.Basic
 
 config :logger, :console, format: "$metadata[$level] $message\n"
 
-config :rollbax, enabled: false
-
 import_config "#{Mix.env()}.exs"

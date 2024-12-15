@@ -44,10 +44,10 @@ defmodule Bob.Runner do
       :ok ->
         if job_id, do: Bob.RemoteQueue.success(job_id)
 
-      {:error, kind, error, stacktrace} ->
+      {:error, exception, stacktrace} ->
         if job_id, do: Bob.RemoteQueue.failure(job_id)
         Logger.error("FAILED #{inspect(key)} #{inspect(args)}")
-        Bob.log_error(kind, error, stacktrace)
+        Bob.log_error(exception, stacktrace)
     end
 
     state = update_in(state.tasks, &Map.delete(&1, ref))
@@ -80,9 +80,9 @@ defmodule Bob.Runner do
     {time, _} = :timer.tc(fn -> run_task_fun(key, args) end)
     Logger.info("COMPLETED #{inspect(key)} #{inspect(args)} (#{time / 1_000_000}s)")
     :ok
-  catch
-    kind, error ->
-      {:error, kind, error, __STACKTRACE__}
+  rescue
+    exception ->
+      {:error, exception, __STACKTRACE__}
   end
 
   defp run_task_fun({module, key}, args), do: apply(module, :run, [key | args])
