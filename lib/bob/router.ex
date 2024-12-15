@@ -1,12 +1,8 @@
 defmodule Bob.Router do
   use Plug.Router
-  use Bob.Plug.Rollbax
+  use Sentry.PlugCapture
 
   import Plug.Conn
-
-  def call(conn, opts) do
-    Bob.Plug.Exception.call(conn, fun: &super(&1, opts))
-  end
 
   plug(Bob.Plug.Forwarded)
   plug(Bob.Plug.Status)
@@ -23,6 +19,7 @@ defmodule Bob.Router do
     json_decoder: Jason
   )
 
+  plug(Sentry.PlugContext)
   plug(:match)
   plug(:dispatch)
 

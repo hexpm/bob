@@ -4,6 +4,8 @@ defmodule Bob.Application do
   def start(_type, _args) do
     opts = [port: port(), compress: true]
 
+    :logger.add_handler(:sentry_handler, Sentry.LoggerHandler, %{})
+
     setup_docker()
     setup_gsutil()
     setup_tarsnap()

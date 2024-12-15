@@ -21,9 +21,10 @@ config :ex_aws,
   access_key_id: System.fetch_env!("BOB_S3_ACCESS_KEY"),
   secret_access_key: System.fetch_env!("BOB_S3_SECRET_KEY")
 
-config :rollbax,
-  access_token: System.fetch_env!("BOB_ROLLBAR_ACCESS_TOKEN"),
-  custom: %{
-    "bob-who" => System.fetch_env!("BOB_WHO"),
-    "bob-hostname" => System.fetch_env!("BOB_HOSTNAME")
+config :sentry,
+  dsn: System.fetch_env!("BOB_SENTRY_DSN"),
+  environment_name: System.fetch_env!("BOB_ENV"),
+  tags: %{
+    bob_who: System.fetch_env!("BOB_WHO"),
+    bob_hostname: System.fetch_env!("BOB_HOSTNAME")
   }
