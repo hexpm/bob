@@ -16,7 +16,7 @@ defmodule Bob.Job.DockerChecker do
       {"ubuntu",
        [
          # 24.04
-         ~r/^noble-\d{8}$/,
+         ~r/^noble-\d{8}(\.\d)?$/,
          # 22.04
          ~r/^jammy-\d{8}$/,
          # 20.04
