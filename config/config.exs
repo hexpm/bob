@@ -56,6 +56,6 @@ config :mime, :types, %{
 
 config :porcelain, driver: Porcelain.Driver.Basic
 
-config :logger, :console, format: "$metadata[$level] $message\n"
+config :logger, :default_formatter, format: "$metadata[$level] $message\n"
 
 import_config "#{Mix.env()}.exs"
