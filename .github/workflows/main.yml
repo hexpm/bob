@@ -3,36 +3,18 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  format:
-    name: Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Install OTP and Elixir
-        uses: erlef/setup-beam@v1
-        with:
-          otp-version: 25.1
-          elixir-version: 1.14.0
-
-      - name: Install dependencies
-        run: mix deps.get
-
-      - name: Check mix format
-        run: mix format --check-formatted
-
   test:
     name: Test
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: 25.1
-          elixir-version: 1.14.0
+          otp-version: 27.2
+          elixir-version: 1.18.1
 
       - name: Install dependencies
         run: |
@@ -42,6 +24,9 @@ jobs:
       - name: Check for compiler warnings
         run: |
           MIX_ENV=test mix compile --warnings-as-errors
+
+      - name: Check mix format
+        run: mix format --check-formatted
 
       - name: Run tests
         run: |
