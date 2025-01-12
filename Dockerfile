@@ -71,7 +71,8 @@ COPY etc/boto /app/.boto
 WORKDIR /app
 
 COPY --from=build /app/_build/prod/rel/bob ./
-RUN chown -R nobody: /app
+RUN mkdir /boto /tarsnap
+RUN chown -R nobody: /app /boto /tarsnap
 USER nobody
 
 ENV HOME=/app

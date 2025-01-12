@@ -4,4 +4,4 @@ config :bob,
   master_schedule: [],
   agent_schedule: []
 
-# config :logger, level: :warning
+config :logger, level: :warning
