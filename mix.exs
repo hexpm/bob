@@ -5,7 +5,7 @@ defmodule Bob.Mixfile do
     [
       app: :bob,
       version: "0.0.1",
-      elixir: "~> 1.8",
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       build_embedded: Mix.env() == :prod,
       releases: releases(),
