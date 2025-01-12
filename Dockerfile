@@ -57,7 +57,7 @@ RUN mix do sentry.package_source_code, release
 FROM debian:${DEBIAN_VERSION} AS app
 
 RUN apt update -y && \
-    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker gnupg gzip libffi-dev libssl-dev openssl pigz python3-dev tar zip
+    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker.io gnupg gzip libffi-dev libssl-dev openssl pigz python3-dev tar zip
 
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \

@@ -15,7 +15,7 @@ defmodule Bob.Application do
     File.mkdir_p!(Bob.tmp_dir())
 
     # TODO: Do not start webserver if we are an agent
-    Plug.Adapters.Cowboy.http(Bob.Router, [], opts)
+    Plug.Cowboy.http(Bob.Router, [], opts)
 
     children = [
       {Task.Supervisor, [name: Bob.Tasks]},

@@ -1,6 +1,10 @@
 defmodule Bob.Plug.Parser do
   alias Plug.Conn
 
+  def init(opts) do
+    opts
+  end
+
   def parse(%Conn{} = conn, "application", "vnd.bob+erlang", _headers, opts) do
     conn
     |> Conn.read_body(opts)
