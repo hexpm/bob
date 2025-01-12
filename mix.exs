@@ -35,7 +35,10 @@ defmodule Bob.Mixfile do
 
   defp releases() do
     [
-      bob: [include_executables_for: [:unix]]
+      bob: [
+        include_executables_for: [:unix],
+        reboot_system_after_config: true
+      ]
     ]
   end
 end
