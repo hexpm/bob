@@ -1,11 +1,11 @@
 # $1 = service
 # $2 = keys
 function fastly_purge {
-  fastly_purge_request $1 $2
+  fastly_purge_request $1 "$2"
   sleep 4
-  fastly_purge_request $1 $2
+  fastly_purge_request $1 "$2"
   sleep 4
-  fastly_purge_request $1 $2
+  fastly_purge_request $1 "$2"
 }
 
 # $1 = service

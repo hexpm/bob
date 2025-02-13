@@ -40,7 +40,6 @@ function push {
   upload_build "$1" ""
   update_builds_txt "$1" "$2" ""
 
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM builds/elixir/txt
   fastly_purge $BOB_FASTLY_SERVICE_BUILDS builds/elixir/txt
 
   PATH=${original_path}
@@ -85,7 +84,6 @@ function upload_build {
     upload_build master "${2}"
   fi
 
-  fastly_purge $BOB_FASTLY_SERVICE_HEXPM "builds/elixir/${version}${2}"
   fastly_purge $BOB_FASTLY_SERVICE_BUILDS "builds/elixir/${version}${2}"
 }
 
