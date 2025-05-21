@@ -16,6 +16,7 @@ defmodule Bob.Job.BuildElixir do
     version = ref_to_version(ref_name)
 
     cond do
+      version_gte(version, "1.18.4") -> ["26.0", "27.0", "28.0"]
       version_gte(version, "1.17.0-0") -> ["25.3", "26.0", "27.0"]
       version_gte(version, "1.15.0-0") -> ["24.3", "25.3", "26.0"]
       version_gte(version, "1.14.4") -> ["23.3", "24.3", "25.3", "26.0"]
