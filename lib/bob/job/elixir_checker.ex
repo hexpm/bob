@@ -4,7 +4,7 @@ defmodule Bob.Job.ElixirChecker do
   def run() do
     for {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/elixir", &expand_ref/1),
         build_ref?(ref_name) do
-      otps = Bob.Job.BuildElixir.elixir_to_otp(ref)
+      otps = Bob.Job.BuildElixir.elixir_to_otp(ref_name)
       Bob.Queue.add(Bob.Job.BuildElixir, [ref_name, ref, otps])
     end
   end
@@ -22,12 +22,16 @@ defmodule Bob.Job.ElixirChecker do
   defp build_ref?(_), do: false
 
   def expand_ref(ref) do
-    ref_otps =
-      Enum.map(Bob.Job.BuildElixir.elixir_to_otp(ref), fn otp ->
-        [major, _minor] = String.split(otp, ".", parts: 2)
-        "#{ref}-otp-#{major}"
-      end)
+    if String.ends_with?(ref, "-latest") do
+      []
+    else
+      ref_otps =
+        Enum.map(Bob.Job.BuildElixir.elixir_to_otp(ref), fn otp ->
+          [major, _minor] = String.split(otp, ".", parts: 2)
+          "#{ref}-otp-#{major}"
+        end)
 
-    [ref] ++ ref_otps
+      [ref] ++ ref_otps
+    end
   end
 end
