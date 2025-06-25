@@ -73,6 +73,7 @@ WORKDIR /app
 COPY --from=build /app/_build/prod/rel/bob ./
 RUN mkdir /boto /persist /tarsnap
 RUN chown -R nobody: /app /boto /persist /tarsnap
+RUN chmod 1777 /tmp
 USER nobody
 
 ENV HOME=/app
