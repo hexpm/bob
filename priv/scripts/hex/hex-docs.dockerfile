@@ -1,4 +1,4 @@
-FROM hexpm/elixir:1.14.1-erlang-25.1.2-ubuntu-jammy-20220428
+FROM hexpm/elixir:1.18.4-erlang-27.3.4.1-ubuntu-jammy-20250530
 
 ENV LANG=C.UTF-8
 
