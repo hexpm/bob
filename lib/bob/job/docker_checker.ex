@@ -29,10 +29,7 @@ defmodule Bob.Job.DockerChecker do
          ~r/^bookworm-\d{8}-slim$/,
          # 11
          ~r/^bullseye-\d{8}$/,
-         ~r/^bullseye-\d{8}-slim$/,
-         # 10
-         ~r/^buster-\d{8}$/,
-         ~r/^buster-\d{8}-slim$/
+         ~r/^bullseye-\d{8}-slim$/
        ]}
     ]
     |> Task.async_stream(
