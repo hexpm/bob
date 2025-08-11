@@ -24,6 +24,9 @@ defmodule Bob.Job.DockerChecker do
        ]},
       {"debian",
        [
+         # 13
+         ~r/^trixie-\d{8}$/,
+         ~r/^trixie-\d{8}-slim$/,
          # 12
          ~r/^bookworm-\d{8}$/,
          ~r/^bookworm-\d{8}-slim$/,
@@ -120,6 +123,9 @@ defmodule Bob.Job.DockerChecker do
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-1" <> _), do: false
   defp build_erlang_ref?("debian", "bullseye-" <> _, "OTP-1" <> _), do: false
   defp build_erlang_ref?("ubuntu", "focal-" <> _, "OTP-1" <> _), do: false
+
+  defp build_erlang_ref?("debian", "trixie-" <> _, "OTP-" <> version),
+    do: build_openssl_3?(version)
 
   defp build_erlang_ref?("debian", "bookworm-" <> _, "OTP-" <> version),
     do: build_openssl_3?(version)
