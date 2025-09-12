@@ -12,6 +12,7 @@ function fastly_purge {
 # $2 = keys
 function fastly_purge_request {
   curl \
+    --fail \
     -X POST \
     -H "Fastly-Key: ${BOB_FASTLY_KEY}" \
     -H "Accept: application/json" \
