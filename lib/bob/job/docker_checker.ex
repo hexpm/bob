@@ -365,7 +365,7 @@ defmodule Bob.Job.DockerChecker do
   end
 
   defp cmp_elixir_tags({"v" <> elixir_left, otp_left}, {"v" <> elixir_right, otp_right}) do
-    case Version.compare(elixir_left, elixir_right) do
+    case Version.compare(normalize_version(elixir_left), normalize_version(elixir_right)) do
       :gt -> true
       :eq -> otp_left > otp_right
       :lt -> false
@@ -375,7 +375,9 @@ defmodule Bob.Job.DockerChecker do
   defp build_elixir_ref?({"v0." <> _, _major_otp}), do: false
 
   defp build_elixir_ref?({"v" <> version, _major_otp}) do
-    case Version.parse(version) do
+    normalized_version = normalize_version(version)
+
+    case Version.parse(normalized_version) do
       # don't build RCs for < 1.12
       {:ok, %Version{major: 1, minor: minor, pre: pre}} when minor < 12 and pre != [] -> false
       {:ok, %Version{}} -> true
@@ -384,6 +386,14 @@ defmodule Bob.Job.DockerChecker do
   end
 
   defp build_elixir_ref?(_), do: false
+
+  defp normalize_version(version) do
+    case String.split(version, ".") do
+      [major, minor] -> "#{major}.#{minor}.0"
+      [_major, _minor | _rest] -> version
+      _ -> version
+    end
+  end
 
   def diff(expected, current) do
     current = MapSet.new(current)
