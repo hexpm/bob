@@ -65,6 +65,7 @@ defmodule Bob.Queue do
 
     case :queue.out(queue) do
       {{:value, args}, queue} ->
+        Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
         now = NaiveDateTime.utc_now()
         id = :erlang.unique_integer()
 
@@ -79,10 +80,26 @@ defmodule Bob.Queue do
   end
 
   def handle_call({:success, id}, _from, state) do
+    case Map.fetch(state.running, id) do
+      {:ok, {key, args, _created}} ->
+        Logger.info("SUCCESS #{inspect(key)} #{inspect(args)}")
+
+      _ ->
+        :ok
+    end
+
     {:reply, :ok, remove_job(id, state)}
   end
 
   def handle_call({:failure, id}, _from, state) do
+    case Map.fetch(state.running, id) do
+      {:ok, {key, args, _created}} ->
+        Logger.info("FAILURE #{inspect(key)} #{inspect(args)}")
+
+      _ ->
+        :ok
+    end
+
     # Right now we just delete the job instead of retrying
     # under the assumption that a job will eventually be added back
     # Because of this the behaviour is the same as the success case
