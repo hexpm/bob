@@ -206,7 +206,6 @@ defmodule Bob.Job.DockerChecker do
     |> Enum.map(fn {ref_name, _ref} -> ref_name end)
     |> Enum.filter(&String.starts_with?(&1, "OTP-"))
     |> Enum.sort(&(cmp_erlang_tags(&1, &2) != :lt))
-    |> Enum.dedup_by(&dedup_erlang_ref_by/1)
   end
 
   defp cmp_erlang_tags("OTP-" <> left, "OTP-" <> right) do
@@ -248,24 +247,6 @@ defmodule Bob.Job.DockerChecker do
       |> Enum.map(&String.to_integer/1)
 
     {components, pre || []}
-  end
-
-  defp dedup_erlang_ref_by("OTP-" <> version) do
-    version
-    |> version_components()
-    |> Enum.take(2)
-  end
-
-  defp dedup_erlang_ref_by(other) do
-    other
-  end
-
-  defp version_components(version) do
-    version
-    |> String.split(["-"])
-    |> List.first()
-    |> String.split(["."])
-    |> Enum.map(&String.to_integer/1)
   end
 
   def erlang_tags() do
