@@ -318,28 +318,8 @@ defmodule Bob.Job.DockerChecker do
       |> Stream.filter(&build_elixir_ref?/1)
       |> Enum.sort(&cmp_elixir_tags/2)
 
-    versions =
-      all_builds
-      |> Enum.reject(fn {_elixir, otp} -> otp end)
-      |> Enum.map(fn {elixir, _otp} -> elixir end)
-      |> Enum.dedup_by(&dedup_elixir_ref_by/1)
-      |> MapSet.new()
-
     all_builds
     |> Stream.reject(fn {_elixir, otp} -> otp == nil end)
-    |> Stream.filter(fn {elixir, _otp} -> elixir in versions end)
-  end
-
-  defp dedup_elixir_ref_by("v" <> version) do
-    version
-    |> String.split(["-"])
-    |> List.first()
-    |> String.split(["."])
-    |> Enum.take(2)
-  end
-
-  defp dedup_elixir_ref_by(other) do
-    other
   end
 
   def elixir_tags() do
@@ -419,7 +399,7 @@ defmodule Bob.Job.DockerChecker do
   defp skip_elixir_for_erlang?(_erlang), do: false
 
   defp skip_elixir?(elixir) do
-    Version.compare(elixir, "1.10.0-0") == :lt
+    Version.compare(normalize_version(elixir), "1.10.0-0") == :lt
   end
 
   def manifest() do
