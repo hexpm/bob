@@ -2,4 +2,4 @@
 
 set -euox pipefail
 
-docker system prune -af --filter "until=6h"
+docker system prune -af --filter "until=3h"
