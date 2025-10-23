@@ -65,7 +65,7 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
 
 COPY --from=build /usr/bin/tarsnap* /usr/bin/
 
-COPY etc/tarsnap.conf /etc/tarsnap/tarsnap.conf
+COPY etc/tarsnap.conf /etc/tarsnap.conf
 COPY etc/boto /app/.boto
 
 WORKDIR /app
