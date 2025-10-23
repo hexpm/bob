@@ -19,6 +19,7 @@ pigz -d -c logs/*.gz | pigz -9 -c - > logs-fastly.txt.gz
 
 echo ""
 echo "### upload ###"
+tarsnap -d -f hex-s3-${today}.part || true
 tarsnap -c -f hex-s3-${today} hex-s3
 gsutil -q cp logs-fastly.txt.gz gs://hexpm-backup/logs/daily/hex-fastly-${yesterday}.txt.gz
 
