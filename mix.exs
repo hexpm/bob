@@ -28,7 +28,8 @@ defmodule Bob.Mixfile do
       {:porcelain, "~> 2.0"},
       {:sentry, "~> 10.2"},
       {:sweet_xml, "~> 0.5"},
-      {:logster, "~> 1.0"}
+      {:logster, "~> 1.0"},
+      {:observer_cli, "~> 1.7"}
     ]
   end
 
