@@ -31,7 +31,7 @@ config :bob,
     ],
     [
       module: Bob.Job.DockerChecker,
-      period: {60, :min}
+      period: {15, :min}
     ]
   ],
   agent_schedule: [
