@@ -94,16 +94,15 @@ defmodule Bob.DockerHub.Cache do
         try do
           case GenServer.call(__MODULE__, {:lock, repo}, @timeout + @timeout_grace_time) do
             :aquired ->
-              result = fun.()
+              on_result = fn results ->
+                Enum.each(results, fn {tag, archs} ->
+                  :ets.insert(__MODULE__, {{:data, repo, tag}, archs})
+                end)
+              end
 
-              :ets.insert(
-                __MODULE__,
-                Enum.map(result, fn {tag, archs} -> {{:data, repo, tag}, archs} end)
-              )
-
+              :ok = fun.(on_result)
               :ets.insert(__MODULE__, {{:status, repo}, true})
-
-              result
+              read_from_ets(repo)
 
             :done ->
               lookup(repo, fun)
@@ -113,8 +112,12 @@ defmodule Bob.DockerHub.Cache do
         end
 
       [{_, true}] ->
-        :ets.select(__MODULE__, [{{{:data, repo, :"$1"}, :"$2"}, [], [:"$$"]}])
-        |> Enum.map(&List.to_tuple/1)
+        read_from_ets(repo)
     end
+  end
+
+  defp read_from_ets(repo) do
+    :ets.select(__MODULE__, [{{{:data, repo, :"$1"}, :"$2"}, [], [:"$$"]}])
+    |> Enum.map(&List.to_tuple/1)
   end
 end

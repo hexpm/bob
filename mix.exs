@@ -23,7 +23,6 @@ defmodule Bob.Mixfile do
     [
       {:ex_aws_s3, "~> 2.0"},
       {:hackney, "~> 1.11"},
-      {:jason, "~> 1.1"},
       {:plug_cowboy, "~> 2.0"},
       {:porcelain, "~> 2.0"},
       {:sentry, "~> 10.2"},

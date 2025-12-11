@@ -5,20 +5,25 @@ defmodule Bob.DockerHub.Pager do
   @timeout 60 * 60 * 1000
 
   def start_link(url) do
-    GenServer.start_link(__MODULE__, url)
+    GenServer.start_link(__MODULE__, {url, nil})
+  end
+
+  def start_link(url, on_result) do
+    GenServer.start_link(__MODULE__, {url, on_result})
   end
 
   def wait(server) do
     GenServer.call(server, :wait, @timeout)
   end
 
-  def init(url) do
-    {:ok, next_request(%{url: url, page: 1, tasks: MapSet.new(), results: [], reply: nil})}
+  def init({url, on_result}) do
+    {:ok, next_request(%{url: url, on_result: on_result, page: 1, tasks: MapSet.new(), results: [], reply: nil})}
   end
 
   def handle_call(:wait, from, state) do
     if MapSet.size(state.tasks) == 0 do
-      {:stop, :normal, Enum.concat(state.results), state}
+      result = if state.on_result, do: :ok, else: Enum.concat(state.results)
+      {:stop, :normal, result, state}
     else
       state = %{state | reply: from}
       {:noreply, state}
@@ -26,7 +31,15 @@ defmodule Bob.DockerHub.Pager do
   end
 
   def handle_info({ref, {:ok, result}}, state) do
-    state = %{state | tasks: MapSet.delete(state.tasks, ref), results: [result | state.results]}
+    state =
+      if state.on_result do
+        state.on_result.(result)
+        state
+      else
+        %{state | results: [result | state.results]}
+      end
+
+    state = %{state | tasks: MapSet.delete(state.tasks, ref)}
     {:noreply, next_request(state)}
   end
 
@@ -34,7 +47,8 @@ defmodule Bob.DockerHub.Pager do
     state = %{state | tasks: MapSet.delete(state.tasks, ref)}
 
     if MapSet.size(state.tasks) == 0 do
-      GenServer.reply(state.reply, Enum.concat(state.results))
+      result = if state.on_result, do: :ok, else: Enum.concat(state.results)
+      GenServer.reply(state.reply, result)
       {:stop, :normal, state}
     else
       {:noreply, state}
@@ -60,8 +74,8 @@ defmodule Bob.DockerHub.Pager do
 
           case result do
             {:ok, 200, _headers, body} ->
-              body = Jason.decode!(body)
-              {:ok, Enum.flat_map(body["results"], &List.wrap(Bob.DockerHub.parse(&1)))}
+              decoded = JSON.decode!(body)
+              {:ok, Enum.flat_map(decoded["results"], &List.wrap(Bob.DockerHub.parse(&1)))}
 
             {:ok, 404, _headers, _body} ->
               :done
