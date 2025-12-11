@@ -2,8 +2,6 @@ defmodule Bob.Application do
   use Application
 
   def start(_type, _args) do
-    opts = [port: port(), compress: true]
-
     :logger.add_handler(:sentry_handler, Sentry.LoggerHandler, %{})
 
     setup_docker()
@@ -14,16 +12,14 @@ defmodule Bob.Application do
 
     File.mkdir_p!(Bob.tmp_dir())
 
-    # TODO: Do not start webserver if we are an agent
-    Plug.Cowboy.http(Bob.Router, [], opts)
-
     children = [
       {Task.Supervisor, [name: Bob.Tasks]},
       Bob.DockerHub.Auth,
       Bob.DockerHub.Cache,
       Bob.Queue,
       runner_spec(),
-      {Bob.Schedule, [schedule()]}
+      {Bob.Schedule, [schedule()]},
+      {Plug.Cowboy, scheme: :http, plug: Bob.Router, options: [port: port(), compress: true]}
     ]
 
     opts = [strategy: :one_for_one, name: Bob.Supervisor]
