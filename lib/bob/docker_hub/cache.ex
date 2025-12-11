@@ -102,7 +102,7 @@ defmodule Bob.DockerHub.Cache do
 
               :ok = fun.(on_result)
               :ets.insert(__MODULE__, {{:status, repo}, true})
-              read_from_ets(repo)
+              :ok
 
             :done ->
               lookup(repo, fun)
@@ -112,12 +112,19 @@ defmodule Bob.DockerHub.Cache do
         end
 
       [{_, true}] ->
-        read_from_ets(repo)
+        :ok
     end
   end
 
-  defp read_from_ets(repo) do
-    :ets.select(__MODULE__, [{{{:data, repo, :"$1"}, :"$2"}, [], [:"$$"]}])
-    |> Enum.map(&List.to_tuple/1)
+  def stream(repo) do
+    Stream.resource(
+      fn -> :ets.match(__MODULE__, {{:data, repo, :"$1"}, :"$2"}, 1000) end,
+      fn
+        :"$end_of_table" -> {:halt, nil}
+        {matches, cont} ->
+          {Enum.map(matches, fn [tag, archs] -> {tag, archs} end), :ets.match(cont)}
+      end,
+      fn _ -> :ok end
+    )
   end
 end

@@ -23,11 +23,14 @@ defmodule Bob.DockerHub do
   end
 
   def fetch_repo_tags_from_cache(repo) do
-    Bob.DockerHub.Cache.lookup(repo, fn on_result ->
-      url = @dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100"
-      {:ok, server} = Bob.DockerHub.Pager.start_link(url, on_result)
-      Bob.DockerHub.Pager.wait(server)
-    end)
+    :ok =
+      Bob.DockerHub.Cache.lookup(repo, fn on_result ->
+        url = @dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100"
+        {:ok, server} = Bob.DockerHub.Pager.start_link(url, on_result)
+        Bob.DockerHub.Pager.wait(server)
+      end)
+
+    Bob.DockerHub.Cache.stream(repo)
   end
 
   def fetch_tag(repo, tag) do
