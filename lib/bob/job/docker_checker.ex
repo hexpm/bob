@@ -278,7 +278,7 @@ defmodule Bob.Job.DockerChecker do
     Stream.flat_map(erlang_tags(), fn {erlang, os, os_version, erlang_arch} ->
       if not skip_elixir_for_erlang?(erlang) and os_version in builds[os] do
         Stream.flat_map(refs, fn {"v" <> elixir, otp_major} ->
-          if not skip_elixir?(elixir) and compatible_elixir_and_erlang?(otp_major, erlang) do
+          if compatible_elixir_and_erlang?(otp_major, erlang) do
             [{elixir, erlang, os, os_version, erlang_arch}]
           else
             []
@@ -291,16 +291,14 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def elixir_builds() do
-    all_builds =
-      "builds/elixir"
-      |> Bob.Repo.fetch_built_refs()
-      |> Stream.map(fn {build_name, _ref} -> build_name end)
-      |> Stream.map(&split_elixir_build/1)
-      |> Stream.filter(&build_elixir_ref?/1)
-      |> Enum.sort(&cmp_elixir_tags/2)
-
-    all_builds
-    |> Stream.reject(fn {_elixir, otp} -> otp == nil end)
+    "builds/elixir"
+    |> Bob.Repo.fetch_built_refs()
+    |> Stream.map(fn {build_name, _ref} -> build_name end)
+    |> Stream.map(&split_elixir_build/1)
+    |> Stream.filter(&build_elixir_ref?/1)
+    |> Enum.sort(&cmp_elixir_tags/2)
+    |> Enum.reject(fn {_elixir, otp} -> otp == nil end)
+    |> Enum.reject(fn {"v" <> elixir, _otp} -> skip_elixir?(elixir) end)
   end
 
   def elixir_tags() do
@@ -310,7 +308,7 @@ defmodule Bob.Job.DockerChecker do
   def elixir_tags(arch) do
     "hexpm/elixir-#{arch}"
     |> Bob.DockerHub.fetch_repo_tags_from_cache()
-    |> Enum.map(fn {tag, [^arch]} ->
+    |> Stream.map(fn {tag, [^arch]} ->
       [elixir, erlang, os, os_version] =
         Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
 
