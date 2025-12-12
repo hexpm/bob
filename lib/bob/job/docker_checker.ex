@@ -8,10 +8,10 @@ defmodule Bob.Job.DockerChecker do
     [
       {"alpine",
        [
+         ~r/^3\.23\.\d+$/,
          ~r/^3\.22\.\d+$/,
          ~r/^3\.21\.\d+$/,
-         ~r/^3\.20\.\d+$/,
-         ~r/^3\.19\.\d+$/
+         ~r/^3\.20\.\d+$/
        ]},
       {"ubuntu",
        [
