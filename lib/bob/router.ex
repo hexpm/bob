@@ -16,7 +16,7 @@ defmodule Bob.Router do
   plug(Plug.Parsers,
     pass: ["application/json", "application/vnd.bob+erlang"],
     parsers: [:json, Bob.Plug.Parser],
-    json_decoder: Jason
+    json_decoder: JSON
   )
 
   plug(Sentry.PlugContext)

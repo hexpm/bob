@@ -9,23 +9,28 @@ defmodule Bob.DockerHub do
 
     {:ok, 200, _headers, body} =
       Bob.HTTP.retry("DockerHub #{url}", fn ->
-        :hackney.request(:post, url, headers, Jason.encode!(body), opts)
+        :hackney.request(:post, url, headers, JSON.encode!(body), opts)
       end)
 
-    result = Jason.decode!(body)
+    result = JSON.decode!(body)
     Application.put_env(:bob, :dockerhub_token, result["token"])
   end
 
   def fetch_repo_tags(repo) do
-    (@dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100")
-    |> dockerhub_request()
+    url = @dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100"
+    {:ok, server} = Bob.DockerHub.Pager.start_link(url)
+    Bob.DockerHub.Pager.wait(server)
   end
 
   def fetch_repo_tags_from_cache(repo) do
-    Bob.DockerHub.Cache.lookup(repo, fn ->
-      (@dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100")
-      |> dockerhub_request()
-    end)
+    :ok =
+      Bob.DockerHub.Cache.lookup(repo, fn on_result ->
+        url = @dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100"
+        {:ok, server} = Bob.DockerHub.Pager.start_link(url, on_result)
+        Bob.DockerHub.Pager.wait(server)
+      end)
+
+    Bob.DockerHub.Cache.stream(repo)
   end
 
   def fetch_tag(repo, tag) do
@@ -40,9 +45,7 @@ defmodule Bob.DockerHub do
 
     case result do
       {:ok, 200, _headers, body} ->
-        body
-        |> Jason.decode!()
-        |> parse()
+        parse(JSON.decode!(body))
 
       {:ok, 404, _headers, _body} ->
         nil
@@ -82,12 +85,7 @@ defmodule Bob.DockerHub do
     else
       # DockerHub returns dupes sometimes?
       archs = result["images"] |> Enum.map(&:binary.copy(&1["architecture"])) |> Enum.uniq()
-      {result["name"], archs}
+      {:binary.copy(result["name"]), archs}
     end
-  end
-
-  defp dockerhub_request(url) do
-    {:ok, server} = Bob.DockerHub.Pager.start_link(url)
-    Bob.DockerHub.Pager.wait(server)
   end
 end

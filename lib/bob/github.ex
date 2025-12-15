@@ -27,7 +27,9 @@ defmodule Bob.GitHub do
   end
 
   defp response_to_refs(response) do
-    Enum.map(response, &{&1["name"], &1["commit"]["sha"]})
+    Enum.map(response, fn item ->
+      {:binary.copy(item["name"]), :binary.copy(item["commit"]["sha"])}
+    end)
   end
 
   defp github_request(url) do
@@ -39,7 +41,7 @@ defmodule Bob.GitHub do
     {:ok, 200, headers, body} =
       Bob.HTTP.retry("GitHub #{url}", fn -> :hackney.request(:get, url, [], "", opts) end)
 
-    body = Jason.decode!(body)
+    body = JSON.decode!(body)
 
     if url = next_link(headers) do
       body ++ github_request(url)
