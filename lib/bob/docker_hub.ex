@@ -88,5 +88,4 @@ defmodule Bob.DockerHub do
       {:binary.copy(result["name"]), archs}
     end
   end
-
 end

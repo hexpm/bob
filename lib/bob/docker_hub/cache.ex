@@ -120,7 +120,9 @@ defmodule Bob.DockerHub.Cache do
     Stream.resource(
       fn -> :ets.match(__MODULE__, {{:data, repo, :"$1"}, :"$2"}, 1000) end,
       fn
-        :"$end_of_table" -> {:halt, nil}
+        :"$end_of_table" ->
+          {:halt, nil}
+
         {matches, cont} ->
           {Enum.map(matches, fn [tag, archs] -> {tag, archs} end), :ets.match(cont)}
       end,

@@ -17,7 +17,15 @@ defmodule Bob.DockerHub.Pager do
   end
 
   def init({url, on_result}) do
-    {:ok, next_request(%{url: url, on_result: on_result, page: 1, tasks: MapSet.new(), results: [], reply: nil})}
+    {:ok,
+     next_request(%{
+       url: url,
+       on_result: on_result,
+       page: 1,
+       tasks: MapSet.new(),
+       results: [],
+       reply: nil
+     })}
   end
 
   def handle_call(:wait, from, state) do
