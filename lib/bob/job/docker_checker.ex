@@ -160,11 +160,14 @@ defmodule Bob.Job.DockerChecker do
     end
   end
 
-  defp build_alpine?(alpine_version, erlang_version) do
+  defp build_alpine?(alpine_version, erlang_version_string) do
     alpine_version = version_to_list(alpine_version)
-    erlang_version = parse_otp_ref(erlang_version)
+    erlang_version = parse_otp_ref(erlang_version_string)
 
     cond do
+      alpine_version >= [3, 23] ->
+        erlang_version >= [26] and not String.starts_with?(erlang_version_string, "26.0-rc")
+
       alpine_version >= [3, 17] ->
         build_openssl_3?(erlang_version)
 
