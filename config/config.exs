@@ -33,6 +33,11 @@ config :bob,
       module: Bob.Job.DockerChecker,
       period: {15, :min},
       queue: true
+    ],
+    [
+      module: Bob.Job.DockerTxtUpdater,
+      period: {60, :min},
+      queue: true
     ]
   ],
   agent_schedule: [
