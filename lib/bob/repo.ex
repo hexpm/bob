@@ -3,10 +3,17 @@ defmodule Bob.Repo do
 
   # TODO: Use S3 object metadata
   def fetch_built_refs(build_path) do
-    Path.join(build_path, "builds.txt")
-    |> fetch_file()
-    |> String.split("\n", trim: true)
-    |> Map.new(&line_to_ref/1)
+    path = Path.join(build_path, "builds.txt")
+
+    case ExAws.S3.get_object(@bucket, path, []) |> ExAws.request() do
+      {:ok, %{body: body}} ->
+        body
+        |> String.split("\n", trim: true)
+        |> Map.new(&line_to_ref/1)
+
+      {:error, {:http_error, 404, _}} ->
+        %{}
+    end
   end
 
   def fetch_file(path) do
