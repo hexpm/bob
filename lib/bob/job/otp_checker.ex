@@ -1,6 +1,6 @@
 defmodule Bob.Job.OTPChecker do
   @repo "erlang/otp"
-  @linuxes ["ubuntu-20.04", "ubuntu-22.04", "ubuntu-24.04"]
+  @linuxes ["ubuntu-22.04", "ubuntu-24.04", "ubuntu-26.04"]
   @arches ["amd64", "arm64"]
 
   def run(_type) do
@@ -17,21 +17,16 @@ defmodule Bob.Job.OTPChecker do
 
   defp build_ref?(_linux, "OTP-18.0-rc2"), do: false
   defp build_ref?(_linux, "maint-r" <> _), do: false
-  defp build_ref?("ubuntu-20.04", "OTP-" <> version), do: build_ubuntu_20?(version)
-  defp build_ref?("ubuntu-20.04", "maint-" <> version), do: build_ubuntu_20?(version)
   defp build_ref?("ubuntu-22.04", "OTP-" <> version), do: build_ubuntu_22?(version)
   defp build_ref?("ubuntu-22.04", "maint-" <> version), do: build_ubuntu_22?(version)
   defp build_ref?("ubuntu-24.04", "OTP-" <> version), do: build_ubuntu_24?(version)
   defp build_ref?("ubuntu-24.04", "maint-" <> version), do: build_ubuntu_24?(version)
+  defp build_ref?("ubuntu-26.04", "OTP-" <> version), do: build_ubuntu_26?(version)
+  defp build_ref?("ubuntu-26.04", "maint-" <> version), do: build_ubuntu_26?(version)
   defp build_ref?(_linux, "OTP-" <> _), do: true
   defp build_ref?(_linux, "maint" <> _), do: true
   defp build_ref?(_linux, "master" <> _), do: true
   defp build_ref?(_linux, _ref), do: false
-
-  defp build_ubuntu_20?(erlang_version) do
-    erlang_version = parse_otp_ref(erlang_version)
-    erlang_version >= [20]
-  end
 
   defp build_ubuntu_22?(erlang_version) do
     # OpenSSL 3.0 compatibility
@@ -50,6 +45,11 @@ defmodule Bob.Job.OTPChecker do
       version ->
         version >= [24, 3, 4]
     end
+  end
+
+  defp build_ubuntu_26?(erlang_version) do
+    erlang_version = parse_otp_ref(erlang_version)
+    erlang_version >= [26, 0]
   end
 
   defp parse_otp_ref(ref) do
