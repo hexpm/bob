@@ -44,26 +44,25 @@ Supported architectures:
 
 Supported OS versions:
 
-  * `ubuntu-20.04`
   * `ubuntu-22.04`
   * `ubuntu-24.04`
+  * `ubuntu-26.04`
 
 Examples of URLs are:
 
-  * https://builds.hex.pm/builds/otp/amd64/ubuntu-20.04/master.tar.gz
   * https://builds.hex.pm/builds/otp/arm64/ubuntu-22.04/OTP-26.0.tar.gz
   * https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/maint.tar.gz
 
 For lists of builds see:
 
   * `amd64`:
-    * https://builds.hex.pm/builds/otp/amd64/ubuntu-20.04/builds.txt
     * https://builds.hex.pm/builds/otp/amd64/ubuntu-22.04/builds.txt
     * https://builds.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt
+    * https://builds.hex.pm/builds/otp/amd64/ubuntu-26.04/builds.txt
   * `arm64`:
-    * https://builds.hex.pm/builds/otp/arm64/ubuntu-20.04/builds.txt
     * https://builds.hex.pm/builds/otp/arm64/ubuntu-22.04/builds.txt
     * https://builds.hex.pm/builds/otp/arm64/ubuntu-24.04/builds.txt
+    * https://builds.hex.pm/builds/otp/arm64/ubuntu-26.04/builds.txt
 
 ## Docker images
 

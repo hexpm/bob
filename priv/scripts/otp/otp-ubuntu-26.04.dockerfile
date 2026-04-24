@@ -1,7 +1,7 @@
-FROM ubuntu:20.04
+FROM ubuntu:26.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ENV UBUNTU_VERSION=20.04
+ENV UBUNTU_VERSION=26.04
 
 RUN apt-get update
 
@@ -9,12 +9,11 @@ RUN apt-get install -y \
   wget \
   ca-certificates \
   gcc \
-  gcc-9 \
   g++ \
   make \
   automake \
   autoconf \
-  libwxgtk3.0-gtk3-dev \
+  libwxgtk3.2-dev \
   libgl1-mesa-dev \
   libglu1-mesa-dev \
   libpng-dev \
