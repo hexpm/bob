@@ -27,6 +27,10 @@ defmodule Bob.Repo do
     |> Stream.map(&Map.get(&1, :key))
   end
 
+  def write_file(key, content) do
+    ExAws.S3.put_object(@bucket, key, content) |> ExAws.request!()
+  end
+
   defp line_to_ref(line) do
     destructure [ref_name, ref], String.split(line, " ", trim: true)
     {ref_name, ref}
