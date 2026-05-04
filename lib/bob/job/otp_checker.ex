@@ -35,7 +35,7 @@ defmodule Bob.Job.OTPChecker do
   end
 
   defp build_ubuntu_24?(erlang_version) do
-    dev_version? = length(String.split(erlang_version, "-")) > 1
+    dev_version? = String.contains?(erlang_version, "-")
 
     # WX compatibility
     case parse_otp_ref(erlang_version) do
@@ -48,8 +48,16 @@ defmodule Bob.Job.OTPChecker do
   end
 
   defp build_ubuntu_26?(erlang_version) do
-    erlang_version = parse_otp_ref(erlang_version)
-    erlang_version >= [26, 0]
+    dev_version? = String.contains?(erlang_version, "-")
+
+    # C23 compatibility (`bool` keyword)
+    case parse_otp_ref(erlang_version) do
+      [26, 0] ->
+        not dev_version?
+
+      version ->
+        version >= [26, 0]
+    end
   end
 
   defp parse_otp_ref(ref) do
