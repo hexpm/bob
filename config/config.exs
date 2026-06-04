@@ -1,5 +1,7 @@
 import Config
 
+config :bob, ecto_repos: [Bob.Repo]
+
 config :bob,
   master_schedule: [
     [

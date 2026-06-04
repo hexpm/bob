@@ -29,4 +29,10 @@ if config_env() == :prod do
       bob_who: System.fetch_env!("BOB_WHO"),
       bob_hostname: System.fetch_env!("BOB_HOSTNAME")
     }
+
+  if System.get_env("BOB_WHO") == "master" do
+    config :bob, Bob.Repo,
+      url: System.fetch_env!("BOB_DATABASE_URL"),
+      pool_size: String.to_integer(System.get_env("BOB_DB_POOL_SIZE", "10"))
+  end
 end
