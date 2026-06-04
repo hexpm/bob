@@ -12,18 +12,28 @@ defmodule Bob.Application do
 
     File.mkdir_p!(Bob.tmp_dir())
 
-    children = [
-      {Task.Supervisor, [name: Bob.Tasks]},
-      Bob.DockerHub.Auth,
-      Bob.DockerHub.Cache,
-      Bob.Queue,
-      runner_spec(),
-      {Bob.Schedule, [schedule()]},
-      {Plug.Cowboy, scheme: :http, plug: Bob.Router, options: [port: port(), compress: true]}
-    ]
+    children =
+      repo_children() ++
+        [
+          {Task.Supervisor, [name: Bob.Tasks]},
+          Bob.DockerHub.Auth,
+          Bob.DockerHub.Cache,
+          Bob.Queue,
+          runner_spec(),
+          {Bob.Schedule, [schedule()]},
+          {Plug.Cowboy, scheme: :http, plug: Bob.Router, options: [port: port(), compress: true]}
+        ]
 
     opts = [strategy: :one_for_one, name: Bob.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp repo_children() do
+    if Application.get_env(:bob, :master?) do
+      [Bob.Repo]
+    else
+      []
+    end
   end
 
   defp port() do
