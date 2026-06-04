@@ -23,7 +23,7 @@ defmodule Bob.Job.HexDocsChecker do
 
   defp diff() do
     existing =
-      Bob.Repo.list_files("docs/hex-")
+      Bob.Store.list_files("docs/hex-")
       |> Enum.map(fn file ->
         [version] = Regex.run(@file_regex, file, capture: :all_but_first)
         "v" <> version

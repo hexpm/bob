@@ -1,4 +1,4 @@
-defmodule Bob.Repo do
+defmodule Bob.Store do
   @bucket "s3.hex.pm"
 
   # TODO: Use S3 object metadata

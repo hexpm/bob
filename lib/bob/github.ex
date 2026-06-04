@@ -7,7 +7,7 @@ defmodule Bob.GitHub do
         Enum.map(expand_fun.(ref_name), &{&1, ref_name, ref})
       end)
 
-    built = Bob.Repo.fetch_built_refs(build_path)
+    built = Bob.Store.fetch_built_refs(build_path)
 
     existing
     |> Enum.filter(fn {name, _ref_name, ref} ->

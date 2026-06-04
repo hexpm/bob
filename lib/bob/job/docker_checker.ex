@@ -308,7 +308,7 @@ defmodule Bob.Job.DockerChecker do
 
   def elixir_builds() do
     "builds/elixir"
-    |> Bob.Repo.fetch_built_refs()
+    |> Bob.Store.fetch_built_refs()
     |> Stream.map(fn {build_name, _ref} -> build_name end)
     |> Stream.map(&split_elixir_build/1)
     |> Stream.filter(&build_elixir_ref?/1)

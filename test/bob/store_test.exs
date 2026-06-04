@@ -1,7 +1,7 @@
-defmodule Bob.RepoTest do
+defmodule Bob.StoreTest do
   use ExUnit.Case
 
-  alias Bob.Repo
+  alias Bob.Store
 
   setup do
     Bob.FakeHttpClient.reset()
@@ -22,14 +22,14 @@ defmodule Bob.RepoTest do
         body
       )
 
-      assert Repo.fetch_built_refs("builds/otp/amd64/ubuntu-24.04") == %{
+      assert Store.fetch_built_refs("builds/otp/amd64/ubuntu-24.04") == %{
                "OTP-26.2" => "abc123",
                "OTP-27.0" => "def456"
              }
     end
 
     test "returns an empty map when builds.txt does not exist yet" do
-      assert Repo.fetch_built_refs("builds/otp/amd64/ubuntu-26.04") == %{}
+      assert Store.fetch_built_refs("builds/otp/amd64/ubuntu-26.04") == %{}
     end
 
     test "returns an empty map when builds.txt is empty" do
@@ -40,7 +40,7 @@ defmodule Bob.RepoTest do
         ""
       )
 
-      assert Repo.fetch_built_refs("builds/otp/amd64/ubuntu-24.04") == %{}
+      assert Store.fetch_built_refs("builds/otp/amd64/ubuntu-24.04") == %{}
     end
   end
 end
