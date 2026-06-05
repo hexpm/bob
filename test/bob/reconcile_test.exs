@@ -51,6 +51,16 @@ defmodule Bob.ReconcileTest do
       assert Artifacts.base_image_tags("library/alpine") == ["3.23.5"]
     end
 
+    test "keeps existing base image tags when no upstream tag is fully multi-arch" do
+      Artifacts.replace_base_image_tags("library/alpine", ["3.23.5"])
+
+      fetch = fetcher(%{"library/alpine" => [{"3.24.0", ["amd64"]}]})
+
+      Reconcile.reconcile(fetch)
+
+      assert Artifacts.base_image_tags("library/alpine") == ["3.23.5"]
+    end
+
     test "prunes docker tags that vanished upstream" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "stale-tag", ["amd64"])
 
@@ -82,6 +92,19 @@ defmodule Bob.ReconcileTest do
 
       assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"keep-me", ["amd64"]}]
       assert Artifacts.docker_tags("hexpm/elixir-arm64") == [{"fresh-tag", ["arm64"]}]
+    end
+  end
+
+  describe "reconcile_base_images/1" do
+    test "reconciles the base image repos only" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "untouched", ["amd64"])
+
+      fetch = fetcher(%{"library/alpine" => [{"3.23.5", ["amd64", "arm64"]}]})
+
+      Reconcile.reconcile_base_images(fetch)
+
+      assert Artifacts.base_image_tags("library/alpine") == ["3.23.5"]
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"untouched", ["amd64"]}]
     end
   end
 

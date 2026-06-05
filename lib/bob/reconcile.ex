@@ -37,6 +37,11 @@ defmodule Bob.Reconcile do
     :ok
   end
 
+  def reconcile_base_images(fetch \\ &Bob.DockerHub.fetch_repo_tags/1) do
+    sync_base_repos(fetch)
+    :ok
+  end
+
   defp sync_per_arch_repos(fetch) do
     Enum.each(@per_arch_repos, fn {repo, arch} ->
       with_tags(repo, fetch, fn tags ->
@@ -67,19 +72,31 @@ defmodule Bob.Reconcile do
           |> Enum.filter(fn {_tag, archs} -> Enum.all?(@archs, &(&1 in archs)) end)
           |> Enum.map(fn {tag, _archs} -> tag end)
 
-        Bob.Artifacts.replace_base_image_tags(repo, multi_arch)
+        case multi_arch do
+          [] -> Logger.warning("RECONCILE no multi-arch tags for #{repo}, skipping")
+          tags -> Bob.Artifacts.replace_base_image_tags(repo, tags)
+        end
       end)
     end)
   end
 
   defp with_tags(repo, fetch, fun) do
-    case fetch.(repo) do
-      [] -> Logger.warning("RECONCILE empty fetch for #{repo}, skipping")
-      tags -> fun.(tags)
+    case fetch_tags(repo, fetch) do
+      {:ok, []} -> Logger.warning("RECONCILE empty fetch for #{repo}, skipping")
+      {:ok, tags} -> fun.(tags)
+      :error -> :ok
     end
+  end
+
+  defp fetch_tags(repo, fetch) do
+    {:ok, fetch.(repo)}
   rescue
     exception ->
-      Logger.error("RECONCILE failed for #{repo}, skipping: #{Exception.message(exception)}")
+      Logger.error(
+        "RECONCILE fetch failed for #{repo}, skipping: #{Exception.message(exception)}"
+      )
+
+      :error
   end
 
   defp known_archs(archs) do

@@ -33,6 +33,11 @@ config :bob,
       period: :day,
       time: {1, 0, 0},
       queue: true
+    ],
+    [
+      module: Bob.Job.ReconcileBaseImages,
+      period: {1, :hour},
+      queue: true
     ]
   ],
   agent_schedule: [
