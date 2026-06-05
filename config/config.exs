@@ -13,13 +13,15 @@ config :bob,
     [
       module: Bob.Job.OTPChecker,
       args: [:tags],
-      period: {15, :min}
+      period: {15, :min},
+      queue: true
     ],
     [
       module: Bob.Job.OTPChecker,
       args: [:branches],
       period: :day,
-      time: {3, 0, 0}
+      time: {3, 0, 0},
+      queue: true
     ],
     [
       module: Bob.Job.DockerChecker,
