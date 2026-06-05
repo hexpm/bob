@@ -2,7 +2,7 @@ defmodule Bob.Artifacts do
   import Ecto.Query
 
   alias Bob.Repo
-  alias Bob.Artifacts.Artifact
+  alias Bob.Artifacts.{Artifact, DockerTag, BaseImageTag}
 
   @builds_txt_lock 4_771_002
 
@@ -11,6 +11,43 @@ defmodule Bob.Artifacts do
     generate_builds_txt(attrs.arch, attrs.os)
     Bob.Fastly.purge_builds(purge_keys(attrs.arch, attrs.os, attrs.name))
     :ok
+  end
+
+  def add_docker_tag(repo, tag, archs) do
+    Repo.query!(
+      """
+      INSERT INTO docker_tags (repo, tag, archs, built_at)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (repo, tag)
+      DO UPDATE SET
+        archs = (
+          SELECT array_agg(DISTINCT a ORDER BY a)
+          FROM unnest(docker_tags.archs || EXCLUDED.archs) AS a
+        ),
+        built_at = EXCLUDED.built_at
+      """,
+      [repo, tag, archs, NaiveDateTime.utc_now()]
+    )
+
+    :ok
+  end
+
+  def docker_tags(repo) do
+    Repo.all(
+      from(d in DockerTag,
+        where: d.repo == ^repo,
+        select: {d.tag, d.archs}
+      )
+    )
+  end
+
+  def base_image_tags(repo) do
+    Repo.all(
+      from(b in BaseImageTag,
+        where: b.repo == ^repo,
+        select: b.tag
+      )
+    )
   end
 
   def upsert(attrs) do

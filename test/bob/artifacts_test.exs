@@ -2,7 +2,7 @@ defmodule Bob.ArtifactsTest do
   use Bob.DataCase
 
   alias Bob.Artifacts
-  alias Bob.Artifacts.Artifact
+  alias Bob.Artifacts.{Artifact, BaseImageTag}
 
   describe "Artifact.changeset/2" do
     test "casts a posted artifact, parsing the ISO8601 date" do
@@ -121,6 +121,57 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.add(attrs()) == :ok
       assert [%Artifact{name: "OTP-27.0"}] = Repo.all(Artifact)
+    end
+  end
+
+  describe "add_docker_tag/3" do
+    test "inserts a new docker tag row" do
+      assert Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", [
+               "amd64"
+             ]) ==
+               :ok
+
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") ==
+               [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
+    end
+
+    test "unions archs on conflicting (repo, tag)" do
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["arm64"])
+
+      assert Artifacts.docker_tags("hexpm/erlang") ==
+               [{"27.0-ubuntu-noble-20250101", ["amd64", "arm64"]}]
+    end
+
+    test "is idempotent for a repeated single-arch report" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") ==
+               [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
+    end
+  end
+
+  describe "docker_tags/1" do
+    test "scopes to the requested repo" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "a", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "b", ["arm64"])
+
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"a", ["amd64"]}]
+    end
+
+    test "returns an empty list for an unknown repo" do
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == []
+    end
+  end
+
+  describe "base_image_tags/1" do
+    test "returns the tags for a repo" do
+      Repo.insert!(%BaseImageTag{repo: "library/alpine", tag: "3.23.5"})
+      Repo.insert!(%BaseImageTag{repo: "library/alpine", tag: "3.22.1"})
+      Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250101"})
+
+      assert Enum.sort(Artifacts.base_image_tags("library/alpine")) == ["3.22.1", "3.23.5"]
     end
   end
 
