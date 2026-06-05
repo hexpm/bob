@@ -17,10 +17,6 @@ defmodule Bob do
     Bob.Queue.add(Bob.Job.BuildOTP, [ref_name, ref, linux])
   end
 
-  def build_hex_docs(ref_name) do
-    Bob.Queue.add(Bob.Job.BuildHexDocs, [ref_name])
-  end
-
   def build_docker_erlang(erlang, os, os_version, arch) do
     Bob.Queue.add(Bob.Job.BuildDockerErlang, [arch, erlang, os, os_version])
   end

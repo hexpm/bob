@@ -15,11 +15,6 @@ config :bob,
     #   module: Bob.Job.ElixirChecker,
     #   period: {15, :min}
     # ],
-    # Done by https://github.com/hexpm/hex/blob/main/scripts/release.sh
-    # [
-    #   module: Bob.Job.HexDocsChecker,
-    #   period: {15, :min}
-    # ],
     [
       module: Bob.Job.OTPChecker,
       args: [:tags],
