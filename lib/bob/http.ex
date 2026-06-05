@@ -33,6 +33,17 @@ defmodule Bob.HTTP do
           result
         end
 
+      {:ok, status, _headers, _body} = result when status >= 500 ->
+        Logger.warning("#{name} SERVER ERROR: #{status}")
+
+        if times + 1 < @max_retry_times do
+          sleep = trunc(:math.pow(3, times) * @error_sleep_time)
+          Process.sleep(sleep)
+          retry(name, fun, times + 1)
+        else
+          result
+        end
+
       result ->
         result
     end
