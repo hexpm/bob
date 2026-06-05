@@ -32,7 +32,7 @@ defmodule Bob.Queue.MaintenanceTest do
   defp ago(seconds), do: DateTime.add(DateTime.utc_now(), -seconds, :second)
 
   test "sweeps stale running jobs to failed without recording backoff" do
-    old = ago(2 * @hour)
+    old = ago(4 * @hour)
     insert_job(state: "running", inserted_at: old, started_at: old)
 
     Maintenance.run()

@@ -13,7 +13,7 @@ defmodule Bob.Queue.Maintenance do
   alias Bob.Queue.{Job, Failure}
 
   @interval_seconds 60
-  @job_timeout_seconds 60 * 60
+  @job_timeout_seconds 3 * 60 * 60
   @backoff_expiry_seconds 7 * 24 * 60 * 60
   @history_retention_seconds 90 * 24 * 60 * 60
   @advisory_lock_key 4_771_001
