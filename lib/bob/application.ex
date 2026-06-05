@@ -29,10 +29,16 @@ defmodule Bob.Application do
 
   defp repo_children() do
     if Application.get_env(:bob, :master?) do
-      [Bob.Repo]
+      [Bob.Repo] ++ maintenance_children()
     else
       []
     end
+  end
+
+  if Mix.env() == :test do
+    defp maintenance_children(), do: []
+  else
+    defp maintenance_children(), do: [Bob.Queue.Maintenance]
   end
 
   defp port() do

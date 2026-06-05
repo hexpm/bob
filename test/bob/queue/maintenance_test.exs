@@ -1,0 +1,95 @@
+defmodule Bob.Queue.MaintenanceTest do
+  use Bob.DataCase
+
+  alias Bob.Queue.{Maintenance, Job, Failure, Term}
+
+  @hour 60 * 60
+  @day 24 * @hour
+
+  defp insert_job(attrs) do
+    defaults = %{
+      module_key: :test,
+      args: [:a],
+      args_digest: Term.digest([:a]),
+      state: "queued",
+      inserted_at: DateTime.utc_now()
+    }
+
+    Repo.insert_all(Job, [Map.merge(defaults, Map.new(attrs))])
+  end
+
+  defp insert_failure(attrs) do
+    defaults = %{
+      module_key: :test,
+      args_digest: Term.digest([:a]),
+      count: 1,
+      last_failed_at: DateTime.utc_now()
+    }
+
+    Repo.insert_all(Failure, [Map.merge(defaults, Map.new(attrs))])
+  end
+
+  defp ago(seconds), do: DateTime.add(DateTime.utc_now(), -seconds, :second)
+
+  test "sweeps stale running jobs to failed without recording backoff" do
+    old = ago(2 * @hour)
+    insert_job(state: "running", inserted_at: old, started_at: old)
+
+    Maintenance.run()
+
+    assert [%Job{state: "failed", finished_at: finished}] = Repo.all(Job)
+    assert finished != nil
+    assert Repo.all(Failure) == []
+  end
+
+  test "leaves running jobs that are within the timeout" do
+    now = DateTime.utc_now()
+    insert_job(state: "running", inserted_at: now, started_at: now)
+
+    Maintenance.run()
+
+    assert [%Job{state: "running"}] = Repo.all(Job)
+  end
+
+  test "prunes failures older than the expiry window" do
+    insert_failure(last_failed_at: ago(8 * @day))
+
+    Maintenance.run()
+
+    assert Repo.all(Failure) == []
+  end
+
+  test "keeps recent failures" do
+    insert_failure(last_failed_at: DateTime.utc_now())
+
+    Maintenance.run()
+
+    assert [%Failure{}] = Repo.all(Failure)
+  end
+
+  test "prunes completed jobs past the retention window" do
+    old = ago(91 * @day)
+    insert_job(state: "done", inserted_at: old, finished_at: old)
+
+    Maintenance.run()
+
+    assert Repo.all(Job) == []
+  end
+
+  test "keeps recently completed jobs within the retention window" do
+    now = DateTime.utc_now()
+    insert_job(state: "done", inserted_at: now, finished_at: now)
+
+    Maintenance.run()
+
+    assert [%Job{state: "done"}] = Repo.all(Job)
+  end
+
+  test "keeps queued jobs regardless of age" do
+    insert_job(state: "queued", inserted_at: ago(91 * @day))
+
+    Maintenance.run()
+
+    assert [%Job{state: "queued"}] = Repo.all(Job)
+  end
+end
