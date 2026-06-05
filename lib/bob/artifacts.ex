@@ -35,6 +35,7 @@ defmodule Bob.Artifacts do
   def replace_docker_tags(_repo, []), do: :ok
 
   def replace_docker_tags(repo, tag_archs) do
+    tag_archs = Enum.uniq_by(tag_archs, fn {tag, _archs} -> tag end)
     now = NaiveDateTime.utc_now()
     {values, params} = docker_tags_insert(repo, tag_archs, now)
     tags = Enum.map(tag_archs, fn {tag, _archs} -> tag end)

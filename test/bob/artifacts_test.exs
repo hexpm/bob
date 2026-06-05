@@ -193,6 +193,16 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.docker_tags("hexpm/erlang-arm64") == [{"arm-tag", ["arm64"]}]
     end
+
+    test "deduplicates repeated tags (Docker Hub can return dupes)" do
+      assert Artifacts.replace_docker_tags("hexpm/erlang-amd64", [
+               {"27.0-ubuntu-noble-20250101", ["amd64"]},
+               {"27.0-ubuntu-noble-20250101", ["amd64"]}
+             ]) == :ok
+
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") ==
+               [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
+    end
   end
 
   describe "docker_tags/1" do
