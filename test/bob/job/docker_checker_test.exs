@@ -4,6 +4,7 @@ defmodule Bob.Job.DockerCheckerTest do
   alias Bob.Job.DockerChecker
   alias Bob.Artifacts
   alias Bob.Artifacts.BaseImageTag
+  alias Bob.Queue.Job
 
   describe "erlang_tags/1" do
     test "reads and parses per-arch erlang tags from docker_tags" do
@@ -60,6 +61,46 @@ defmodule Bob.Job.DockerCheckerTest do
 
     test "yields no versions when base_image_tags is empty" do
       assert DockerChecker.builds()["alpine"] == []
+    end
+  end
+
+  describe "diff_manifests/3" do
+    test "enqueues a manifest job when expected archs are missing" do
+      expected = %{{"27.0", "ubuntu", "noble-20250101"} => ["amd64", "arm64"]}
+
+      DockerChecker.diff_manifests("erlang", expected, %{})
+
+      assert [%Job{module_key: Bob.Job.DockerManifest, args: args}] = Repo.all(Job)
+      assert args == ["erlang", {"27.0", "ubuntu", "noble-20250101"}]
+    end
+
+    test "does not enqueue when the manifest already has all archs" do
+      key = {"27.0", "ubuntu", "noble-20250101"}
+      expected = %{key => ["amd64", "arm64"]}
+      current = %{key => ["amd64", "arm64"]}
+
+      DockerChecker.diff_manifests("erlang", expected, current)
+
+      assert Repo.all(Job) == []
+    end
+
+    test "enqueues when only some archs are present" do
+      key = {"27.0", "ubuntu", "noble-20250101"}
+      expected = %{key => ["amd64", "arm64"]}
+      current = %{key => ["amd64"]}
+
+      DockerChecker.diff_manifests("erlang", expected, current)
+
+      assert [%Job{module_key: Bob.Job.DockerManifest}] = Repo.all(Job)
+    end
+  end
+
+  describe "diff/2" do
+    test "returns expected entries that are not in current" do
+      expected = [{"a", 1}, {"b", 2}, {"c", 3}]
+      current = [{"b", 2}]
+
+      assert Enum.sort(DockerChecker.diff(expected, current)) == [{"a", 1}, {"c", 3}]
     end
   end
 end

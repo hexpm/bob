@@ -64,12 +64,11 @@ defmodule Bob.Job.DockerChecker do
   def concurrency(), do: :shared
 
   def erlang() do
-    tags = erlang_tags()
-    expected_tags = expected_erlang_tags()
-
-    Enum.each(diff(expected_tags, tags), fn {erlang, os, os_version, arch} ->
-      Bob.Queue.add({Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version])
+    diff(expected_erlang_tags(), erlang_tags())
+    |> Enum.map(fn {erlang, os, os_version, arch} ->
+      {{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}
     end)
+    |> Bob.Queue.add_many()
   end
 
   def expected_erlang_tags() do
@@ -269,12 +268,11 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def elixir() do
-    tags = elixir_tags()
-    expected_tags = expected_elixir_tags()
-
-    Enum.each(diff(expected_tags, tags), fn {elixir, erlang, os, os_version, arch} ->
-      Bob.Queue.add({Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version])
+    diff(expected_elixir_tags(), elixir_tags())
+    |> Enum.map(fn {elixir, erlang, os, os_version, arch} ->
+      {{Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version]}
     end)
+    |> Bob.Queue.add_many()
   end
 
   def expected_elixir_tags() do
@@ -426,10 +424,15 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def diff_manifests(kind, expected, current) do
-    Enum.each(Enum.sort(expected), fn {key, expected_archs} ->
+    expected
+    |> Enum.sort()
+    |> Enum.flat_map(fn {key, expected_archs} ->
       if expected_archs -- Map.get(current, key, []) != [] do
-        Bob.Queue.add(Bob.Job.DockerManifest, [kind, key])
+        [{Bob.Job.DockerManifest, [kind, key]}]
+      else
+        []
       end
     end)
+    |> Bob.Queue.add_many()
   end
 end
