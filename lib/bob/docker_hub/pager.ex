@@ -70,12 +70,17 @@ defmodule Bob.DockerHub.Pager do
   def handle_info({ref, :done}, state) do
     state = %{state | tasks: MapSet.delete(state.tasks, ref)}
 
-    if MapSet.size(state.tasks) == 0 do
-      result = if state.on_result, do: :ok, else: Enum.concat(state.results)
-      GenServer.reply(state.reply, result)
-      {:stop, :normal, state}
-    else
-      {:noreply, state}
+    cond do
+      MapSet.size(state.tasks) > 0 ->
+        {:noreply, state}
+
+      state.reply ->
+        result = if state.on_result, do: :ok, else: Enum.concat(state.results)
+        GenServer.reply(state.reply, result)
+        {:stop, :normal, state}
+
+      true ->
+        {:noreply, state}
     end
   end
 
