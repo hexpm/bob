@@ -32,27 +32,43 @@ defmodule Bob.Artifacts do
     :ok
   end
 
+  def replace_docker_tags(_repo, []), do: :ok
+
   def replace_docker_tags(repo, tag_archs) do
     now = NaiveDateTime.utc_now()
+    {values, params} = docker_tags_insert(repo, tag_archs, now)
+    tags = Enum.map(tag_archs, fn {tag, _archs} -> tag end)
 
     Repo.transaction(fn ->
-      Enum.each(tag_archs, fn {tag, archs} ->
-        Repo.query!(
-          """
-          INSERT INTO docker_tags (repo, tag, archs, built_at)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (repo, tag)
-          DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at
-          """,
-          [repo, tag, archs, now]
-        )
-      end)
+      Repo.query!(
+        """
+        INSERT INTO docker_tags (repo, tag, archs, built_at)
+        VALUES #{values}
+        ON CONFLICT (repo, tag)
+        DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at
+        """,
+        params
+      )
 
-      tags = Enum.map(tag_archs, fn {tag, _archs} -> tag end)
       Repo.query!("DELETE FROM docker_tags WHERE repo = $1 AND NOT (tag = ANY($2))", [repo, tags])
     end)
 
     :ok
+  end
+
+  # Builds the multi-row VALUES clause and its parameter list for a single
+  # batched INSERT. $1 is the repo and $2 the timestamp, shared by every row;
+  # each tag/archs pair takes the next two positional parameters.
+  defp docker_tags_insert(repo, tag_archs, now) do
+    values =
+      tag_archs
+      |> Enum.with_index()
+      |> Enum.map_join(", ", fn {_tag_archs, i} ->
+        "($1, $#{3 + i * 2}, $#{4 + i * 2}, $2)"
+      end)
+
+    params = [repo, now | Enum.flat_map(tag_archs, fn {tag, archs} -> [tag, archs] end)]
+    {values, params}
   end
 
   def docker_tags(repo) do
