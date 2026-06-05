@@ -24,17 +24,22 @@ defmodule Bob.DockerHub.Pager do
        page: 1,
        tasks: MapSet.new(),
        results: [],
-       reply: nil
+       reply: nil,
+       error: nil
      })}
   end
 
   def handle_call(:wait, from, state) do
-    if MapSet.size(state.tasks) == 0 do
-      result = if state.on_result, do: :ok, else: Enum.concat(state.results)
-      {:stop, :normal, result, state}
-    else
-      state = %{state | reply: from}
-      {:noreply, state}
+    cond do
+      state.error ->
+        {:stop, :normal, {:error, state.error}, state}
+
+      MapSet.size(state.tasks) == 0 ->
+        result = if state.on_result, do: :ok, else: Enum.concat(state.results)
+        {:stop, :normal, result, state}
+
+      true ->
+        {:noreply, %{state | reply: from}}
     end
   end
 
@@ -49,6 +54,17 @@ defmodule Bob.DockerHub.Pager do
 
     state = %{state | tasks: MapSet.delete(state.tasks, ref)}
     {:noreply, next_request(state)}
+  end
+
+  def handle_info({ref, {:error, reason}}, state) do
+    state = %{state | tasks: MapSet.delete(state.tasks, ref), error: reason}
+
+    if state.reply do
+      GenServer.reply(state.reply, {:error, reason})
+      {:stop, :normal, state}
+    else
+      {:noreply, state}
+    end
   end
 
   def handle_info({ref, :done}, state) do
@@ -87,6 +103,9 @@ defmodule Bob.DockerHub.Pager do
 
             {:ok, 404, _headers, _body} ->
               :done
+
+            other ->
+              {:error, other}
           end
         end)
 

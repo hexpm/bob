@@ -5,8 +5,9 @@ defmodule Bob.Reconcile do
   `backfill/1` is run once at cutover (`Bob.Release.backfill/0`); `reconcile/1`
   runs nightly via `Bob.Job.Reconcile`. Both page Docker Hub through an injected
   fetcher (default `Bob.DockerHub.fetch_repo_tags/1`) and write through
-  `Bob.Artifacts`. A repo whose fetch returns an empty list is skipped, so a
-  transient Docker Hub failure never wipes its rows.
+  `Bob.Artifacts`. A repo whose fetch returns an empty list or fails is
+  skipped, so a transient Docker Hub failure never wipes its rows nor aborts
+  the reconcile of the other repos.
   """
 
   require Logger
@@ -38,49 +39,47 @@ defmodule Bob.Reconcile do
 
   defp sync_per_arch_repos(fetch) do
     Enum.each(@per_arch_repos, fn {repo, arch} ->
-      case fetch.(repo) do
-        [] ->
-          Logger.warning("RECONCILE empty fetch for #{repo}, skipping")
-
-        tags ->
-          Bob.Artifacts.replace_docker_tags(
-            repo,
-            Enum.map(tags, fn {tag, _archs} -> {tag, [arch]} end)
-          )
-      end
+      with_tags(repo, fetch, fn tags ->
+        Bob.Artifacts.replace_docker_tags(
+          repo,
+          Enum.map(tags, fn {tag, _archs} -> {tag, [arch]} end)
+        )
+      end)
     end)
   end
 
   defp sync_manifest_repos(fetch) do
     Enum.each(@manifest_repos, fn repo ->
-      case fetch.(repo) do
-        [] ->
-          Logger.warning("RECONCILE empty fetch for #{repo}, skipping")
-
-        tags ->
-          Bob.Artifacts.replace_docker_tags(
-            repo,
-            Enum.map(tags, fn {tag, archs} -> {tag, known_archs(archs)} end)
-          )
-      end
+      with_tags(repo, fetch, fn tags ->
+        Bob.Artifacts.replace_docker_tags(
+          repo,
+          Enum.map(tags, fn {tag, archs} -> {tag, known_archs(archs)} end)
+        )
+      end)
     end)
   end
 
   defp sync_base_repos(fetch) do
     Enum.each(@base_repos, fn repo ->
-      case fetch.(repo) do
-        [] ->
-          Logger.warning("RECONCILE empty fetch for #{repo}, skipping")
+      with_tags(repo, fetch, fn tags ->
+        multi_arch =
+          tags
+          |> Enum.filter(fn {_tag, archs} -> Enum.all?(@archs, &(&1 in archs)) end)
+          |> Enum.map(fn {tag, _archs} -> tag end)
 
-        tags ->
-          multi_arch =
-            tags
-            |> Enum.filter(fn {_tag, archs} -> Enum.all?(@archs, &(&1 in archs)) end)
-            |> Enum.map(fn {tag, _archs} -> tag end)
-
-          Bob.Artifacts.replace_base_image_tags(repo, multi_arch)
-      end
+        Bob.Artifacts.replace_base_image_tags(repo, multi_arch)
+      end)
     end)
+  end
+
+  defp with_tags(repo, fetch, fun) do
+    case fetch.(repo) do
+      [] -> Logger.warning("RECONCILE empty fetch for #{repo}, skipping")
+      tags -> fun.(tags)
+    end
+  rescue
+    exception ->
+      Logger.error("RECONCILE failed for #{repo}, skipping: #{Exception.message(exception)}")
   end
 
   defp known_archs(archs) do

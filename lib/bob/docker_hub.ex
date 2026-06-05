@@ -19,7 +19,11 @@ defmodule Bob.DockerHub do
   def fetch_repo_tags(repo) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100"
     {:ok, server} = Bob.DockerHub.Pager.start_link(url)
-    Bob.DockerHub.Pager.wait(server)
+
+    case Bob.DockerHub.Pager.wait(server) do
+      {:error, reason} -> raise "DockerHub paging failed for #{repo}: #{inspect(reason)}"
+      tags -> tags
+    end
   end
 
   def fetch_tag(repo, tag) do

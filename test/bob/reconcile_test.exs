@@ -68,6 +68,21 @@ defmodule Bob.ReconcileTest do
 
       assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"keep-me", ["amd64"]}]
     end
+
+    test "skips a repo whose fetch fails without wiping its rows or aborting siblings" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "keep-me", ["amd64"])
+
+      fetch = fn
+        "hexpm/erlang-amd64" -> raise "DockerHub paging failed for hexpm/erlang-amd64"
+        "hexpm/elixir-arm64" -> [{"fresh-tag", ["arm64"]}]
+        _repo -> []
+      end
+
+      Reconcile.reconcile(fetch)
+
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"keep-me", ["amd64"]}]
+      assert Artifacts.docker_tags("hexpm/elixir-arm64") == [{"fresh-tag", ["arm64"]}]
+    end
   end
 
   describe "backfill/1" do
