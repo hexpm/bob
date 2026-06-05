@@ -49,6 +49,20 @@ defmodule Bob.Router do
     send_resp(conn, 204, "")
   end
 
+  post "artifacts/add" do
+    Bob.Artifacts.add(%{
+      kind: conn.params["kind"],
+      arch: conn.params["arch"],
+      os: conn.params["os"],
+      name: conn.params["name"],
+      ref: conn.params["ref"],
+      sha256: conn.params["sha256"],
+      built_at: conn.params["date"]
+    })
+
+    send_resp(conn, 204, "")
+  end
+
   post "docker/add" do
     Bob.DockerHub.Cache.add(conn.params.repo, conn.params.tag, conn.params.archs)
     send_resp(conn, 204, "")
