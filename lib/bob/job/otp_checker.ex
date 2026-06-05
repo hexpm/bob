@@ -4,11 +4,18 @@ defmodule Bob.Job.OTPChecker do
   @arches ["amd64", "arm64"]
 
   def run(_type) do
+    refs = Bob.GitHub.fetch_repo_refs(@repo)
+
     for linux <- @linuxes,
         arch <- @arches,
-        {ref_name, ref} <- Bob.GitHub.diff(@repo, "builds/otp/#{arch}/#{linux}"),
+        {ref_name, ref} <- unbuilt(refs, arch, linux),
         build_ref?(linux, ref_name),
         do: Bob.Queue.add({Bob.Job.BuildOTP, arch}, [ref_name, ref, linux])
+  end
+
+  def unbuilt(refs, arch, os) do
+    built = Bob.Artifacts.built_otp_refs(arch, os)
+    Enum.filter(refs, fn {ref_name, ref} -> Map.get(built, ref_name) != ref end)
   end
 
   def priority(), do: 1
