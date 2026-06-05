@@ -18,7 +18,6 @@ defmodule Bob.Application do
           {Task.Supervisor, [name: Bob.Tasks]},
           Bob.DockerHub.Auth,
           Bob.DockerHub.Cache,
-          Bob.Queue,
           runner_spec(),
           {Bob.Schedule, [schedule()]},
           {Plug.Cowboy, scheme: :http, plug: Bob.Router, options: [port: port(), compress: true]}

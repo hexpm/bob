@@ -1,157 +1,188 @@
 defmodule Bob.Queue do
-  use GenServer
+  import Ecto.Query
   require Logger
 
-  @timeout_timer 60
-  @timeout 60 * 60
+  alias Bob.Repo
+  alias Bob.Queue.{Job, Failure, Term}
 
-  def start_link([]) do
-    GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
-  end
+  @backoff_base 30 * 60
+  @backoff_max 24 * 60 * 60
 
-  def init(state) do
-    Process.send_after(self(), :timeout, @timeout_timer * 1000)
-    {:ok, state}
-  end
+  @dedup_conflict_target {:unsafe_fragment,
+                          "(module_key, args_digest) WHERE state IN ('queued', 'running')"}
 
   def add(key, args) do
-    GenServer.call(__MODULE__, {:add, key, args})
+    add_many([{key, args}])
+  end
+
+  def add_many(entries) do
+    now = DateTime.utc_now()
+
+    rows =
+      entries
+      |> Enum.map(fn {key, args} ->
+        %{module_key: key, args: args, args_digest: Term.digest(args)}
+      end)
+      |> reject_backed_off(now)
+      |> Enum.map(fn candidate ->
+        Logger.info("QUEUED #{inspect(candidate.module_key)} #{inspect(candidate.args)}")
+
+        %{
+          module_key: candidate.module_key,
+          args: candidate.args,
+          args_digest: candidate.args_digest,
+          state: "queued",
+          inserted_at: now
+        }
+      end)
+
+    if rows != [] do
+      Repo.insert_all(Job, rows,
+        on_conflict: :nothing,
+        conflict_target: @dedup_conflict_target
+      )
+    end
+
+    :ok
   end
 
   def start(key) do
-    GenServer.call(__MODULE__, {:start, key})
+    module_key = Term.encode(key)
+    now = NaiveDateTime.utc_now()
+
+    {:ok, %{rows: rows}} =
+      Repo.query(
+        """
+        WITH candidate AS (
+          SELECT id FROM jobs
+          WHERE state = 'queued' AND module_key = $1
+          ORDER BY inserted_at, id
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )
+        UPDATE jobs SET state = 'running', started_at = $2
+        FROM candidate WHERE jobs.id = candidate.id
+        RETURNING jobs.id, jobs.args
+        """,
+        [module_key, now]
+      )
+
+    case rows do
+      [[id, args_binary]] ->
+        args = Term.decode(args_binary)
+        Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
+        {:ok, {id, args}}
+
+      [] ->
+        :error
+    end
   end
 
   def success(id) do
-    GenServer.call(__MODULE__, {:success, id})
+    Repo.transaction(fn ->
+      case finish(id, "done") do
+        {:ok, module_key, args_digest, args} ->
+          Logger.info("SUCCESS #{inspect(module_key)} #{inspect(args)}")
+
+          Repo.delete_all(
+            from(f in Failure,
+              where: f.module_key == ^module_key and f.args_digest == ^args_digest
+            )
+          )
+
+        :error ->
+          :ok
+      end
+    end)
+
+    :ok
   end
 
   def failure(id) do
-    GenServer.call(__MODULE__, {:failure, id})
-  end
+    Repo.transaction(fn ->
+      case finish(id, "failed") do
+        {:ok, module_key, args_digest, args} ->
+          Logger.info("FAILURE #{inspect(module_key)} #{inspect(args)}")
+          record_failure(module_key, args_digest)
 
-  def reset() do
-    GenServer.call(__MODULE__, :reset)
-  end
+        :error ->
+          :ok
+      end
+    end)
 
-  def state() do
-    GenServer.call(__MODULE__, :state)
+    :ok
   end
 
   def queue_sizes() do
-    GenServer.call(__MODULE__, :queue_sizes)
+    Repo.all(
+      from(j in Job,
+        where: j.state == "queued",
+        group_by: j.module_key,
+        select: {j.module_key, count(j.id)}
+      )
+    )
   end
 
-  def handle_call({:add, key, args}, _from, state) do
-    state =
-      cond do
-        already_running?(key, args, state) ->
-          state
+  defp finish(id, state) do
+    {_count, rows} =
+      Repo.update_all(
+        from(j in Job,
+          where: j.id == ^id and j.state == "running",
+          select: {j.module_key, j.args_digest, j.args}
+        ),
+        set: [state: state, finished_at: DateTime.utc_now()]
+      )
 
-        already_queued?(key, args, state) ->
-          state
-
-        true ->
-          Logger.info("QUEUED #{inspect(key)} #{inspect(args)}")
-          state = update_in(state.queue_sets[key], &MapSet.put(&1 || MapSet.new(), args))
-          update_in(state.queues[key], &:queue.in(args, &1 || :queue.new()))
-      end
-
-    {:reply, :ok, state}
-  end
-
-  def handle_call({:start, key}, _from, state) do
-    queue = Map.get(state.queues, key, :queue.new())
-
-    case :queue.out(queue) do
-      {{:value, args}, queue} ->
-        Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
-        now = NaiveDateTime.utc_now()
-        id = :erlang.unique_integer()
-
-        state = put_in(state.running[id], {key, args, now})
-        state = put_in(state.queues[key], queue)
-        state = update_in(state.queue_sets[key], &MapSet.delete(&1, args))
-        {:reply, {:ok, {id, args}}, state}
-
-      {:empty, _queue} ->
-        {:reply, :error, state}
+    case rows do
+      [{module_key, args_digest, args}] -> {:ok, module_key, args_digest, args}
+      [] -> :error
     end
   end
 
-  def handle_call({:success, id}, _from, state) do
-    case Map.fetch(state.running, id) do
-      {:ok, {key, args, _created}} ->
-        Logger.info("SUCCESS #{inspect(key)} #{inspect(args)}")
-
-      _ ->
-        :ok
-    end
-
-    {:reply, :ok, remove_job(id, state)}
+  defp record_failure(module_key, args_digest) do
+    Repo.query!(
+      """
+      INSERT INTO job_failures (module_key, args_digest, count, last_failed_at)
+      VALUES ($1, $2, 1, $3)
+      ON CONFLICT (module_key, args_digest)
+      DO UPDATE SET count = job_failures.count + 1, last_failed_at = $3
+      """,
+      [Term.encode(module_key), args_digest, NaiveDateTime.utc_now()]
+    )
   end
 
-  def handle_call({:failure, id}, _from, state) do
-    case Map.fetch(state.running, id) do
-      {:ok, {key, args, _created}} ->
-        Logger.info("FAILURE #{inspect(key)} #{inspect(args)}")
+  defp reject_backed_off(candidates, now) do
+    digests = Enum.map(candidates, & &1.args_digest)
 
-      _ ->
-        :ok
-    end
-
-    # Right now we just delete the job instead of retrying
-    # under the assumption that a job will eventually be added back
-    # Because of this the behaviour is the same as the success case
-    {:reply, :ok, remove_job(id, state)}
-  end
-
-  def handle_call(:reset, _from, _state) do
-    {:reply, :ok, new_state()}
-  end
-
-  def handle_call(:state, _from, state) do
-    {:reply, state, state}
-  end
-
-  def handle_call(:queue_sizes, _from, state) do
-    sizes = Enum.map(state.queue_sets, fn {key, set} -> {key, MapSet.size(set)} end)
-    {:reply, sizes, state}
-  end
-
-  def handle_info(:timeout, state) do
-    Process.send_after(self(), :timeout, @timeout_timer * 1000)
-    now = NaiveDateTime.utc_now()
-
-    # Right now we just prune instead of retrying and adding back to the queue
-    # under the assumption that a job will eventually be added back
-    state =
-      Enum.reduce(state.running, state, fn {id, {_key, _args, created}}, state ->
-        if NaiveDateTime.diff(now, created) > @timeout do
-          remove_job(id, state)
-        else
-          state
-        end
+    failures =
+      Repo.all(
+        from(f in Failure,
+          where: f.args_digest in ^digests,
+          select: {f.module_key, f.args_digest, f.count, f.last_failed_at}
+        )
+      )
+      |> Map.new(fn {module_key, args_digest, count, last_failed_at} ->
+        {{module_key, args_digest}, {count, last_failed_at}}
       end)
 
-    {:noreply, state}
-  end
+    Enum.reject(candidates, fn candidate ->
+      case Map.fetch(failures, {candidate.module_key, candidate.args_digest}) do
+        {:ok, {count, last_failed_at}} ->
+          backed_off? = DateTime.diff(now, last_failed_at) < backoff_seconds(count)
 
-  defp remove_job(id, state) do
-    update_in(state.running, &Map.delete(&1, id))
-  end
+          if backed_off? do
+            Logger.info("BACKOFF #{inspect(candidate.module_key)} #{inspect(candidate.args)}")
+          end
 
-  defp already_queued?(key, args, state) do
-    args in Map.get(state.queue_sets, key, MapSet.new())
-  end
+          backed_off?
 
-  defp already_running?(key, args, state) do
-    Enum.any?(state.running, fn {_id, {running_key, running_args, _created}} ->
-      key == running_key and args == running_args
+        :error ->
+          false
+      end
     end)
   end
 
-  defp new_state do
-    %{queues: %{}, running: %{}, queue_sets: %{}}
+  defp backoff_seconds(count) do
+    min(@backoff_base * Integer.pow(2, min(count - 1, 12)), @backoff_max)
   end
 end

@@ -1,5 +1,5 @@
 defmodule Bob.RemoteQueueTest do
-  use ExUnit.Case
+  use Bob.DataCase
 
   alias Bob.RemoteQueue
 
@@ -20,10 +20,6 @@ defmodule Bob.RemoteQueueTest do
   end
 
   describe "start_jobs/3" do
-    setup do
-      Bob.Queue.reset()
-    end
-
     test "start single job" do
       Bob.Queue.add(SharedTestJob, [:arg1])
 
