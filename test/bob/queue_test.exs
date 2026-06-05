@@ -91,6 +91,15 @@ defmodule Bob.QueueTest do
     assert size(TestJob) == 1
   end
 
+  test "scheduler jobs do not back off after a failure" do
+    Queue.add(Bob.Job.DockerChecker, [])
+    {:ok, {id, []}} = Queue.start(Bob.Job.DockerChecker)
+    Queue.failure(id)
+
+    Queue.add(Bob.Job.DockerChecker, [])
+    assert size(Bob.Job.DockerChecker) == 1
+  end
+
   test "success clears any existing backoff for the job" do
     # Set up a previously-failed job that is now running again, by inserting
     # the rows directly (a backed-off job will not re-enter the queue on its own).

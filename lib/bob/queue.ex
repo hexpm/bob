@@ -8,6 +8,16 @@ defmodule Bob.Queue do
   @backoff_base 30 * 60
   @backoff_max 24 * 60 * 60
 
+  # Periodic scheduler jobs re-run every interval and must not be suppressed by
+  # backoff after a transient failure; only the build jobs they enqueue back off.
+  @no_backoff [
+    Bob.Job.Backup,
+    Bob.Job.OTPChecker,
+    Bob.Job.DockerChecker,
+    Bob.Job.Reconcile,
+    Bob.Job.ReconcileBaseImages
+  ]
+
   @dedup_conflict_target {:unsafe_fragment,
                           "(module_key, args_digest) WHERE state IN ('queued', 'running')"}
 
@@ -103,7 +113,7 @@ defmodule Bob.Queue do
       case finish(id, "failed") do
         {:ok, module_key, args_digest, args} ->
           Logger.info("FAILURE #{inspect(module_key)} #{inspect(args)}")
-          record_failure(module_key, args_digest)
+          if backoff?(module_key), do: record_failure(module_key, args_digest)
 
         :error ->
           :ok
@@ -151,8 +161,18 @@ defmodule Bob.Queue do
     )
   end
 
+  defp backoff?(module_key) do
+    module =
+      case module_key do
+        {module, _arg} -> module
+        module -> module
+      end
+
+    module not in @no_backoff
+  end
+
   defp reject_backed_off(candidates, now) do
-    digests = Enum.map(candidates, & &1.args_digest)
+    digests = candidates |> Enum.map(& &1.args_digest) |> Enum.uniq()
 
     failures =
       Repo.all(
