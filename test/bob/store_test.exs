@@ -43,4 +43,26 @@ defmodule Bob.StoreTest do
       assert Store.fetch_built_refs("builds/otp/amd64/ubuntu-24.04") == %{}
     end
   end
+
+  describe "put_file/3" do
+    test "uploads the body to the bucket path" do
+      Bob.FakeHttpClient.stub(
+        :put,
+        "https://s3.amazonaws.com/s3.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt",
+        200,
+        ""
+      )
+
+      assert %{status_code: 200} =
+               Store.put_file(
+                 "builds/otp/amd64/ubuntu-24.04/builds.txt",
+                 "OTP-27.0 abc 2026-01-01T00:00:00Z hash\n",
+                 cache_control: "public,max-age=3600",
+                 meta: [
+                   {"surrogate-key", "builds"},
+                   {"surrogate-control", "public,max-age=604800"}
+                 ]
+               )
+    end
+  end
 end

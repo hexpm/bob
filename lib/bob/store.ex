@@ -21,6 +21,11 @@ defmodule Bob.Store do
     body
   end
 
+  def put_file(path, body, opts \\ []) do
+    ExAws.S3.put_object(@bucket, path, body, opts)
+    |> ExAws.request!()
+  end
+
   def list_files(prefix) do
     ExAws.S3.list_objects(@bucket, prefix: prefix)
     |> ExAws.stream!()
