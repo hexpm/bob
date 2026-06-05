@@ -1,0 +1,10 @@
+defmodule Bob.Artifacts.DockerTag do
+  use Ecto.Schema
+
+  schema "docker_tags" do
+    field(:repo, :string)
+    field(:tag, :string)
+    field(:archs, {:array, :string})
+    field(:built_at, :utc_datetime_usec)
+  end
+end
