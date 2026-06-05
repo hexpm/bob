@@ -248,6 +248,12 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.base_image_tags("library/alpine") == []
     end
+
+    test "deduplicates repeated tags (Docker Hub can return dupes)" do
+      assert Artifacts.replace_base_image_tags("library/alpine", ["3.23.5", "3.23.5"]) == :ok
+
+      assert Artifacts.base_image_tags("library/alpine") == ["3.23.5"]
+    end
   end
 
   defp attrs() do
