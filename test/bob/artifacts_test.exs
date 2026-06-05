@@ -218,6 +218,38 @@ defmodule Bob.ArtifactsTest do
     end
   end
 
+  describe "replace_base_image_tags/2" do
+    test "inserts the given tags for the repo" do
+      assert Artifacts.replace_base_image_tags("library/alpine", ["3.23.5", "3.22.1"]) == :ok
+
+      assert Enum.sort(Artifacts.base_image_tags("library/alpine")) == ["3.22.1", "3.23.5"]
+    end
+
+    test "replaces the previous set for the repo" do
+      Repo.insert!(%BaseImageTag{repo: "library/alpine", tag: "3.20.0"})
+
+      Artifacts.replace_base_image_tags("library/alpine", ["3.23.5"])
+
+      assert Artifacts.base_image_tags("library/alpine") == ["3.23.5"]
+    end
+
+    test "does not touch other repos" do
+      Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250101"})
+
+      Artifacts.replace_base_image_tags("library/alpine", ["3.23.5"])
+
+      assert Artifacts.base_image_tags("library/ubuntu") == ["noble-20250101"]
+    end
+
+    test "clears the repo when given an empty list" do
+      Repo.insert!(%BaseImageTag{repo: "library/alpine", tag: "3.20.0"})
+
+      Artifacts.replace_base_image_tags("library/alpine", [])
+
+      assert Artifacts.base_image_tags("library/alpine") == []
+    end
+  end
+
   defp attrs() do
     %{
       kind: "otp",

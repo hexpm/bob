@@ -73,6 +73,15 @@ defmodule Bob.Artifacts do
     )
   end
 
+  def replace_base_image_tags(repo, tags) do
+    Repo.transaction(fn ->
+      Repo.delete_all(from(b in BaseImageTag, where: b.repo == ^repo))
+      Repo.insert_all(BaseImageTag, Enum.map(tags, &%{repo: repo, tag: &1}))
+    end)
+
+    :ok
+  end
+
   def upsert(attrs) do
     %Artifact{}
     |> Artifact.changeset(attrs)
