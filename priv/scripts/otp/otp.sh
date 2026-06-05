@@ -7,8 +7,6 @@ ref=$2
 linux=$3
 arch=$4
 
-source ${SCRIPT_DIR}/utils.sh
-
 echo "Building $1 $2 $3 $4"
 
 container="otp-build-${linux}-${ref_name}"
@@ -43,11 +41,12 @@ build_sha256=$(sha256sum ${ref_name}.tar.gz | cut -d ' ' -f 1)
 
 aws s3 cp ${ref_name}.tar.gz s3://s3.hex.pm/builds/otp/${arch}/${linux}/${ref_name}.tar.gz --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"builds builds/otp builds/otp/${arch} builds/otp/${arch}/${linux} builds/otp/${arch}/${linux}/${ref_name}\",\"surrogate-control\":\"public,max-age=604800\"}"
 
-aws s3 cp s3://s3.hex.pm/builds/otp/${arch}/${linux}/builds.txt builds.txt || true
-touch builds.txt
-sed -i "/^${ref_name} /d" builds.txt
-echo -e "${ref_name} ${ref} $(date -u '+%Y-%m-%dT%H:%M:%SZ') ${build_sha256}\n$(cat builds.txt)" > builds.txt
-sort -u -k1,1 -o builds.txt builds.txt
-aws s3 cp builds.txt s3://s3.hex.pm/builds/otp/${arch}/${linux}/builds.txt --cache-control "public,max-age=3600" --metadata "{\"surrogate-key\":\"builds builds/otp builds/otp/${arch} builds/otp/${arch}/${linux} builds/otp/${arch}/${linux}/txt\",\"surrogate-control\":\"public,max-age=604800\"}"
-
-fastly_purge $BOB_FASTLY_SERVICE_BUILDS "builds/otp/${arch}/${linux}/txt builds/otp/${arch}/${linux}/${ref_name}"
+curl \
+  --fail \
+  --retry 5 \
+  --retry-all-errors \
+  -X POST \
+  -H "authorization: ${BOB_AGENT_SECRET}" \
+  -H "content-type: application/json" \
+  -d "{\"kind\":\"otp\",\"arch\":\"${arch}\",\"os\":\"${linux}\",\"name\":\"${ref_name}\",\"ref\":\"${ref}\",\"sha256\":\"${build_sha256}\",\"date\":\"${date}\"}" \
+  "${BOB_MASTER_URL}/artifacts/add"
