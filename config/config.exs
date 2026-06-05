@@ -25,6 +25,12 @@ config :bob,
       module: Bob.Job.DockerChecker,
       period: {15, :min},
       queue: true
+    ],
+    [
+      module: Bob.Job.Reconcile,
+      period: :day,
+      time: {1, 0, 0},
+      queue: true
     ]
   ],
   agent_schedule: [
