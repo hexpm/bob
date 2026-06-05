@@ -4,6 +4,7 @@ defmodule Bob.RouterTest do
   import Plug.Test
   import Plug.Conn
 
+  alias Bob.Artifacts
   alias Bob.Artifacts.Artifact
 
   @opts Bob.Router.init([])
@@ -55,5 +56,42 @@ defmodule Bob.RouterTest do
 
     assert conn.status == 401
     assert Repo.all(Artifact) == []
+  end
+
+  test "POST /docker/add upserts a docker tag and returns 204" do
+    body =
+      Bob.Plug.ErlangFormat.encode_to_iodata!(%{
+        repo: "hexpm/erlang-amd64",
+        tag: "27.0-ubuntu-noble-20250101",
+        archs: ["amd64"]
+      })
+
+    conn =
+      conn(:post, "/docker/add", body)
+      |> put_req_header("content-type", "application/vnd.bob+erlang")
+      |> put_req_header("authorization", "secret")
+      |> Bob.Router.call(@opts)
+
+    assert conn.status == 204
+
+    assert Artifacts.docker_tags("hexpm/erlang-amd64") ==
+             [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
+  end
+
+  test "POST /docker/add rejects a missing/wrong secret with 401" do
+    body =
+      Bob.Plug.ErlangFormat.encode_to_iodata!(%{
+        repo: "hexpm/erlang-amd64",
+        tag: "27.0-ubuntu-noble-20250101",
+        archs: ["amd64"]
+      })
+
+    conn =
+      conn(:post, "/docker/add", body)
+      |> put_req_header("content-type", "application/vnd.bob+erlang")
+      |> Bob.Router.call(@opts)
+
+    assert conn.status == 401
+    assert Artifacts.docker_tags("hexpm/erlang-amd64") == []
   end
 end

@@ -64,7 +64,7 @@ defmodule Bob.Router do
   end
 
   post "docker/add" do
-    Bob.DockerHub.Cache.add(conn.params.repo, conn.params.tag, conn.params.archs)
+    Bob.Artifacts.add_docker_tag(conn.params.repo, conn.params.tag, conn.params.archs)
     send_resp(conn, 204, "")
   end
 
