@@ -152,6 +152,49 @@ defmodule Bob.ArtifactsTest do
     end
   end
 
+  describe "replace_docker_tags/2" do
+    test "inserts the given tags with their arch lists" do
+      assert Artifacts.replace_docker_tags("hexpm/erlang-amd64", [
+               {"27.0-ubuntu-noble-20250101", ["amd64"]},
+               {"26.0-ubuntu-noble-20250101", ["amd64"]}
+             ]) == :ok
+
+      assert Enum.sort(Artifacts.docker_tags("hexpm/erlang-amd64")) ==
+               [
+                 {"26.0-ubuntu-noble-20250101", ["amd64"]},
+                 {"27.0-ubuntu-noble-20250101", ["amd64"]}
+               ]
+    end
+
+    test "replaces (does not union) the arch list on conflict" do
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
+
+      Artifacts.replace_docker_tags("hexpm/erlang", [
+        {"27.0-ubuntu-noble-20250101", ["amd64"]}
+      ])
+
+      assert Artifacts.docker_tags("hexpm/erlang") ==
+               [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
+    end
+
+    test "prunes rows whose tag is no longer present" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "old-tag", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "kept-tag", ["amd64"])
+
+      Artifacts.replace_docker_tags("hexpm/erlang-amd64", [{"kept-tag", ["amd64"]}])
+
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"kept-tag", ["amd64"]}]
+    end
+
+    test "does not touch other repos" do
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "arm-tag", ["arm64"])
+
+      Artifacts.replace_docker_tags("hexpm/erlang-amd64", [{"amd-tag", ["amd64"]}])
+
+      assert Artifacts.docker_tags("hexpm/erlang-arm64") == [{"arm-tag", ["arm64"]}]
+    end
+  end
+
   describe "docker_tags/1" do
     test "scopes to the requested repo" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "a", ["amd64"])

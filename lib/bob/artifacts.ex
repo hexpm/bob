@@ -32,6 +32,29 @@ defmodule Bob.Artifacts do
     :ok
   end
 
+  def replace_docker_tags(repo, tag_archs) do
+    now = NaiveDateTime.utc_now()
+
+    Repo.transaction(fn ->
+      Enum.each(tag_archs, fn {tag, archs} ->
+        Repo.query!(
+          """
+          INSERT INTO docker_tags (repo, tag, archs, built_at)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (repo, tag)
+          DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at
+          """,
+          [repo, tag, archs, now]
+        )
+      end)
+
+      tags = Enum.map(tag_archs, fn {tag, _archs} -> tag end)
+      Repo.query!("DELETE FROM docker_tags WHERE repo = $1 AND NOT (tag = ANY($2))", [repo, tags])
+    end)
+
+    :ok
+  end
+
   def docker_tags(repo) do
     Repo.all(
       from(d in DockerTag,
