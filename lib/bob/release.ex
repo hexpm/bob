@@ -19,6 +19,27 @@ defmodule Bob.Release do
     {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))
   end
 
+  def backfill() do
+    load_app()
+    {:ok, _} = Application.ensure_all_started(:hackney)
+    {:ok, _} = Application.ensure_all_started(:ex_aws)
+
+    auth_dockerhub()
+
+    Ecto.Migrator.with_repo(Bob.Repo, fn _repo ->
+      Bob.Reconcile.backfill()
+    end)
+  end
+
+  defp auth_dockerhub() do
+    username = Application.get_env(@app, :dockerhub_username)
+    password = Application.get_env(@app, :dockerhub_password)
+
+    if username && password do
+      Bob.DockerHub.auth(username, password)
+    end
+  end
+
   defp repos() do
     Application.fetch_env!(@app, :ecto_repos)
   end
