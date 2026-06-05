@@ -26,9 +26,10 @@ defmodule Bob.Release do
 
     auth_dockerhub()
 
-    Ecto.Migrator.with_repo(Bob.Repo, fn _repo ->
-      Bob.Reconcile.backfill()
-    end)
+    {:ok, _, _} =
+      Ecto.Migrator.with_repo(Bob.Repo, fn _repo ->
+        Bob.Reconcile.backfill()
+      end)
   end
 
   defp auth_dockerhub() do
