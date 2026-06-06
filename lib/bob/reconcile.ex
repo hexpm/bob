@@ -9,6 +9,10 @@ defmodule Bob.Reconcile do
   set-based swap — so the response is never held in memory and no connection is
   held across the fetch. A repo whose fetch returns nothing or fails is skipped,
   so a transient Docker Hub failure never wipes its rows nor aborts the others.
+
+  Each slice can also be reconciled on its own — `reconcile_per_arch_repos/1`,
+  `reconcile_manifest_repos/1`, `reconcile_base_images/1`, and
+  `import_otp_builds/0` — to re-run just one kind without paging every repo.
   """
 
   require Logger
@@ -42,6 +46,18 @@ defmodule Bob.Reconcile do
   def backfill(stream \\ &Bob.DockerHub.stream_repo_tags/2) do
     reconcile(stream)
     import_otp_builds()
+    :ok
+  end
+
+  def reconcile_per_arch_repos(stream \\ &Bob.DockerHub.stream_repo_tags/2) do
+    Artifacts.prune_staging(@staging_orphan_seconds)
+    sync_per_arch_repos(stream)
+    :ok
+  end
+
+  def reconcile_manifest_repos(stream \\ &Bob.DockerHub.stream_repo_tags/2) do
+    Artifacts.prune_staging(@staging_orphan_seconds)
+    sync_manifest_repos(stream)
     :ok
   end
 
@@ -125,7 +141,7 @@ defmodule Bob.Reconcile do
     |> Enum.sort()
   end
 
-  defp import_otp_builds() do
+  def import_otp_builds() do
     for arch <- @archs, os <- @linuxes do
       case Bob.Store.fetch_text("builds/otp/#{arch}/#{os}/builds.txt") do
         nil ->

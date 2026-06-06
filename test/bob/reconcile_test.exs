@@ -130,6 +130,32 @@ defmodule Bob.ReconcileTest do
     end
   end
 
+  describe "reconcile_per_arch_repos/1" do
+    test "reconciles the per-arch repos only" do
+      Artifacts.add_docker_tag("hexpm/erlang", "untouched", ["amd64"])
+
+      stream = streamer(%{"hexpm/erlang-amd64" => [{"27.0", ["amd64", "arm64"]}]})
+
+      Reconcile.reconcile_per_arch_repos(stream)
+
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"27.0", ["amd64"]}]
+      assert Artifacts.docker_tags("hexpm/erlang") == [{"untouched", ["amd64"]}]
+    end
+  end
+
+  describe "reconcile_manifest_repos/1" do
+    test "reconciles the manifest repos only" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "untouched", ["amd64"])
+
+      stream = streamer(%{"hexpm/erlang" => [{"27.0", ["arm64", "amd64", "ppc64le"]}]})
+
+      Reconcile.reconcile_manifest_repos(stream)
+
+      assert Artifacts.docker_tags("hexpm/erlang") == [{"27.0", ["amd64", "arm64"]}]
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"untouched", ["amd64"]}]
+    end
+  end
+
   describe "reconcile_base_images/1" do
     test "reconciles the base image repos only" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "untouched", ["amd64"])
@@ -140,6 +166,26 @@ defmodule Bob.ReconcileTest do
 
       assert Artifacts.base_image_tags("library/alpine") == ["3.23.5"]
       assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"untouched", ["amd64"]}]
+    end
+  end
+
+  describe "import_otp_builds/0" do
+    test "imports OTP builds.txt without touching docker tags" do
+      Bob.FakeHttpClient.reset()
+
+      Bob.FakeHttpClient.stub(
+        :get,
+        "https://s3.amazonaws.com/s3.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt",
+        200,
+        "OTP-27.0 ref27 2026-01-02T03:04:05Z sha27\nOTP-26.0 ref26 2026-01-02T03:04:05Z\n"
+      )
+
+      Reconcile.import_otp_builds()
+
+      assert Artifacts.built_otp_refs("amd64", "ubuntu-24.04") == %{
+               "OTP-27.0" => "ref27",
+               "OTP-26.0" => "ref26"
+             }
     end
   end
 
