@@ -1,33 +1,39 @@
 defmodule Bob.DockerHub.RateLimiter do
   @moduledoc """
-  Process-wide gate that paces Docker Hub API requests to the budget Docker Hub
-  reports in its `x-ratelimit-*` headers (600/min, keyed by source IP).
+  Process-wide gate that lets Docker Hub API requests burst up to the window's
+  limit, then waits for the window to reset. Docker Hub caps the tags API at 600
+  requests/minute per source IP and reports the budget in its `x-ratelimit-*`
+  headers.
 
-  Every request calls `acquire/1` before sending and `observe/2` after. `acquire`
-  is an atomic check-and-count against the window's limit — it runs inside this
-  GenServer, so no two callers race past the ceiling, and no safety buffer is
-  needed: we count our own requests exactly. The server's reported `remaining` is
-  folded in only to raise our count (catching any usage from outside this
-  process), keyed by the window's `reset` so a stale, out-of-order response can't
-  corrupt the next window. Tracking this in one process keeps it correct across
-  repos and every other caller sharing the IP's budget.
+  The count is of **our own** granted requests, not the server's reported
+  `remaining` — that number lags the requests already in flight, so granting up
+  to it overshoots. `remaining` is used only to seed the count (so a window the
+  previous run partly spent is respected) and to ratchet it up if something
+  outside this process eats budget; it never lowers our own tally. The window is
+  reset on a timer derived from the `reset` header plus a small offset, so we
+  resume only after the server's window has actually rolled — not a beat before
+  it, when our clock runs slightly ahead of Docker Hub's.
   """
 
   use GenServer
 
+  # Resume this long after the server's reset, so a local clock running slightly
+  # ahead of Docker Hub's can't send into the tail of the previous window.
+  @resume_offset_ms 2_000
+
   def start_link(opts \\ []) do
     case Keyword.get(opts, :name, __MODULE__) do
-      nil -> GenServer.start_link(__MODULE__, [])
-      name -> GenServer.start_link(__MODULE__, [], name: name)
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
     end
   end
 
-  @doc "Blocks until a Docker Hub request may be sent under the current budget."
+  @doc "Blocks until a request may be sent under the current window's budget."
   def acquire(server \\ __MODULE__) do
     GenServer.call(server, :acquire, :infinity)
   end
 
-  @doc "Feeds a response's headers back so the gate tracks the live budget."
+  @doc "Feeds a response's headers back so the gate tracks the limit and window."
   def observe(headers, server \\ __MODULE__) do
     GenServer.cast(server, {:observe, parse_rate(headers)})
   end
@@ -46,21 +52,27 @@ defmodule Bob.DockerHub.RateLimiter do
   end
 
   @impl true
-  def init([]) do
-    # `limit: nil` until the first response calibrates us; until then requests are
-    # let through (bounded by the caller's own concurrency) to read the headers.
+  def init(opts) do
     {:ok,
-     %{used: 0, limit: nil, window: nil, reset_at: nil, refill_timer: nil, waiters: :queue.new()}}
+     %{
+       sent: 0,
+       limit: nil,
+       window: nil,
+       reset_at: nil,
+       offset_ms: Keyword.get(opts, :offset_ms, @resume_offset_ms),
+       timer: nil,
+       waiters: :queue.new()
+     }}
   end
 
   @impl true
   def handle_call(:acquire, from, state) do
-    state = refill(state)
+    state = roll(state)
 
     if available?(state) do
-      {:reply, :ok, %{state | used: state.used + 1}}
+      {:reply, :ok, %{state | sent: state.sent + 1}}
     else
-      {:noreply, schedule_refill(%{state | waiters: :queue.in(from, state.waiters)})}
+      {:noreply, schedule_resume(%{state | waiters: :queue.in(from, state.waiters)})}
     end
   end
 
@@ -68,50 +80,52 @@ defmodule Bob.DockerHub.RateLimiter do
   def handle_cast({:observe, nil}, state), do: {:noreply, state}
 
   def handle_cast({:observe, %{limit: limit, remaining: remaining, reset: reset}}, state) do
-    {:noreply, release(observe_window(state, limit, remaining, reset))}
+    state = %{state | limit: limit}
+
+    state =
+      cond do
+        # First response of a window (initial, or after a roll cleared it):
+        # anchor the window and seed the count from the server's usage.
+        state.window == nil ->
+          %{
+            state
+            | window: reset,
+              reset_at: monotonic_deadline(reset) + state.offset_ms,
+              sent: max(state.sent, limit - remaining)
+          }
+
+        # Same window: ratchet the count up if external usage outran ours.
+        reset == state.window ->
+          %{state | sent: max(state.sent, limit - remaining)}
+
+        # A different window's reset (a stale straggler, or a roll the timer will
+        # handle): leave the count and window alone.
+        true ->
+          state
+      end
+
+    {:noreply, schedule_resume(release(state))}
   end
 
   @impl true
-  def handle_info(:refill, state) do
-    {:noreply, release(refill(%{state | refill_timer: nil}))}
+  def handle_info(:resume, state) do
+    {:noreply, schedule_resume(release(roll(%{state | timer: nil})))}
   end
 
   defp available?(%{limit: nil}), do: true
-  defp available?(%{used: used, limit: limit}), do: used < limit
+  defp available?(%{sent: sent, limit: limit}), do: sent < limit
 
-  # A later reset is a new window, so its remaining sets the baseline count; the
-  # same window only ratchets the count up (the server's remaining lags ours); an
-  # earlier reset is a stale, out-of-order response and is ignored.
-  defp observe_window(state, limit, remaining, reset) do
-    cond do
-      state.window == nil or reset > state.window ->
-        %{
-          state
-          | limit: limit,
-            window: reset,
-            reset_at: monotonic_deadline(reset),
-            used: limit - remaining
-        }
-
-      reset == state.window ->
-        %{state | limit: limit, used: max(state.used, limit - remaining)}
-
-      true ->
-        state
-    end
-  end
-
-  # The window has elapsed: start the next one with a clean count. The next
-  # response's reset identifies the new window and recalibrates from ground truth.
-  defp refill(%{reset_at: reset_at} = state) when not is_nil(reset_at) do
+  # The window has elapsed (its reset plus the offset has passed): start the next
+  # one with a clean count. The next response re-anchors the window.
+  defp roll(%{reset_at: reset_at} = state) when not is_nil(reset_at) do
     if System.monotonic_time(:millisecond) >= reset_at do
-      %{state | used: 0, window: nil, reset_at: nil}
+      %{state | sent: 0, window: nil, reset_at: nil}
     else
       state
     end
   end
 
-  defp refill(state), do: state
+  defp roll(state), do: state
 
   defp release(state) do
     cond do
@@ -124,17 +138,23 @@ defmodule Bob.DockerHub.RateLimiter do
       true ->
         {{:value, from}, waiters} = :queue.out(state.waiters)
         GenServer.reply(from, :ok)
-        release(%{state | used: state.used + 1, waiters: waiters})
+        release(%{state | sent: state.sent + 1, waiters: waiters})
     end
   end
 
-  defp schedule_refill(%{refill_timer: nil, reset_at: reset_at} = state)
+  # Wake at the window's reset so parked callers are released even when no further
+  # responses arrive to drive observe.
+  defp schedule_resume(%{timer: nil, reset_at: reset_at, waiters: waiters} = state)
        when not is_nil(reset_at) do
-    delay = max(reset_at - System.monotonic_time(:millisecond) + 50, 0)
-    %{state | refill_timer: Process.send_after(self(), :refill, delay)}
+    if :queue.is_empty(waiters) do
+      state
+    else
+      delay = max(reset_at - System.monotonic_time(:millisecond), 0)
+      %{state | timer: Process.send_after(self(), :resume, delay)}
+    end
   end
 
-  defp schedule_refill(state), do: state
+  defp schedule_resume(state), do: state
 
   defp monotonic_deadline(reset_unix) do
     delay_ms = max(reset_unix - System.os_time(:second), 0) * 1000

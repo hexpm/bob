@@ -3,8 +3,8 @@ defmodule Bob.DockerHub.RateLimiterTest do
 
   alias Bob.DockerHub.RateLimiter
 
-  defp start_limiter do
-    {:ok, pid} = start_supervised({RateLimiter, name: nil})
+  defp start_limiter(opts) do
+    {:ok, pid} = start_supervised({RateLimiter, [name: nil] ++ opts})
     pid
   end
 
@@ -14,6 +14,13 @@ defmodule Bob.DockerHub.RateLimiterTest do
       {"x-ratelimit-remaining", Integer.to_string(remaining)},
       {"x-ratelimit-reset", Integer.to_string(reset)}
     ]
+  end
+
+  defp blocks?(limiter) do
+    task = Task.async(fn -> RateLimiter.acquire(limiter) end)
+    result = Task.yield(task, 100)
+    Task.shutdown(task)
+    result == nil
   end
 
   describe "parse_rate/1" do
@@ -43,62 +50,73 @@ defmodule Bob.DockerHub.RateLimiterTest do
   end
 
   describe "acquire/1 + observe/2" do
-    test "grants exactly the reported remaining, then blocks until the window resets" do
-      limiter = start_limiter()
+    test "bursts the whole window immediately, then blocks" do
+      limiter = start_limiter(offset_ms: 0)
       reset = System.os_time(:second) + 3600
 
-      # remaining = 2 with no reserve means exactly two more requests are allowed.
-      RateLimiter.observe(headers(600, 2, reset), limiter)
-
-      assert RateLimiter.acquire(limiter) == :ok
-      assert RateLimiter.acquire(limiter) == :ok
-
-      # Budget exhausted and the window is an hour out: the next acquire blocks.
-      task = Task.async(fn -> RateLimiter.acquire(limiter) end)
-      assert Task.yield(task, 100) == nil
-      Task.shutdown(task)
-    end
-
-    test "refills the budget once the reset time has passed" do
-      limiter = start_limiter()
-
-      # Window fully spent (remaining 0), but its reset is already in the past.
-      RateLimiter.observe(headers(600, 0, System.os_time(:second) - 1), limiter)
-
-      # The elapsed window is refilled rather than blocking.
-      assert RateLimiter.acquire(limiter) == :ok
-    end
-
-    test "ratchets the count up within a window and ignores stale older windows" do
-      limiter = start_limiter()
-      reset = System.os_time(:second) + 3600
-
-      RateLimiter.observe(headers(600, 5, reset), limiter)
-
-      # An out-of-order response from the same window reporting more headroom must
-      # not raise the budget back up.
-      RateLimiter.observe(headers(600, 500, reset), limiter)
+      RateLimiter.observe(headers(5, 5, reset), limiter)
 
       for _ <- 1..5, do: assert(RateLimiter.acquire(limiter) == :ok)
-
-      task = Task.async(fn -> RateLimiter.acquire(limiter) end)
-      assert Task.yield(task, 100) == nil
-      Task.shutdown(task)
+      assert blocks?(limiter)
     end
 
-    test "releases a blocked caller when the next window is observed" do
-      limiter = start_limiter()
+    test "before any response, grants are allowed (calibration probe)" do
+      limiter = start_limiter(offset_ms: 0)
+      assert RateLimiter.acquire(limiter) == :ok
+    end
+
+    test "seeds the count from the server's reported usage" do
+      limiter = start_limiter(offset_ms: 0)
       reset = System.os_time(:second) + 3600
 
-      RateLimiter.observe(headers(600, 0, reset), limiter)
+      # remaining 2 of 5 means 3 are already spent, so only 2 more are allowed.
+      RateLimiter.observe(headers(5, 2, reset), limiter)
 
-      # Budget is 0 in this window, so this acquire parks.
+      assert RateLimiter.acquire(limiter) == :ok
+      assert RateLimiter.acquire(limiter) == :ok
+      assert blocks?(limiter)
+    end
+
+    test "ratchets the count up when external usage outruns ours" do
+      limiter = start_limiter(offset_ms: 0)
+      reset = System.os_time(:second) + 3600
+
+      RateLimiter.observe(headers(5, 5, reset), limiter)
+      assert RateLimiter.acquire(limiter) == :ok
+
+      # Same window now reports only 1 left (something else spent budget): the
+      # count jumps to 4, so just one more grant remains.
+      RateLimiter.observe(headers(5, 1, reset), limiter)
+      assert RateLimiter.acquire(limiter) == :ok
+      assert blocks?(limiter)
+    end
+
+    test "rolls to a fresh window once the reset has passed" do
+      limiter = start_limiter(offset_ms: 0)
+
+      # Window fully spent, but its reset is already in the past.
+      RateLimiter.observe(headers(5, 0, System.os_time(:second) - 1), limiter)
+
+      assert RateLimiter.acquire(limiter) == :ok
+    end
+
+    test "the offset holds the window past the server's stated reset" do
+      limiter = start_limiter(offset_ms: 60_000)
+
+      # Server says the window resets now, but the offset keeps us waiting.
+      RateLimiter.observe(headers(5, 0, System.os_time(:second)), limiter)
+
+      assert blocks?(limiter)
+    end
+
+    test "releases a blocked caller when the window rolls" do
+      limiter = start_limiter(offset_ms: 100)
+
+      RateLimiter.observe(headers(5, 0, System.os_time(:second)), limiter)
+
       task = Task.async(fn -> RateLimiter.acquire(limiter) end)
-      assert Task.yield(task, 50) == nil
-
-      # A response from a later window (higher reset) wakes the parked caller.
-      RateLimiter.observe(headers(600, 600, reset + 60), limiter)
-      assert Task.await(task, 1000) == :ok
+      assert Task.yield(task, 30) == nil
+      assert Task.await(task, 2000) == :ok
     end
   end
 end
