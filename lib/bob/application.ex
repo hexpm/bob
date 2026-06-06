@@ -16,6 +16,7 @@ defmodule Bob.Application do
       repo_children() ++
         [
           {Task.Supervisor, [name: Bob.Tasks]},
+          Bob.DockerHub.RateLimiter,
           Bob.DockerHub.Auth,
           runner_spec(),
           {Bob.Schedule, [schedule()]},
