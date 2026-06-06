@@ -4,6 +4,8 @@ defmodule Bob.Artifacts.Artifact do
   import Ecto.Changeset
 
   @fields [:kind, :arch, :os, :name, :ref, :sha256, :built_at]
+  # sha256 is absent for OTP builds that predate the builds.txt checksum column.
+  @required [:kind, :arch, :os, :name, :ref, :built_at]
 
   schema "build_artifacts" do
     field(:kind, :string)
@@ -18,6 +20,6 @@ defmodule Bob.Artifacts.Artifact do
   def changeset(artifact, attrs) do
     artifact
     |> cast(attrs, @fields)
-    |> validate_required(@fields)
+    |> validate_required(@required)
   end
 end

@@ -21,8 +21,22 @@ defmodule Bob.ArtifactsTest do
       assert changeset.changes.built_at == ~U[2026-01-02 03:04:05.000000Z]
     end
 
-    test "requires every field" do
+    test "requires every field but sha256" do
       refute Artifact.changeset(%Artifact{}, %{}).valid?
+    end
+
+    test "is valid without a sha256 (historical OTP build)" do
+      changeset =
+        Artifact.changeset(%Artifact{}, %{
+          kind: "otp",
+          arch: "amd64",
+          os: "ubuntu-24.04",
+          name: "OTP-27.0",
+          ref: "abc123",
+          built_at: "2026-01-02T03:04:05Z"
+        })
+
+      assert changeset.valid?
     end
   end
 
@@ -47,6 +61,32 @@ defmodule Bob.ArtifactsTest do
     end
   end
 
+  describe "import_artifacts/1" do
+    test "bulk-inserts rows and upserts on a conflicting (kind, arch, os, name)" do
+      assert Artifacts.import_artifacts([
+               row("OTP-27.0", "r27", "h27"),
+               row("OTP-26.0", "r26", nil)
+             ]) == :ok
+
+      Artifacts.import_artifacts([row("OTP-27.0", "r27b", "h27b")])
+
+      assert [
+               %Artifact{name: "OTP-26.0", sha256: nil},
+               %Artifact{name: "OTP-27.0", sha256: "h27b"}
+             ] =
+               Repo.all(from(a in Artifact, order_by: a.name))
+
+      assert Artifacts.built_otp_refs("amd64", "ubuntu-24.04") == %{
+               "OTP-27.0" => "r27b",
+               "OTP-26.0" => "r26"
+             }
+    end
+
+    test "returns :ok for an empty list" do
+      assert Artifacts.import_artifacts([]) == :ok
+    end
+  end
+
   describe "builds_txt/2" do
     test "renders one line per artifact, sorted by name, second-precision date" do
       Artifacts.upsert(%{attrs() | name: "OTP-27.0", ref: "r27", sha256: "h27"})
@@ -57,6 +97,16 @@ defmodule Bob.ArtifactsTest do
              OTP-26.0 r26 2026-01-02T03:04:05Z h26
              OTP-27.0 r27 2026-01-02T03:04:05Z h27
              maint rm 2026-01-02T03:04:05Z hm
+             """
+    end
+
+    test "omits the checksum column for builds without a sha256" do
+      Artifacts.upsert(%{attrs() | name: "OTP-27.0", ref: "r27", sha256: nil})
+      Artifacts.upsert(%{attrs() | name: "OTP-28.0", ref: "r28", sha256: "h28"})
+
+      assert Artifacts.builds_txt("amd64", "ubuntu-24.04") == """
+             OTP-27.0 r27 2026-01-02T03:04:05Z
+             OTP-28.0 r28 2026-01-02T03:04:05Z h28
              """
     end
 
@@ -371,6 +421,18 @@ defmodule Bob.ArtifactsTest do
       ref: "abc123",
       sha256: "deadbeef",
       built_at: "2026-01-02T03:04:05Z"
+    }
+  end
+
+  defp row(name, ref, sha256) do
+    %{
+      kind: "otp",
+      arch: "amd64",
+      os: "ubuntu-24.04",
+      name: name,
+      ref: ref,
+      sha256: sha256,
+      built_at: ~U[2026-01-02 03:04:05.000000Z]
     }
   end
 end

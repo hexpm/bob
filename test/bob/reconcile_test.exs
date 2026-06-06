@@ -151,7 +151,7 @@ defmodule Bob.ReconcileTest do
         :get,
         "https://s3.amazonaws.com/s3.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt",
         200,
-        "OTP-27.0 ref27 2026-01-02T03:04:05Z sha27\nOTP-26.0 ref26 2026-01-02T03:04:05Z sha26\n"
+        "OTP-27.0 ref27 2026-01-02T03:04:05Z sha27\nOTP-26.0 ref26 2026-01-02T03:04:05Z\n"
       )
 
       Reconcile.backfill(streamer(%{}))

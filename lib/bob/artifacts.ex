@@ -198,6 +198,25 @@ defmodule Bob.Artifacts do
     )
   end
 
+  @doc """
+  Bulk-upserts artifact rows in a single statement, replacing
+  `ref`/`sha256`/`built_at` on a conflicting `(kind, arch, os, name)`. The
+  backfill imports each builds.txt with one insert rather than a query per line.
+  Rows must already carry dumped values (e.g. `built_at` as a `DateTime`).
+  """
+  def import_artifacts([]), do: :ok
+
+  def import_artifacts(rows) do
+    rows = Enum.uniq_by(rows, &{&1.kind, &1.arch, &1.os, &1.name})
+
+    Repo.insert_all(Artifact, rows,
+      on_conflict: {:replace, [:ref, :sha256, :built_at]},
+      conflict_target: [:kind, :arch, :os, :name]
+    )
+
+    :ok
+  end
+
   def built_otp_refs(arch, os) do
     Repo.all(
       from(a in Artifact,
@@ -216,8 +235,12 @@ defmodule Bob.Artifacts do
         select: {a.name, a.ref, a.built_at, a.sha256}
       )
     )
-    |> Enum.map_join(fn {name, ref, built_at, sha256} ->
-      "#{name} #{ref} #{format_date(built_at)} #{sha256}\n"
+    |> Enum.map_join(fn
+      {name, ref, built_at, nil} ->
+        "#{name} #{ref} #{format_date(built_at)}\n"
+
+      {name, ref, built_at, sha256} ->
+        "#{name} #{ref} #{format_date(built_at)} #{sha256}\n"
     end)
   end
 

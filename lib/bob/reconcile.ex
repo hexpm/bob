@@ -134,28 +134,48 @@ defmodule Bob.Reconcile do
         body ->
           body
           |> String.split("\n", trim: true)
-          |> Enum.each(&import_builds_line(&1, arch, os))
+          |> Enum.flat_map(&parse_builds_line(&1, arch, os))
+          |> Artifacts.import_artifacts()
       end
     end
 
     :ok
   end
 
-  defp import_builds_line(line, arch, os) do
+  # Builds written before the checksum column was added carry only
+  # `name ref date`; newer ones append the sha256.
+  defp parse_builds_line(line, arch, os) do
     case String.split(line, " ", trim: true) do
-      [name, ref, date, sha256] ->
-        Artifacts.upsert(%{
-          kind: "otp",
-          arch: arch,
-          os: os,
-          name: name,
-          ref: ref,
-          sha256: sha256,
-          built_at: date
-        })
-
-      _other ->
-        Logger.warning("BACKFILL skipping malformed builds.txt line: #{inspect(line)}")
+      [name, ref, date, sha256] -> build_row(line, arch, os, name, ref, date, sha256)
+      [name, ref, date] -> build_row(line, arch, os, name, ref, date, nil)
+      _other -> skip_malformed(line)
     end
+  end
+
+  defp build_row(line, arch, os, name, ref, date, sha256) do
+    case DateTime.from_iso8601(date) do
+      {:ok, datetime, _offset} ->
+        built_at = %{datetime | microsecond: {elem(datetime.microsecond, 0), 6}}
+
+        [
+          %{
+            kind: "otp",
+            arch: arch,
+            os: os,
+            name: name,
+            ref: ref,
+            sha256: sha256,
+            built_at: built_at
+          }
+        ]
+
+      {:error, _reason} ->
+        skip_malformed(line)
+    end
+  end
+
+  defp skip_malformed(line) do
+    Logger.warning("BACKFILL skipping malformed builds.txt line: #{inspect(line)}")
+    []
   end
 end
