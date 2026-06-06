@@ -2,8 +2,9 @@ defmodule Bob.Reconcile do
   @moduledoc """
   Seeds and reconciles the Docker tag and base-image caches.
 
-  `backfill/1` is run once at cutover (`Bob.Release.backfill/0`); `reconcile/1`
-  runs nightly via `Bob.Job.Reconcile`. Both page Docker Hub through an injected
+  `backfill/1` is run once at cutover on the running node (e.g.
+  `bin/bob rpc "Bob.Reconcile.backfill()"`); `reconcile/1` runs nightly via
+  `Bob.Job.Reconcile`. Both page Docker Hub through an injected
   streamer (default `Bob.DockerHub.stream_repo_tags/2`), staging each page into
   `docker_tags_staging` under a per-run token and applying the full set with a
   set-based swap — so the response is never held in memory and no connection is
