@@ -60,9 +60,10 @@ defmodule Bob.DockerHub.RateLimiterTest do
       assert blocks?(limiter)
     end
 
-    test "before any response, grants are allowed (calibration probe)" do
+    test "allows a single calibration probe, then blocks until a response anchors the window" do
       limiter = start_limiter(offset_ms: 0)
       assert RateLimiter.acquire(limiter) == :ok
+      assert blocks?(limiter)
     end
 
     test "seeds the count from the server's reported usage" do
@@ -117,6 +118,25 @@ defmodule Bob.DockerHub.RateLimiterTest do
       task = Task.async(fn -> RateLimiter.acquire(limiter) end)
       assert Task.yield(task, 30) == nil
       assert Task.await(task, 2000) == :ok
+    end
+  end
+
+  describe "throttle/2" do
+    test "a 429 with rate headers holds the gate shut until the window resets" do
+      limiter = start_limiter(offset_ms: 0)
+      reset = System.os_time(:second) + 3600
+
+      RateLimiter.throttle(headers(600, 0, reset), limiter)
+
+      assert blocks?(limiter)
+    end
+
+    test "a 429 without rate headers holds the gate shut on the fallback window" do
+      limiter = start_limiter(offset_ms: 0)
+
+      RateLimiter.throttle([{"retry-after", "30"}], limiter)
+
+      assert blocks?(limiter)
     end
   end
 end

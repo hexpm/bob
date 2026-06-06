@@ -21,6 +21,10 @@ defmodule Bob.DockerHub.RateLimiter do
   # ahead of Docker Hub's can't send into the tail of the previous window.
   @resume_offset_ms 2_000
 
+  # How long to hold the gate shut on a 429 that carries no usable rate headers,
+  # so callers stop hammering until the server's limit has had time to reset.
+  @throttle_fallback_ms 60_000
+
   def start_link(opts \\ []) do
     case Keyword.get(opts, :name, __MODULE__) do
       nil -> GenServer.start_link(__MODULE__, opts)
@@ -36,6 +40,15 @@ defmodule Bob.DockerHub.RateLimiter do
   @doc "Feeds a response's headers back so the gate tracks the limit and window."
   def observe(headers, server \\ __MODULE__) do
     GenServer.cast(server, {:observe, parse_rate(headers)})
+  end
+
+  @doc """
+  Feeds a 429 response back so the gate holds shut until the limit window
+  resets. If the response carries rate headers we anchor on their `reset`;
+  otherwise we fall back to a fixed wait.
+  """
+  def throttle(headers, server \\ __MODULE__) do
+    GenServer.cast(server, {:throttle, parse_rate(headers)})
   end
 
   @doc false
@@ -79,32 +92,20 @@ defmodule Bob.DockerHub.RateLimiter do
   @impl true
   def handle_cast({:observe, nil}, state), do: {:noreply, state}
 
-  def handle_cast({:observe, %{limit: limit, remaining: remaining, reset: reset}}, state) do
-    state = %{state | limit: limit}
+  def handle_cast({:observe, rate}, state) do
+    {:noreply, schedule_resume(release(apply_rate(state, rate)))}
+  end
 
-    state =
-      cond do
-        # First response of a window (initial, or after a roll cleared it):
-        # anchor the window and seed the count from the server's usage.
-        state.window == nil ->
-          %{
-            state
-            | window: reset,
-              reset_at: monotonic_deadline(reset) + state.offset_ms,
-              sent: max(state.sent, limit - remaining)
-          }
+  # A 429 with rate headers reports remaining == 0, so apply_rate anchors the
+  # window with the count maxed out and the gate stays shut until it resets. No
+  # release: there is nothing to hand out.
+  def handle_cast({:throttle, rate}, state) when not is_nil(rate) do
+    {:noreply, schedule_resume(apply_rate(state, rate))}
+  end
 
-        # Same window: ratchet the count up if external usage outran ours.
-        reset == state.window ->
-          %{state | sent: max(state.sent, limit - remaining)}
-
-        # A different window's reset (a stale straggler, or a roll the timer will
-        # handle): leave the count and window alone.
-        true ->
-          state
-      end
-
-    {:noreply, schedule_resume(release(state))}
+  # A 429 without usable headers: hold the window shut for a fixed spell.
+  def handle_cast({:throttle, nil}, state) do
+    {:noreply, schedule_resume(park(state, @throttle_fallback_ms))}
   end
 
   @impl true
@@ -112,8 +113,46 @@ defmodule Bob.DockerHub.RateLimiter do
     {:noreply, schedule_resume(release(roll(%{state | timer: nil})))}
   end
 
-  defp available?(%{limit: nil}), do: true
+  # No confirmed window yet (cold start, or just rolled): allow a single probe
+  # so the next response anchors the real budget before we burst into it.
+  defp available?(%{window: nil, sent: sent}), do: sent < 1
   defp available?(%{sent: sent, limit: limit}), do: sent < limit
+
+  # Folds a response's rate headers into the window: anchor it on the window's
+  # first response and seed the count from the server's usage; on later
+  # responses only ratchet the count up, never lower our own tally.
+  defp apply_rate(state, %{limit: limit, remaining: remaining, reset: reset}) do
+    state = %{state | limit: limit}
+
+    cond do
+      state.window == nil ->
+        %{
+          state
+          | window: reset,
+            reset_at: monotonic_deadline(reset) + state.offset_ms,
+            sent: max(state.sent, limit - remaining)
+        }
+
+      reset == state.window ->
+        %{state | sent: max(state.sent, limit - remaining)}
+
+      true ->
+        state
+    end
+  end
+
+  # Force the gate shut for `ms`, regardless of what the window thought it had.
+  defp park(state, ms) do
+    limit = state.limit || 1
+
+    %{
+      state
+      | limit: limit,
+        sent: limit,
+        window: state.window || :throttled,
+        reset_at: System.monotonic_time(:millisecond) + ms + state.offset_ms
+    }
+  end
 
   # The window has elapsed (its reset plus the offset has passed): start the next
   # one with a clean count. The next response re-anchors the window.

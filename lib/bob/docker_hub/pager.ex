@@ -6,6 +6,10 @@ defmodule Bob.DockerHub.Pager do
   @concurrency 50
   @timeout 60 * 60 * 1000
 
+  # Cap re-acquires after a 429 so a permanently throttled IP can't loop forever;
+  # each re-acquire already blocks on the rate limiter until the window resets.
+  @max_rate_limit_retries 20
+
   def start_link(url, on_page) do
     GenServer.start_link(__MODULE__, {url, on_page})
   end
@@ -78,38 +82,47 @@ defmodule Bob.DockerHub.Pager do
 
   defp next_request(state) do
     if MapSet.size(state.tasks) < @concurrency do
-      task =
-        Task.async(fn ->
-          url = String.replace(state.url, "${page}", Integer.to_string(state.page))
-          headers = Bob.DockerHub.headers()
-          opts = [:with_body, recv_timeout: 20_000]
-
-          RateLimiter.acquire()
-
-          result =
-            Bob.HTTP.retry("DockerHub #{url}", fn ->
-              :hackney.request(:get, url, headers, "", opts)
-            end)
-
-          case result do
-            {:ok, 200, headers, body} ->
-              RateLimiter.observe(headers)
-              decoded = JSON.decode!(body)
-              {:ok, Enum.flat_map(decoded["results"], &List.wrap(Bob.DockerHub.parse(&1)))}
-
-            {:ok, 404, headers, _body} ->
-              RateLimiter.observe(headers)
-              :done
-
-            other ->
-              {:error, other}
-          end
-        end)
-
+      url = String.replace(state.url, "${page}", Integer.to_string(state.page))
+      task = Task.async(fn -> fetch_page(url, 0) end)
       state = %{state | page: state.page + 1, tasks: MapSet.put(state.tasks, task.ref)}
       next_request(state)
     else
       state
+    end
+  end
+
+  # Each attempt acquires from the rate limiter (which blocks until the window
+  # has budget), so a 429 simply feeds the limiter and re-acquires — the next
+  # attempt waits for the window to reset rather than hammering.
+  defp fetch_page(url, attempts) do
+    headers = Bob.DockerHub.headers()
+    opts = [:with_body, recv_timeout: 20_000]
+
+    RateLimiter.acquire()
+
+    result =
+      Bob.HTTP.retry(
+        "DockerHub #{url}",
+        fn -> :hackney.request(:get, url, headers, "", opts) end,
+        retry_rate_limit?: false
+      )
+
+    case result do
+      {:ok, 200, headers, body} ->
+        RateLimiter.observe(headers)
+        decoded = JSON.decode!(body)
+        {:ok, Enum.flat_map(decoded["results"], &List.wrap(Bob.DockerHub.parse(&1)))}
+
+      {:ok, 404, headers, _body} ->
+        RateLimiter.observe(headers)
+        :done
+
+      {:ok, 429, headers, _body} when attempts < @max_rate_limit_retries ->
+        RateLimiter.throttle(headers)
+        fetch_page(url, attempts + 1)
+
+      other ->
+        {:error, other}
     end
   end
 end
