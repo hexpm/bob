@@ -133,6 +133,17 @@ defmodule Bob.Queue do
     )
   end
 
+  @doc "Lists queued jobs as `{module_key, args}`, oldest first, for inspection."
+  def queued() do
+    Repo.all(
+      from(j in Job,
+        where: j.state == "queued",
+        order_by: [j.inserted_at, j.id],
+        select: {j.module_key, j.args}
+      )
+    )
+  end
+
   defp finish(id, state) do
     {_count, rows} =
       Repo.update_all(

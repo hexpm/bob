@@ -163,4 +163,11 @@ defmodule Bob.QueueTest do
     assert Enum.sort(Queue.queue_sizes()) ==
              Enum.sort([{TestJob, 2}, {{TestJob, :variant}, 1}])
   end
+
+  test "queued lists queued jobs with decoded module_key and args, oldest first" do
+    Queue.add(TestJob, [:a])
+    Queue.add({TestJob, :variant}, [:b, :c])
+
+    assert Queue.queued() == [{TestJob, [:a]}, {{TestJob, :variant}, [:b, :c]}]
+  end
 end
