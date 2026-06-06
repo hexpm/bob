@@ -3,7 +3,7 @@ defmodule Bob.DockerHub.Pager do
 
   alias Bob.DockerHub.RateLimiter
 
-  @concurrency 20
+  @concurrency 50
   @timeout 60 * 60 * 1000
 
   def start_link(url, on_page) do
