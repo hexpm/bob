@@ -17,6 +17,8 @@ defmodule Bob.DockerHub.RateLimiter do
 
   use GenServer
 
+  require Logger
+
   # Resume this long after the server's reset, so a local clock running slightly
   # ahead of Docker Hub's can't send into the tail of the previous window.
   @resume_offset_ms 2_000
@@ -100,12 +102,16 @@ defmodule Bob.DockerHub.RateLimiter do
   # window with the count maxed out and the gate stays shut until it resets. No
   # release: there is nothing to hand out.
   def handle_cast({:throttle, rate}, state) when not is_nil(rate) do
-    {:noreply, schedule_resume(apply_rate(state, rate))}
+    state = apply_rate(state, rate)
+    log_throttle(state)
+    {:noreply, schedule_resume(state)}
   end
 
   # A 429 without usable headers: hold the window shut for a fixed spell.
   def handle_cast({:throttle, nil}, state) do
-    {:noreply, schedule_resume(park(state, @throttle_fallback_ms))}
+    state = park(state, @throttle_fallback_ms)
+    log_throttle(state)
+    {:noreply, schedule_resume(state)}
   end
 
   @impl true
@@ -194,6 +200,11 @@ defmodule Bob.DockerHub.RateLimiter do
   end
 
   defp schedule_resume(state), do: state
+
+  defp log_throttle(%{reset_at: reset_at}) do
+    wait_s = div(max(reset_at - System.monotonic_time(:millisecond), 0), 1000)
+    Logger.warning("DockerHub rate limited, holding #{wait_s}s for the window to reset")
+  end
 
   defp monotonic_deadline(reset_unix) do
     delay_ms = max(reset_unix - System.os_time(:second), 0) * 1000

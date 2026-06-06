@@ -23,15 +23,19 @@ defmodule Bob.HTTP do
         end
 
       {:ok, 429, _headers, _body} = result ->
-        Logger.warning("#{name} RATE LIMIT")
-
         # When the caller paces itself against the rate-limit window (the Docker
-        # Hub pager), hand the 429 back so it can react to the headers instead of
-        # blind-sleeping here.
-        if Keyword.get(opts, :retry_rate_limit?, true) and times + 1 < @max_retry_times do
-          sleep = trunc(:math.pow(3, times) * @rate_limit_sleep_time)
-          Process.sleep(sleep)
-          retry(name, fun, times + 1, opts)
+        # Hub pager), hand the 429 back silently so it can react to the headers;
+        # the limiter logs the wait. Only blind-retry (and warn) otherwise.
+        if Keyword.get(opts, :retry_rate_limit?, true) do
+          Logger.warning("#{name} RATE LIMIT")
+
+          if times + 1 < @max_retry_times do
+            sleep = trunc(:math.pow(3, times) * @rate_limit_sleep_time)
+            Process.sleep(sleep)
+            retry(name, fun, times + 1, opts)
+          else
+            result
+          end
         else
           result
         end
