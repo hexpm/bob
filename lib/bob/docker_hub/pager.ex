@@ -1,29 +1,26 @@
 defmodule Bob.DockerHub.Pager do
   use GenServer
 
+  alias Bob.DockerHub.RateLimiter
+
   @concurrency 20
   @timeout 60 * 60 * 1000
 
-  def start_link(url) do
-    GenServer.start_link(__MODULE__, {url, nil})
-  end
-
-  def start_link(url, on_result) do
-    GenServer.start_link(__MODULE__, {url, on_result})
+  def start_link(url, on_page) do
+    GenServer.start_link(__MODULE__, {url, on_page})
   end
 
   def wait(server) do
     GenServer.call(server, :wait, @timeout)
   end
 
-  def init({url, on_result}) do
+  def init({url, on_page}) do
     {:ok,
      next_request(%{
        url: url,
-       on_result: on_result,
+       on_page: on_page,
        page: 1,
        tasks: MapSet.new(),
-       results: [],
        reply: nil,
        error: nil
      })}
@@ -35,23 +32,15 @@ defmodule Bob.DockerHub.Pager do
         {:stop, :normal, {:error, state.error}, state}
 
       MapSet.size(state.tasks) == 0 ->
-        result = if state.on_result, do: :ok, else: Enum.concat(state.results)
-        {:stop, :normal, result, state}
+        {:stop, :normal, :ok, state}
 
       true ->
         {:noreply, %{state | reply: from}}
     end
   end
 
-  def handle_info({ref, {:ok, result}}, state) do
-    state =
-      if state.on_result do
-        state.on_result.(result)
-        state
-      else
-        %{state | results: [result | state.results]}
-      end
-
+  def handle_info({ref, {:ok, tags}}, state) do
+    state.on_page.(tags)
     state = %{state | tasks: MapSet.delete(state.tasks, ref)}
     {:noreply, next_request(state)}
   end
@@ -75,8 +64,7 @@ defmodule Bob.DockerHub.Pager do
         {:noreply, state}
 
       state.reply ->
-        result = if state.on_result, do: :ok, else: Enum.concat(state.results)
-        GenServer.reply(state.reply, result)
+        GenServer.reply(state.reply, :ok)
         {:stop, :normal, state}
 
       true ->
@@ -96,17 +84,21 @@ defmodule Bob.DockerHub.Pager do
           headers = Bob.DockerHub.headers()
           opts = [:with_body, recv_timeout: 20_000]
 
+          RateLimiter.acquire()
+
           result =
             Bob.HTTP.retry("DockerHub #{url}", fn ->
               :hackney.request(:get, url, headers, "", opts)
             end)
 
           case result do
-            {:ok, 200, _headers, body} ->
+            {:ok, 200, headers, body} ->
+              RateLimiter.observe(headers)
               decoded = JSON.decode!(body)
               {:ok, Enum.flat_map(decoded["results"], &List.wrap(Bob.DockerHub.parse(&1)))}
 
-            {:ok, 404, _headers, _body} ->
+            {:ok, 404, headers, _body} ->
+              RateLimiter.observe(headers)
               :done
 
             other ->

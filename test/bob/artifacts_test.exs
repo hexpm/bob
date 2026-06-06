@@ -152,9 +152,9 @@ defmodule Bob.ArtifactsTest do
     end
   end
 
-  describe "replace_docker_tags/2" do
-    test "inserts the given tags with their arch lists" do
-      assert Artifacts.replace_docker_tags("hexpm/erlang-amd64", [
+  describe "stage_docker_tags/3 + swap_docker_tags/2" do
+    test "inserts the staged tags with their arch lists" do
+      assert replace("hexpm/erlang-amd64", [
                {"27.0-ubuntu-noble-20250101", ["amd64"]},
                {"26.0-ubuntu-noble-20250101", ["amd64"]}
              ]) == :ok
@@ -169,19 +169,17 @@ defmodule Bob.ArtifactsTest do
     test "replaces (does not union) the arch list on conflict" do
       Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
 
-      Artifacts.replace_docker_tags("hexpm/erlang", [
-        {"27.0-ubuntu-noble-20250101", ["amd64"]}
-      ])
+      replace("hexpm/erlang", [{"27.0-ubuntu-noble-20250101", ["amd64"]}])
 
       assert Artifacts.docker_tags("hexpm/erlang") ==
                [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
     end
 
-    test "prunes rows whose tag is no longer present" do
+    test "prunes rows whose tag is no longer staged" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "old-tag", ["amd64"])
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "kept-tag", ["amd64"])
 
-      Artifacts.replace_docker_tags("hexpm/erlang-amd64", [{"kept-tag", ["amd64"]}])
+      replace("hexpm/erlang-amd64", [{"kept-tag", ["amd64"]}])
 
       assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"kept-tag", ["amd64"]}]
     end
@@ -189,19 +187,111 @@ defmodule Bob.ArtifactsTest do
     test "does not touch other repos" do
       Artifacts.add_docker_tag("hexpm/erlang-arm64", "arm-tag", ["arm64"])
 
-      Artifacts.replace_docker_tags("hexpm/erlang-amd64", [{"amd-tag", ["amd64"]}])
+      replace("hexpm/erlang-amd64", [{"amd-tag", ["amd64"]}])
 
       assert Artifacts.docker_tags("hexpm/erlang-arm64") == [{"arm-tag", ["arm64"]}]
     end
 
-    test "deduplicates repeated tags (Docker Hub can return dupes)" do
-      assert Artifacts.replace_docker_tags("hexpm/erlang-amd64", [
-               {"27.0-ubuntu-noble-20250101", ["amd64"]},
-               {"27.0-ubuntu-noble-20250101", ["amd64"]}
-             ]) == :ok
+    test "collapses duplicate tags staged across pages (Docker Hub returns dupes)" do
+      token = Ecto.UUID.generate()
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"27.0", ["amd64"]}])
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"27.0", ["amd64"]}])
+      assert Artifacts.swap_docker_tags(token, "hexpm/erlang-amd64") == :ok
 
-      assert Artifacts.docker_tags("hexpm/erlang-amd64") ==
-               [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"27.0", ["amd64"]}]
+    end
+
+    test "streams more tags than fit in a single statement's parameter limit" do
+      token = Ecto.UUID.generate()
+
+      for page <- Enum.chunk_every(1..6000, 100) do
+        Artifacts.stage_docker_tags(
+          token,
+          "hexpm/erlang-amd64",
+          Enum.map(page, &{"tag-#{&1}", ["amd64"]})
+        )
+      end
+
+      assert Artifacts.swap_docker_tags(token, "hexpm/erlang-amd64") == :ok
+      assert length(Artifacts.docker_tags("hexpm/erlang-amd64")) == 6000
+    end
+
+    test "concurrent tokens for the same repo do not see each other's rows" do
+      a = Ecto.UUID.generate()
+      b = Ecto.UUID.generate()
+
+      Artifacts.stage_docker_tags(a, "hexpm/erlang-amd64", [{"from-a", ["amd64"]}])
+      Artifacts.stage_docker_tags(b, "hexpm/erlang-amd64", [{"from-b", ["amd64"]}])
+
+      assert Artifacts.staged_tag_count(a, "hexpm/erlang-amd64") == 1
+      assert Artifacts.swap_docker_tags(a, "hexpm/erlang-amd64") == :ok
+
+      # Swapping token a leaves token b's staged rows untouched.
+      assert Artifacts.staged_tag_count(b, "hexpm/erlang-amd64") == 1
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"from-a", ["amd64"]}]
+    end
+  end
+
+  describe "staged_tag_count/2" do
+    test "counts distinct staged tags for the token and repo" do
+      token = Ecto.UUID.generate()
+
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [
+        {"a", ["amd64"]},
+        {"b", ["amd64"]}
+      ])
+
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"a", ["amd64"]}])
+
+      assert Artifacts.staged_tag_count(token, "hexpm/erlang-amd64") == 2
+      assert Artifacts.staged_tag_count(token, "hexpm/elixir-amd64") == 0
+    end
+  end
+
+  describe "staged_multi_arch_tags/3" do
+    test "returns staged tags whose archs cover every requested arch" do
+      token = Ecto.UUID.generate()
+
+      Artifacts.stage_docker_tags(token, "library/alpine", [
+        {"3.23.5", ["amd64", "arm64", "386"]},
+        {"3.22.1", ["amd64"]}
+      ])
+
+      assert Artifacts.staged_multi_arch_tags(token, "library/alpine", ["amd64", "arm64"]) ==
+               ["3.23.5"]
+    end
+  end
+
+  describe "discard_staging/1" do
+    test "drops every row for the token" do
+      token = Ecto.UUID.generate()
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"a", ["amd64"]}])
+
+      assert Artifacts.discard_staging(token) == :ok
+      assert Artifacts.staged_tag_count(token, "hexpm/erlang-amd64") == 0
+    end
+  end
+
+  describe "prune_staging/1" do
+    test "deletes rows older than the threshold and keeps fresh ones" do
+      token = Ecto.UUID.generate()
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"fresh", ["amd64"]}])
+
+      stale = Ecto.UUID.generate()
+
+      Repo.insert_all(Bob.Artifacts.DockerTagStaging, [
+        %{
+          token: stale,
+          repo: "hexpm/erlang-amd64",
+          tag: "stale",
+          archs: ["amd64"],
+          inserted_at: NaiveDateTime.add(NaiveDateTime.utc_now(), -7 * 60 * 60, :second)
+        }
+      ])
+
+      assert Artifacts.prune_staging(6 * 60 * 60) == 1
+      assert Artifacts.staged_tag_count(token, "hexpm/erlang-amd64") == 1
+      assert Artifacts.staged_tag_count(stale, "hexpm/erlang-amd64") == 0
     end
   end
 
@@ -264,6 +354,12 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.base_image_tags("library/alpine") == ["3.23.5"]
     end
+  end
+
+  defp replace(repo, tag_archs) do
+    token = Ecto.UUID.generate()
+    Artifacts.stage_docker_tags(token, repo, tag_archs)
+    Artifacts.swap_docker_tags(token, repo)
   end
 
   defp attrs() do

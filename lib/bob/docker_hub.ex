@@ -16,13 +16,20 @@ defmodule Bob.DockerHub do
     Application.put_env(:bob, :dockerhub_token, result["token"])
   end
 
-  def fetch_repo_tags(repo) do
+  @doc """
+  Pages every tag of `repo` from Docker Hub, invoking `on_page` with each page's
+  `{tag, archs}` list as it arrives. Returns `:ok` once the full set is fetched
+  or `:error` if any page failed, so the caller can avoid applying a partial set.
+  Pages stream through `on_page` rather than accumulating, so the response set is
+  never held in memory in full.
+  """
+  def stream_repo_tags(repo, on_page) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100"
-    {:ok, server} = Bob.DockerHub.Pager.start_link(url)
+    {:ok, server} = Bob.DockerHub.Pager.start_link(url, on_page)
 
     case Bob.DockerHub.Pager.wait(server) do
-      {:error, reason} -> raise "DockerHub paging failed for #{repo}: #{inspect(reason)}"
-      tags -> tags
+      :ok -> :ok
+      {:error, _reason} -> :error
     end
   end
 

@@ -2,9 +2,17 @@ defmodule Bob.Artifacts do
   import Ecto.Query
 
   alias Bob.Repo
-  alias Bob.Artifacts.{Artifact, DockerTag, BaseImageTag}
+  alias Bob.Artifacts.{Artifact, DockerTag, BaseImageTag, DockerTagStaging}
 
   @builds_txt_lock 4_771_002
+
+  # Each staging row binds five parameters; Postgres caps a statement at 65535,
+  # so a page is inserted in chunks well under that ceiling.
+  @staging_chunk 5000
+
+  # The swap reads and rewrites the whole repo (up to ~1M rows for hexpm/elixir)
+  # in two set-based statements, which can run longer than the 15s default.
+  @swap_timeout 5 * 60 * 1000
 
   def add(attrs) do
     upsert(attrs)
@@ -32,44 +40,123 @@ defmodule Bob.Artifacts do
     :ok
   end
 
-  def replace_docker_tags(_repo, []), do: :ok
+  @doc """
+  Inserts a page of `{tag, archs}` pairs into the staging table under `token`.
 
-  def replace_docker_tags(repo, tag_archs) do
-    tag_archs = Enum.uniq_by(tag_archs, fn {tag, _archs} -> tag end)
+  Reconcile streams Docker Hub a page at a time into staging so the full tag
+  list (up to ~1M for hexpm/elixir) is never held in memory and no connection is
+  held across the multi-minute fetch. The `token` isolates this run's rows from
+  any concurrent reconcile of the same repo; `swap_docker_tags/2` then applies
+  them. Cross-page duplicates are tolerated and de-duplicated at swap time.
+  """
+  def stage_docker_tags(_token, _repo, []), do: :ok
+
+  def stage_docker_tags(token, repo, tag_archs) do
     now = NaiveDateTime.utc_now()
-    {values, params} = docker_tags_insert(repo, tag_archs, now)
-    tags = Enum.map(tag_archs, fn {tag, _archs} -> tag end)
 
-    Repo.transaction(fn ->
-      Repo.query!(
-        """
-        INSERT INTO docker_tags (repo, tag, archs, built_at)
-        VALUES #{values}
-        ON CONFLICT (repo, tag)
-        DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at
-        """,
-        params
-      )
-
-      Repo.query!("DELETE FROM docker_tags WHERE repo = $1 AND NOT (tag = ANY($2))", [repo, tags])
+    tag_archs
+    |> Enum.uniq_by(fn {tag, _archs} -> tag end)
+    |> Enum.map(fn {tag, archs} ->
+      %{token: token, repo: repo, tag: tag, archs: archs, inserted_at: now}
     end)
+    |> Enum.chunk_every(@staging_chunk)
+    |> Enum.each(&Repo.insert_all(DockerTagStaging, &1))
 
     :ok
   end
 
-  # Builds the multi-row VALUES clause and its parameter list for a single
-  # batched INSERT. $1 is the repo and $2 the timestamp, shared by every row;
-  # each tag/archs pair takes the next two positional parameters.
-  defp docker_tags_insert(repo, tag_archs, now) do
-    values =
-      tag_archs
-      |> Enum.with_index()
-      |> Enum.map_join(", ", fn {_tag_archs, i} ->
-        "($1, $#{3 + i * 2}, $#{4 + i * 2}, $2)"
-      end)
+  @doc """
+  Applies the tags staged under `token` for `repo` to `docker_tags`, in one
+  transaction: upsert every staged tag, prune any `docker_tags` row whose tag is
+  no longer staged, then drop the staging rows. `DISTINCT ON` collapses any
+  duplicate tags Docker Hub returned across pages.
 
-    params = [repo, now | Enum.flat_map(tag_archs, fn {tag, archs} -> [tag, archs] end)]
-    {values, params}
+  Only call this once the full fetch succeeded — a partial fetch would prune
+  tags that were merely not yet fetched.
+  """
+  def swap_docker_tags(token, repo) do
+    now = NaiveDateTime.utc_now()
+
+    Repo.transaction(
+      fn ->
+        Repo.query!(
+          """
+          INSERT INTO docker_tags (repo, tag, archs, built_at)
+          SELECT DISTINCT ON (repo, tag) repo, tag, archs, $3
+          FROM docker_tags_staging
+          WHERE token = $1 AND repo = $2
+          ORDER BY repo, tag
+          ON CONFLICT (repo, tag)
+          DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at
+          """,
+          [token, repo, now]
+        )
+
+        Repo.query!(
+          """
+          DELETE FROM docker_tags d
+          WHERE d.repo = $2
+            AND NOT EXISTS (
+              SELECT 1 FROM docker_tags_staging s
+              WHERE s.token = $1 AND s.repo = d.repo AND s.tag = d.tag
+            )
+          """,
+          [token, repo]
+        )
+
+        Repo.query!(
+          "DELETE FROM docker_tags_staging WHERE token = $1 AND repo = $2",
+          [token, repo]
+        )
+      end,
+      timeout: @swap_timeout
+    )
+
+    :ok
+  end
+
+  @doc "Number of distinct tags staged under `token` for `repo`."
+  def staged_tag_count(token, repo) do
+    %{rows: [[count]]} =
+      Repo.query!(
+        "SELECT count(DISTINCT tag) FROM docker_tags_staging WHERE token = $1 AND repo = $2",
+        [token, repo]
+      )
+
+    count
+  end
+
+  @doc "Distinct staged tags for `repo` whose arch list covers every arch in `archs`."
+  def staged_multi_arch_tags(token, repo, archs) do
+    %{rows: rows} =
+      Repo.query!(
+        "SELECT DISTINCT tag FROM docker_tags_staging WHERE token = $1 AND repo = $2 AND archs @> $3",
+        [token, repo, archs]
+      )
+
+    Enum.map(rows, fn [tag] -> tag end)
+  end
+
+  @doc "Drops every staging row for `token` (used when a fetch fails partway)."
+  def discard_staging(token) do
+    Repo.query!("DELETE FROM docker_tags_staging WHERE token = $1", [token])
+    :ok
+  end
+
+  @doc """
+  Deletes staging rows older than `older_than_seconds`, reclaiming rows orphaned
+  by a process that died between staging and the swap. The age threshold must
+  exceed any single sweep's duration so it never touches an in-flight run.
+  """
+  def prune_staging(older_than_seconds) do
+    cutoff =
+      NaiveDateTime.utc_now()
+      |> NaiveDateTime.add(-older_than_seconds, :second)
+
+    %{num_rows: num_rows} =
+      Repo.query!("DELETE FROM docker_tags_staging WHERE inserted_at < $1", [cutoff])
+
+    num_rows
   end
 
   def docker_tags(repo) do
