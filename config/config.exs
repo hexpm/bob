@@ -2,12 +2,6 @@ import Config
 
 config :bob,
   master_schedule: [
-    [
-      module: Bob.Job.Backup,
-      period: :day,
-      time: {2, 0, 0},
-      queue: true
-    ],
     # Done by https://github.com/elixir-lang/elixir/blob/main/.github/workflows/builds.hex.pm.yml
     # [
     #   module: Bob.Job.ElixirChecker,

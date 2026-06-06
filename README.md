@@ -85,9 +85,3 @@ Builds are provided for the following OS and architectures using the docker `OS/
  * `hexpm/erlang:22.2-ubuntu-bionic-20200219`
  * `hexpm/elixir:1.10.2-erlang-22.2.8-alpine-3.11.3`
  * `hexpm/elixir:1.10.0-erlang-22.2-ubuntu-bionic-20200219`
-
-## Hex S3 backups
-
-Each days backups of yesterdays access logs stored on the bucket `logs.hex.pm` is uploaded to the bucket `backup.hex.pm`.
-
-A snapshot of the bucket `s3.hex.pm` is also uploaded to [tarsnap](https://www.tarsnap.com).

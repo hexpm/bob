@@ -6,7 +6,6 @@ defmodule Bob.Application do
 
     setup_docker()
     setup_gsutil()
-    setup_tarsnap()
     auth_docker()
     validate_jobs()
 
@@ -47,15 +46,6 @@ defmodule Bob.Application do
       credentials = fix_env_newlines(credentials)
       File.mkdir_p!("/boto")
       File.write!("/boto/keyfile.json", credentials)
-    end
-  end
-
-  defp setup_tarsnap() do
-    if key = System.get_env("BOB_TARSNAP_KEY") do
-      key = fix_env_newlines(key)
-      File.mkdir_p!("/tarsnap")
-      # Tarsnap requires a newline before EOF, we should fix this at the source
-      File.write!("/tarsnap/key", key <> "\n")
     end
   end
 
