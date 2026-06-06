@@ -88,6 +88,7 @@ defmodule Bob.Artifacts do
           ORDER BY repo, tag
           ON CONFLICT (repo, tag)
           DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at
+          WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
           """,
           [token, repo, now]
         )
