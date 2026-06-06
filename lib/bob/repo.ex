@@ -10,7 +10,6 @@ defmodule Bob.Repo do
       ca_cert = System.get_env("BOB_DATABASE_CA_CERT")
       client_key = System.get_env("BOB_DATABASE_CLIENT_KEY")
       client_cert = System.get_env("BOB_DATABASE_CLIENT_CERT")
-      common_name = System.get_env("BOB_DATABASE_COMMON_NAME")
 
       ssl_opts =
         if ca_cert do
@@ -19,7 +18,12 @@ defmodule Bob.Repo do
             cacerts: [decode_cert(ca_cert)],
             key: decode_key(client_key),
             cert: decode_cert(client_cert),
-            server_name_indication: String.to_charlist(common_name)
+            # Cloud SQL's internal-CA server cert has a CN but no SAN; patched OTP
+            # rejects no-SAN certs during hostname verification
+            # (missing_subject_altnames). Disabling SNI gives verify-CA: the chain
+            # and mTLS are still verified, only hostname matching is dropped.
+            # customize_hostname_check does not clear this error.
+            server_name_indication: :disable
           ]
         end
 
