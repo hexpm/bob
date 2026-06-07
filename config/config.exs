@@ -4,16 +4,9 @@ config :bob, ecto_repos: [Bob.Repo]
 
 config :bob,
   master_schedule: [
-    # Done by https://github.com/elixir-lang/elixir/blob/main/.github/workflows/builds.hex.pm.yml
-    # [
-    #   module: Bob.Job.ElixirChecker,
-    #   period: {15, :min}
-    # ],
-    # Done by https://github.com/hexpm/hex/blob/main/scripts/release.sh
-    # [
-    #   module: Bob.Job.HexDocsChecker,
-    #   period: {15, :min}
-    # ],
+    # Elixir builds and the Elixir standard-library docs are produced by
+    # https://github.com/elixir-lang/elixir/blob/main/.github/workflows/release.yml,
+    # so Bob no longer schedules them.
     [
       module: Bob.Job.OTPChecker,
       args: [:tags],

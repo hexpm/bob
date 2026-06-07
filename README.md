@@ -2,35 +2,6 @@
 
 Bob performs automated tasks for the Elixir and Hex projects.
 
-## Elixir builds
-
-Elixir builds are compiled on each git push to https://github.com/elixir-lang/elixir for any branch. After the build completes it will be available at `https://builds.hex.pm/builds/elixir/{REF}.zip` where `{REF}` is the git ref for that push. Examples of URLs are:
-
-  * https://builds.hex.pm/builds/elixir/main.zip
-  * https://builds.hex.pm/builds/elixir/v1.12.3.zip
-
-These Elixir builds will be compiled against the oldest supported OTP version to ensure maximum compatibility for all users. We also build Elixir for every officially supported OTP version, if possible always use an Elixir compiled against the latest OTP version to get all available features in Elixir. These builds are available at `https://builds.hex.pm/builds/elixir/{REF}-otp-{OTP_MAJOR_VERSION}.zip`, examples are:
-
-  * https://builds.hex.pm/builds/elixir/main-otp-20.zip
-  * https://builds.hex.pm/builds/elixir/v1.12.3-otp-24.zip
-
-Since these builds are only available for officially supported OTP versions it is recommended that you fall back to the non OTP versioned URL if you get a 404 error for your combination of Elixir and OTP versions. Check https://github.com/elixir-lang/elixir/blob/main/.github/workflows/builds.hex.pm.yml to find which OTP versions we build against for particular Elixir versions.
-
-See https://builds.hex.pm/builds/elixir/builds.txt for a list of all builds.
-
-## Elixir docs
-
-On git pushes documentation is built and pushed to `https://hexdocs.pm/{APPLICATION}/{VERSION}` where `{APPLICATION}` is an application in the Elixir standard distribution and `{VERSION}` is the Elixir version, examples are:
-
-  * https://hexdocs.pm/elixir/
-  * https://hexdocs.pm/elixir/main
-  * https://hexdocs.pm/mix/1.12.3
-
-Documentation tarballs are also uploaded to `https://repo.hex.pm/docs/{APPLICATION}-{VERSION}.tar.gz`, examples are:
-
-  * https://repo.hex.pm/docs/elixir-main.tar.gz
-  * https://repo.hex.pm/docs/mix-1.12.3.tar.gz
-
 ## Erlang builds
 
 Erlang builds compiled on Ubuntu LTS versions are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
