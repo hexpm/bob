@@ -6,5 +6,6 @@ defmodule Bob.Artifacts.DockerTag do
     field(:tag, :string)
     field(:archs, {:array, :string})
     field(:built_at, :utc_datetime_usec)
+    timestamps(type: :utc_datetime_usec)
   end
 end

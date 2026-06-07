@@ -2,7 +2,7 @@ defmodule Bob.ArtifactsTest do
   use Bob.DataCase
 
   alias Bob.Artifacts
-  alias Bob.Artifacts.{Artifact, BaseImageTag}
+  alias Bob.Artifacts.{Artifact, BaseImageTag, DockerTag}
 
   describe "Artifact.changeset/2" do
     test "casts a posted artifact, parsing the ISO8601 date" do
@@ -199,6 +199,17 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.docker_tags("hexpm/erlang-amd64") ==
                [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
+    end
+
+    test "stamps inserted_at and updated_at, advancing only updated_at on conflict" do
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
+      inserted = Repo.one(DockerTag)
+      assert inserted.inserted_at == inserted.updated_at
+
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["arm64"])
+      updated = Repo.one(DockerTag)
+      assert updated.inserted_at == inserted.inserted_at
+      assert DateTime.compare(updated.updated_at, inserted.updated_at) == :gt
     end
   end
 

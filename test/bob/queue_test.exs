@@ -29,6 +29,22 @@ defmodule Bob.QueueTest do
     assert Queue.start(TestJob) == :error
   end
 
+  test "advances updated_at on each transition while inserted_at stays fixed" do
+    Queue.add(TestJob, [:a])
+    queued = Repo.one(Bob.Queue.Job)
+    assert queued.inserted_at == queued.updated_at
+
+    {:ok, {id, [:a]}} = Queue.start(TestJob)
+    started = Repo.get!(Bob.Queue.Job, id)
+    assert started.inserted_at == queued.inserted_at
+    assert DateTime.compare(started.updated_at, queued.updated_at) == :gt
+
+    Queue.success(id)
+    done = Repo.get!(Bob.Queue.Job, id)
+    assert done.inserted_at == queued.inserted_at
+    assert DateTime.compare(done.updated_at, started.updated_at) == :gt
+  end
+
   test "dedups an identical job that is still queued" do
     Queue.add(TestJob, [:a])
     Queue.add(TestJob, [:a])
@@ -116,6 +132,7 @@ defmodule Bob.QueueTest do
             args_digest: digest,
             state: "running",
             inserted_at: now,
+            updated_at: now,
             started_at: now
           }
         ],
@@ -123,7 +140,14 @@ defmodule Bob.QueueTest do
       )
 
     Repo.insert_all(Bob.Queue.Failure, [
-      %{module_key: TestJob, args_digest: digest, count: 2, last_failed_at: now}
+      %{
+        module_key: TestJob,
+        args_digest: digest,
+        count: 2,
+        last_failed_at: now,
+        inserted_at: now,
+        updated_at: now
+      }
     ])
 
     Queue.success(id)

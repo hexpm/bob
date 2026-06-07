@@ -57,14 +57,15 @@ defmodule Bob.Queue.Maintenance do
   end
 
   defp sweep_stale_running() do
-    cutoff = DateTime.add(DateTime.utc_now(), -@job_timeout_seconds, :second)
+    now = DateTime.utc_now()
+    cutoff = DateTime.add(now, -@job_timeout_seconds, :second)
 
     {count, _} =
       Repo.update_all(
         from(j in Job,
           where: j.state == "running" and not is_nil(j.started_at) and j.started_at < ^cutoff
         ),
-        set: [state: "failed", finished_at: DateTime.utc_now()]
+        set: [state: "failed", finished_at: now, updated_at: now]
       )
 
     if count > 0 do

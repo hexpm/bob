@@ -10,6 +10,7 @@ defmodule Bob.Repo.Migrations.CreateBuildArtifacts do
       add :ref, :string, null: false
       add :sha256, :string, null: false
       add :built_at, :utc_datetime_usec, null: false
+      timestamps(type: :utc_datetime_usec)
     end
 
     create unique_index(:build_artifacts, [:kind, :arch, :os, :name])

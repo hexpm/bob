@@ -7,23 +7,30 @@ defmodule Bob.Queue.MaintenanceTest do
   @day 24 * @hour
 
   defp insert_job(attrs) do
+    now = DateTime.utc_now()
+
     defaults = %{
       module_key: :test,
       args: [:a],
       args_digest: Term.digest([:a]),
       state: "queued",
-      inserted_at: DateTime.utc_now()
+      inserted_at: now,
+      updated_at: now
     }
 
     Repo.insert_all(Job, [Map.merge(defaults, Map.new(attrs))])
   end
 
   defp insert_failure(attrs) do
+    now = DateTime.utc_now()
+
     defaults = %{
       module_key: :test,
       args_digest: Term.digest([:a]),
       count: 1,
-      last_failed_at: DateTime.utc_now()
+      last_failed_at: now,
+      inserted_at: now,
+      updated_at: now
     }
 
     Repo.insert_all(Failure, [Map.merge(defaults, Map.new(attrs))])

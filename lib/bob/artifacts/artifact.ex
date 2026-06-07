@@ -15,6 +15,7 @@ defmodule Bob.Artifacts.Artifact do
     field(:ref, :string)
     field(:sha256, :string)
     field(:built_at, :utc_datetime_usec)
+    timestamps(type: :utc_datetime_usec)
   end
 
   def changeset(artifact, attrs) do

@@ -8,6 +8,7 @@ defmodule Bob.Repo.Migrations.CreateQueueTables do
       add :args_digest, :binary, null: false
       add :state, :string, null: false
       add :inserted_at, :utc_datetime_usec, null: false
+      add :updated_at, :utc_datetime_usec, null: false
       add :started_at, :utc_datetime_usec
       add :finished_at, :utc_datetime_usec
     end
@@ -25,6 +26,7 @@ defmodule Bob.Repo.Migrations.CreateQueueTables do
       add :args_digest, :binary, null: false
       add :count, :integer, null: false
       add :last_failed_at, :utc_datetime_usec, null: false
+      timestamps(type: :utc_datetime_usec)
     end
 
     create unique_index(:job_failures, [:module_key, :args_digest])

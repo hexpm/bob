@@ -41,7 +41,8 @@ defmodule Bob.Queue do
           args: candidate.args,
           args_digest: candidate.args_digest,
           state: "queued",
-          inserted_at: now
+          inserted_at: now,
+          updated_at: now
         }
       end)
 
@@ -69,7 +70,7 @@ defmodule Bob.Queue do
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
-        UPDATE jobs SET state = 'running', started_at = $2
+        UPDATE jobs SET state = 'running', started_at = $2, updated_at = $2
         FROM candidate WHERE jobs.id = candidate.id
         RETURNING jobs.id, jobs.args
         """,
@@ -144,13 +145,15 @@ defmodule Bob.Queue do
   end
 
   defp finish(id, state) do
+    now = DateTime.utc_now()
+
     {_count, rows} =
       Repo.update_all(
         from(j in Job,
           where: j.id == ^id and j.state == "running",
           select: {j.module_key, j.args_digest, j.args}
         ),
-        set: [state: state, finished_at: DateTime.utc_now()]
+        set: [state: state, finished_at: now, updated_at: now]
       )
 
     case rows do
@@ -162,10 +165,10 @@ defmodule Bob.Queue do
   defp record_failure(module_key, args_digest) do
     Repo.query!(
       """
-      INSERT INTO job_failures (module_key, args_digest, count, last_failed_at)
-      VALUES ($1, $2, 1, $3)
+      INSERT INTO job_failures (module_key, args_digest, count, last_failed_at, inserted_at, updated_at)
+      VALUES ($1, $2, 1, $3, $3, $3)
       ON CONFLICT (module_key, args_digest)
-      DO UPDATE SET count = job_failures.count + 1, last_failed_at = $3
+      DO UPDATE SET count = job_failures.count + 1, last_failed_at = $3, updated_at = $3
       """,
       [Term.encode(module_key), args_digest, NaiveDateTime.utc_now()]
     )

@@ -6,5 +6,6 @@ defmodule Bob.Queue.Failure do
     field(:args_digest, :binary)
     field(:count, :integer)
     field(:last_failed_at, :utc_datetime_usec)
+    timestamps(type: :utc_datetime_usec)
   end
 end

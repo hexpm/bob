@@ -24,15 +24,16 @@ defmodule Bob.Artifacts do
   def add_docker_tag(repo, tag, archs) do
     Repo.query!(
       """
-      INSERT INTO docker_tags (repo, tag, archs, built_at)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO docker_tags (repo, tag, archs, built_at, inserted_at, updated_at)
+      VALUES ($1, $2, $3, $4, $4, $4)
       ON CONFLICT (repo, tag)
       DO UPDATE SET
         archs = (
           SELECT array_agg(DISTINCT a ORDER BY a)
           FROM unnest(docker_tags.archs || EXCLUDED.archs) AS a
         ),
-        built_at = EXCLUDED.built_at
+        built_at = EXCLUDED.built_at,
+        updated_at = EXCLUDED.updated_at
       """,
       [repo, tag, archs, NaiveDateTime.utc_now()]
     )
@@ -55,7 +56,6 @@ defmodule Bob.Artifacts do
     now = NaiveDateTime.utc_now()
 
     tag_archs
-    |> Enum.uniq_by(fn {tag, _archs} -> tag end)
     |> Enum.map(fn {tag, archs} ->
       %{token: token, repo: repo, tag: tag, archs: archs, inserted_at: now}
     end)
@@ -81,13 +81,13 @@ defmodule Bob.Artifacts do
       fn ->
         Repo.query!(
           """
-          INSERT INTO docker_tags (repo, tag, archs, built_at)
-          SELECT DISTINCT ON (repo, tag) repo, tag, archs, $3
+          INSERT INTO docker_tags (repo, tag, archs, built_at, inserted_at, updated_at)
+          SELECT DISTINCT ON (repo, tag) repo, tag, archs, $3, $3, $3
           FROM docker_tags_staging
           WHERE token = $1 AND repo = $2
           ORDER BY repo, tag
           ON CONFLICT (repo, tag)
-          DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at
+          DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at, updated_at = EXCLUDED.updated_at
           WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
           """,
           [token, repo, now]
@@ -179,7 +179,10 @@ defmodule Bob.Artifacts do
   end
 
   def replace_base_image_tags(repo, tags) do
-    rows = tags |> Enum.uniq() |> Enum.map(&%{repo: repo, tag: &1})
+    now = DateTime.utc_now()
+
+    rows =
+      tags |> Enum.uniq() |> Enum.map(&%{repo: repo, tag: &1, inserted_at: now, updated_at: now})
 
     Repo.transaction(fn ->
       Repo.delete_all(from(b in BaseImageTag, where: b.repo == ^repo))
@@ -193,7 +196,7 @@ defmodule Bob.Artifacts do
     %Artifact{}
     |> Artifact.changeset(attrs)
     |> Repo.insert!(
-      on_conflict: {:replace, [:ref, :sha256, :built_at]},
+      on_conflict: {:replace, [:ref, :sha256, :built_at, :updated_at]},
       conflict_target: [:kind, :arch, :os, :name]
     )
   end
@@ -207,10 +210,15 @@ defmodule Bob.Artifacts do
   def import_artifacts([]), do: :ok
 
   def import_artifacts(rows) do
-    rows = Enum.uniq_by(rows, &{&1.kind, &1.arch, &1.os, &1.name})
+    now = DateTime.utc_now()
+
+    rows =
+      rows
+      |> Enum.uniq_by(&{&1.kind, &1.arch, &1.os, &1.name})
+      |> Enum.map(&Map.merge(&1, %{inserted_at: now, updated_at: now}))
 
     Repo.insert_all(Artifact, rows,
-      on_conflict: {:replace, [:ref, :sha256, :built_at]},
+      on_conflict: {:replace, [:ref, :sha256, :built_at, :updated_at]},
       conflict_target: [:kind, :arch, :os, :name]
     )
 
