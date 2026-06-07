@@ -179,6 +179,16 @@ defmodule Bob.QueueTest do
     assert size(TestJob) == 2
   end
 
+  test "add_many chunks inserts that exceed the Postgres bind-parameter limit" do
+    # Each row binds 6 fields, so more than 65535 / 6 rows would overflow a
+    # single insert statement. Chunking must keep every row enqueued.
+    count = div(65_535, 6) + 1
+    entries = for i <- 1..count, do: {TestJob, [i]}
+
+    Queue.add_many(entries)
+    assert size(TestJob) == count
+  end
+
   test "queue_sizes counts queued jobs per key" do
     Queue.add(TestJob, [:a])
     Queue.add(TestJob, [:b])

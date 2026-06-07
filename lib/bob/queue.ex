@@ -20,6 +20,10 @@ defmodule Bob.Queue do
   @dedup_conflict_target {:unsafe_fragment,
                           "(module_key, args_digest) WHERE state IN ('queued', 'running')"}
 
+  # Postgres rejects a statement with more than 65535 bind parameters. Each row
+  # inserted below binds 6 fields, so chunk inserts to stay under that ceiling.
+  @insert_chunk_size div(65_535, 6)
+
   def add(key, args) do
     add_many([{key, args}])
   end
@@ -46,12 +50,14 @@ defmodule Bob.Queue do
         }
       end)
 
-    if rows != [] do
-      Repo.insert_all(Job, rows,
+    rows
+    |> Enum.chunk_every(@insert_chunk_size)
+    |> Enum.each(fn chunk ->
+      Repo.insert_all(Job, chunk,
         on_conflict: :nothing,
         conflict_target: @dedup_conflict_target
       )
-    end
+    end)
 
     :ok
   end
