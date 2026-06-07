@@ -119,6 +119,36 @@ defmodule Bob.DockerHub.RateLimiterTest do
       assert Task.yield(task, 30) == nil
       assert Task.await(task, 2000) == :ok
     end
+
+    test "reclaims the probe slot when the probe dies without anchoring the window" do
+      limiter = start_limiter(offset_ms: 0)
+
+      # A caller takes the single calibration probe, then exits without ever
+      # reporting server headers (a non-2xx/429 response or a crash).
+      {pid, ref} = spawn_monitor(fn -> RateLimiter.acquire(limiter) end)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
+
+      # Without reclaiming the dead probe's slot, the gate would stay shut
+      # forever: window unanchored, count stuck at one, nothing left to roll it.
+      assert RateLimiter.acquire(limiter) == :ok
+    end
+
+    test "keeps the probe's slot when it anchored the window before exiting" do
+      limiter = start_limiter(offset_ms: 0)
+      reset = System.os_time(:second) + 3600
+
+      {pid, ref} =
+        spawn_monitor(fn ->
+          RateLimiter.acquire(limiter)
+          RateLimiter.observe(headers(2, 1, reset), limiter)
+        end)
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
+
+      # limit 2 with one already spent by the probe: exactly one grant remains.
+      assert RateLimiter.acquire(limiter) == :ok
+      assert blocks?(limiter)
+    end
   end
 
   describe "throttle/2" do

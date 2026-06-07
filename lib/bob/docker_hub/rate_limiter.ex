@@ -13,6 +13,11 @@ defmodule Bob.DockerHub.RateLimiter do
   reset on a timer derived from the `reset` header plus a small offset, so we
   resume only after the server's window has actually rolled — not a beat before
   it, when our clock runs slightly ahead of Docker Hub's.
+
+  A request sent before any response has anchored the window is the lone
+  calibration probe. The gate monitors it and reclaims its slot if it dies
+  without reporting a response — a non-2xx/429 status or a crash — so a probe
+  that never feeds back can't wedge every later caller behind it forever.
   """
 
   use GenServer
@@ -76,6 +81,7 @@ defmodule Bob.DockerHub.RateLimiter do
        reset_at: nil,
        offset_ms: Keyword.get(opts, :offset_ms, @resume_offset_ms),
        timer: nil,
+       probe_mon: nil,
        waiters: :queue.new()
      }}
   end
@@ -85,7 +91,7 @@ defmodule Bob.DockerHub.RateLimiter do
     state = roll(state)
 
     if available?(state) do
-      {:reply, :ok, %{state | sent: state.sent + 1}}
+      {:reply, :ok, grant(state, from)}
     else
       {:noreply, schedule_resume(%{state | waiters: :queue.in(from, state.waiters)})}
     end
@@ -95,21 +101,23 @@ defmodule Bob.DockerHub.RateLimiter do
   def handle_cast({:observe, nil}, state), do: {:noreply, state}
 
   def handle_cast({:observe, rate}, state) do
-    {:noreply, schedule_resume(release(apply_rate(state, rate)))}
+    state = apply_rate(state, rate)
+    state = if state.window != nil, do: clear_probe_mon(state), else: state
+    {:noreply, schedule_resume(release(state))}
   end
 
   # A 429 with rate headers reports remaining == 0, so apply_rate anchors the
   # window with the count maxed out and the gate stays shut until it resets. No
   # release: there is nothing to hand out.
   def handle_cast({:throttle, rate}, state) when not is_nil(rate) do
-    state = apply_rate(state, rate)
+    state = clear_probe_mon(apply_rate(state, rate))
     log_throttle(state)
     {:noreply, schedule_resume(state)}
   end
 
   # A 429 without usable headers: hold the window shut for a fixed spell.
   def handle_cast({:throttle, nil}, state) do
-    state = park(state, @throttle_fallback_ms)
+    state = clear_probe_mon(park(state, @throttle_fallback_ms))
     log_throttle(state)
     {:noreply, schedule_resume(state)}
   end
@@ -119,10 +127,45 @@ defmodule Bob.DockerHub.RateLimiter do
     {:noreply, schedule_resume(release(roll(%{state | timer: nil})))}
   end
 
+  # The calibration probe finished. If it never anchored the window, reclaim its
+  # slot and wake the next caller, so a probe that failed to report a response
+  # can't leave the gate shut with nothing left to roll or release it.
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{probe_mon: ref} = state) do
+    state = %{state | probe_mon: nil}
+    state = if state.window == nil, do: %{state | sent: max(state.sent - 1, 0)}, else: state
+    {:noreply, schedule_resume(release(state))}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    {:noreply, state}
+  end
+
   # No confirmed window yet (cold start, or just rolled): allow a single probe
   # so the next response anchors the real budget before we burst into it.
   defp available?(%{window: nil, sent: sent}), do: sent < 1
   defp available?(%{sent: sent, limit: limit}), do: sent < limit
+
+  # Hands a slot to `from`. While the window is unanchored the granted request is
+  # the lone calibration probe — monitor it so its termination can reclaim the
+  # slot if it dies without anchoring the window.
+  defp grant(state, from) do
+    state = %{state | sent: state.sent + 1}
+
+    if state.window == nil and state.probe_mon == nil do
+      %{state | probe_mon: Process.monitor(elem(from, 0))}
+    else
+      state
+    end
+  end
+
+  # Stop tracking the calibration probe once the window is anchored; its eventual
+  # exit no longer tells us anything.
+  defp clear_probe_mon(%{probe_mon: nil} = state), do: state
+
+  defp clear_probe_mon(%{probe_mon: ref} = state) do
+    Process.demonitor(ref, [:flush])
+    %{state | probe_mon: nil}
+  end
 
   # Folds a response's rate headers into the window: anchor it on the window's
   # first response and seed the count from the server's usage; on later
@@ -183,7 +226,7 @@ defmodule Bob.DockerHub.RateLimiter do
       true ->
         {{:value, from}, waiters} = :queue.out(state.waiters)
         GenServer.reply(from, :ok)
-        release(%{state | sent: state.sent + 1, waiters: waiters})
+        release(grant(%{state | waiters: waiters}, from))
     end
   end
 
