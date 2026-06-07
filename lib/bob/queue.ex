@@ -11,7 +11,6 @@ defmodule Bob.Queue do
   # Periodic scheduler jobs re-run every interval and must not be suppressed by
   # backoff after a transient failure; only the build jobs they enqueue back off.
   @no_backoff [
-    Bob.Job.Backup,
     Bob.Job.OTPChecker,
     Bob.Job.DockerChecker,
     Bob.Job.Reconcile,
