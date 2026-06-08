@@ -205,6 +205,41 @@ defmodule Bob.QueueTest do
     assert Queue.queued() == [{TestJob, [:a]}, {{TestJob, :variant}, [:b, :c]}]
   end
 
+  describe "pubsub broadcasts" do
+    setup do
+      Phoenix.PubSub.subscribe(Bob.PubSub, "jobs")
+      :ok
+    end
+
+    test "add broadcasts :jobs_changed" do
+      Bob.Queue.add(Bob.Job.OTPChecker, [:a])
+      assert_receive :jobs_changed
+    end
+
+    test "start broadcasts :jobs_changed" do
+      Bob.Queue.add(Bob.Job.OTPChecker, [:a])
+      assert_receive :jobs_changed
+      {:ok, _} = Bob.Queue.start(Bob.Job.OTPChecker)
+      assert_receive :jobs_changed
+    end
+
+    test "success and failure broadcast :jobs_changed" do
+      Bob.Queue.add(Bob.Job.OTPChecker, [:a])
+      assert_receive :jobs_changed
+      {:ok, {id, _}} = Bob.Queue.start(Bob.Job.OTPChecker)
+      assert_receive :jobs_changed
+      Bob.Queue.success(id)
+      assert_receive :jobs_changed
+
+      Bob.Queue.add(Bob.Job.OTPChecker, [:b])
+      assert_receive :jobs_changed
+      {:ok, {id2, _}} = Bob.Queue.start(Bob.Job.OTPChecker)
+      assert_receive :jobs_changed
+      Bob.Queue.failure(id2)
+      assert_receive :jobs_changed
+    end
+  end
+
   describe "read functions" do
     test "running/0 returns running jobs newest-started first" do
       Bob.Queue.add(Bob.Job.OTPChecker, [:a])

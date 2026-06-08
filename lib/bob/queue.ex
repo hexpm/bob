@@ -59,6 +59,7 @@ defmodule Bob.Queue do
       )
     end)
 
+    broadcast()
     :ok
   end
 
@@ -87,6 +88,7 @@ defmodule Bob.Queue do
       [[id, args_binary]] ->
         args = Term.decode(args_binary)
         Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
+        broadcast()
         {:ok, {id, args}}
 
       [] ->
@@ -111,6 +113,7 @@ defmodule Bob.Queue do
       end
     end)
 
+    broadcast()
     :ok
   end
 
@@ -126,6 +129,7 @@ defmodule Bob.Queue do
       end
     end)
 
+    broadcast()
     :ok
   end
 
@@ -254,5 +258,9 @@ defmodule Bob.Queue do
 
   defp backoff_seconds(count) do
     min(@backoff_base * Integer.pow(2, min(count - 1, 12)), @backoff_max)
+  end
+
+  defp broadcast() do
+    Phoenix.PubSub.broadcast(Bob.PubSub, "jobs", :jobs_changed)
   end
 end
