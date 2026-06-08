@@ -150,6 +150,37 @@ defmodule Bob.Queue do
     )
   end
 
+  def running() do
+    Repo.all(
+      from(j in Job,
+        where: j.state == "running",
+        order_by: [desc: j.started_at, desc: j.id]
+      )
+    )
+  end
+
+  def queued_listing(limit \\ 100, offset \\ 0) do
+    Repo.all(
+      from(j in Job,
+        where: j.state == "queued",
+        order_by: [j.inserted_at, j.id],
+        limit: ^limit,
+        offset: ^offset
+      )
+    )
+  end
+
+  def recent(limit \\ 50, offset \\ 0) do
+    Repo.all(
+      from(j in Job,
+        where: j.state in ["done", "failed"],
+        order_by: [desc: j.finished_at, desc: j.id],
+        limit: ^limit,
+        offset: ^offset
+      )
+    )
+  end
+
   defp finish(id, state) do
     now = DateTime.utc_now()
 
