@@ -63,47 +63,69 @@ defmodule BobWeb.ArtifactsLive do
   defp fmt(nil), do: "—"
   defp fmt(datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S")
 
+  defp truncate(nil, _length), do: nil
+
+  defp truncate(value, length) when byte_size(value) > length do
+    binary_part(value, 0, length) <> "..."
+  end
+
+  defp truncate(value, _length), do: value
+
   @impl true
   def render(assigns) do
     ~H"""
-    <h2 class="text-lg font-semibold mb-4">Build artifacts</h2>
+    <div class="fade-in">
+      <div class="page-head">
+        <div class="page-head__main">
+          <h1>Build artifacts</h1>
+        </div>
+      </div>
 
-    <form phx-change="search" phx-submit="search" class="flex flex-wrap gap-2 mb-4">
-      <input
-        type="text"
-        name="query"
-        value={@query}
-        placeholder="Search name or ref…"
-        class="border rounded px-2 py-1 text-sm"
-      />
-      <select name="kind" class="border rounded px-2 py-1 text-sm">
-        <option value="">kind: any</option>
-        <option :for={k <- @kinds} value={k} selected={k == @kind}><%= k %></option>
-      </select>
-      <select name="arch" class="border rounded px-2 py-1 text-sm">
-        <option value="">arch: any</option>
-        <option :for={a <- @arches} value={a} selected={a == @arch}><%= a %></option>
-      </select>
-      <select name="os" class="border rounded px-2 py-1 text-sm">
-        <option value="">os: any</option>
-        <option :for={o <- @oses} value={o} selected={o == @os}><%= o %></option>
-      </select>
-    </form>
+      <section class="sec">
+        <form phx-change="search" phx-submit="search" class="filter-bar filter-bar--wrap">
+          <.search_box name="query" value={@query} placeholder="Search name or ref..." />
+          <.filter_select name="kind" label="kind" value={@kind} options={@kinds} />
+          <.filter_select name="arch" label="arch" value={@arch} options={@arches} />
+          <.filter_select name="os" label="os" value={@os} options={@oses} />
+          <span class="filter-bar__meta"><%= length(@results) %> artifacts</span>
+        </form>
 
-    <.table :if={@results != []} rows={@results}>
-      <:col :let={a} label="kind"><%= a.kind %></:col>
-      <:col :let={a} label="arch"><%= a.arch %></:col>
-      <:col :let={a} label="os"><%= a.os %></:col>
-      <:col :let={a} label="name"><%= a.name %></:col>
-      <:col :let={a} label="ref"><code><%= a.ref %></code></:col>
-      <:col :let={a} label="sha256"><code><%= a.sha256 %></code></:col>
-      <:col :let={a} label="built"><%= fmt(a.built_at) %></:col>
-    </.table>
-    <p :if={@results == []} class="text-sm text-gray-500">No matching artifacts.</p>
+        <.table :if={@results != []} rows={@results} class="jt--art">
+          <:col :let={a} label="kind">
+            <span class="kind-badge"><%= a.kind %></span>
+          </:col>
+          <:col :let={a} label="arch">
+            <span class="arch-tag"><%= a.arch %></span>
+          </:col>
+          <:col :let={a} label="os">
+            <span class="os-cell"><%= a.os %></span>
+          </:col>
+          <:col :let={a} label="name">
+            <code class="mono-cell mono-cell--name"><%= a.name %></code>
+          </:col>
+          <:col :let={a} label="ref">
+            <code class="mono-cell" title={a.ref}><%= truncate(a.ref, 12) %></code>
+          </:col>
+          <:col :let={a} label="sha256">
+            <code :if={a.sha256} class="mono-cell mono-cell--dim" title={a.sha256}>
+              <%= truncate(a.sha256, 14) %>
+            </code>
+            <span :if={!a.sha256} class="mono-cell mono-cell--dim">—</span>
+          </:col>
+          <:col :let={a} label="built" class="col-time">
+            <span class="c-time"><%= fmt(a.built_at) %></span>
+          </:col>
+        </.table>
+        <div :if={@results == []} class="empty-mini">No matching artifacts.</div>
 
-    <div class="flex gap-2 mt-3 text-sm">
-      <button phx-click="page" phx-value-dir="prev" disabled={@offset == 0} class="px-2 py-1 border rounded disabled:opacity-40">Prev</button>
-      <button phx-click="page" phx-value-dir="next" disabled={length(@results) < @page} class="px-2 py-1 border rounded disabled:opacity-40">Next</button>
+        <.pager
+          event="page"
+          offset={@offset}
+          count={length(@results)}
+          page={@page}
+          unit="artifacts"
+        />
+      </section>
     </div>
     """
   end

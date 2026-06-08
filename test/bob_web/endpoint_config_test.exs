@@ -19,7 +19,6 @@ defmodule BobWeb.EndpointConfigTest do
 
   test "favicon assets are served as static paths" do
     assert "favicon.ico" in BobWeb.static_paths()
-    assert "images/favicon-64.png" in BobWeb.static_paths()
-    assert "images/favicon-160.png" in BobWeb.static_paths()
+    assert "images" in BobWeb.static_paths()
   end
 end

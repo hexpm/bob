@@ -1,5 +1,5 @@
 defmodule BobWeb do
-  def static_paths, do: ~w(assets favicon.ico images/favicon-64.png images/favicon-160.png)
+  def static_paths, do: ~w(assets favicon.ico images)
 
   def router do
     quote do

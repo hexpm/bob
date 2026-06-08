@@ -94,65 +94,72 @@ defmodule BobWeb.DockerTagsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <h2 class="text-lg font-semibold mb-4">Docker tags</h2>
+    <div class="fade-in">
+      <div class="page-head">
+        <div class="page-head__main">
+          <h1>Docker tags</h1>
+        </div>
+      </div>
 
-    <form phx-change="search" phx-submit="search" class="flex flex-wrap gap-2 mb-4">
-      <select name="repo" class="border rounded px-2 py-1 text-sm">
-        <option value="">repo: any</option>
-        <option :for={r <- @repos} value={r} selected={r == @repo}><%= r %></option>
-      </select>
-      <input
-        type="text"
-        name="tag"
-        value={@tag}
-        placeholder="tag prefix"
-        class="border rounded px-2 py-1 text-sm"
-      />
-      <input
-        type="text"
-        name="elixir_version"
-        value={@elixir_version}
-        placeholder="Elixir"
-        disabled={@tag != ""}
-        class="border rounded px-2 py-1 text-sm"
-      />
-      <input
-        type="text"
-        name="erlang_version"
-        value={@erlang_version}
-        placeholder="Erlang"
-        disabled={@tag != ""}
-        class="border rounded px-2 py-1 text-sm"
-      />
-      <select name="os" disabled={@tag != ""} class="border rounded px-2 py-1 text-sm">
-        <option value="">os: any</option>
-        <option :for={o <- @oses} value={o} selected={o == @os}><%= o %></option>
-      </select>
-      <input
-        type="text"
-        name="os_version"
-        value={@os_version}
-        placeholder="OS version"
-        disabled={@tag != ""}
-        class="border rounded px-2 py-1 text-sm"
-      />
-      <select name="arch" class="border rounded px-2 py-1 text-sm">
-        <option value="">arch: any</option>
-        <option :for={a <- @arches} value={a} selected={a == @arch}><%= a %></option>
-      </select>
-    </form>
+      <section class="sec">
+        <form phx-change="search" phx-submit="search" class="filter-bar filter-bar--wrap dk-filters">
+          <.filter_select name="repo" label="repo" value={@repo} options={@repos} />
+          <.filter_text name="tag" value={@tag} placeholder="tag prefix..." />
+          <span class={["f-or", @tag != "" && "f-or--off"]}>or</span>
+          <div class={["fgroup", @tag != "" && "fgroup--off"]}>
+            <.filter_text
+              name="elixir_version"
+              value={@elixir_version}
+              placeholder="Elixir"
+              disabled={@tag != ""}
+            />
+            <.filter_text
+              name="erlang_version"
+              value={@erlang_version}
+              placeholder="Erlang"
+              disabled={@tag != ""}
+            />
+            <.filter_select
+              name="os"
+              label="os"
+              value={@os}
+              options={@oses}
+              disabled={@tag != ""}
+            />
+            <.filter_text
+              name="os_version"
+              value={@os_version}
+              placeholder="OS version"
+              disabled={@tag != ""}
+            />
+          </div>
+          <.filter_select name="arch" label="arch" value={@arch} options={@arches} />
+          <span class="filter-bar__meta"><%= length(@results) %> tags</span>
+        </form>
 
-    <.table :if={@results != []} rows={@results}>
-      <:col :let={d} label="repo"><%= d.repo %></:col>
-      <:col :let={d} label="tag"><code><%= d.tag %></code></:col>
-      <:col :let={d} label="archs"><%= Enum.join(d.archs, ", ") %></:col>
-      <:col :let={d} label="built"><%= fmt(d.built_at) %></:col>
-    </.table>
-    <p :if={@results == []} class="text-sm text-gray-500">No matching tags.</p>
+        <.table :if={@results != []} rows={@results} class="jt--dk">
+          <:col :let={d} label="repo">
+            <div class="dk-repo">
+              <.icon name="docker" class="icon-blue" />
+              <code class="mono-cell mono-cell--name"><%= d.repo %></code>
+            </div>
+          </:col>
+          <:col :let={d} label="tag">
+            <code><%= d.tag %></code>
+          </:col>
+          <:col :let={d} label="archs">
+            <div class="arch-list">
+              <span :for={arch <- d.archs} class="arch-tag"><%= arch %></span>
+            </div>
+          </:col>
+          <:col :let={d} label="built" class="col-time">
+            <span class="c-time"><%= fmt(d.built_at) %></span>
+          </:col>
+        </.table>
+        <div :if={@results == []} class="empty-mini">No matching tags.</div>
 
-    <div class="flex gap-2 mt-3 text-sm">
-      <button phx-click="page" phx-value-dir="prev" disabled={@offset == 0} class="px-2 py-1 border rounded disabled:opacity-40">Prev</button>
-      <button phx-click="page" phx-value-dir="next" disabled={length(@results) < @page} class="px-2 py-1 border rounded disabled:opacity-40">Next</button>
+        <.pager event="page" offset={@offset} count={length(@results)} page={@page} unit="tags" />
+      </section>
     </div>
     """
   end

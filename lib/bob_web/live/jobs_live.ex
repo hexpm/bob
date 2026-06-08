@@ -52,9 +52,14 @@ defmodule BobWeb.JobsLive do
   defp step("prev", page), do: -page
 
   defp load(socket) do
+    queue_sizes =
+      Bob.Queue.queue_sizes()
+      |> Enum.sort_by(fn {_mod, count} -> count end, :desc)
+
     assign(socket,
       running: Bob.Queue.running(),
-      queue_sizes: Enum.sort(Bob.Queue.queue_sizes()),
+      queue_sizes: queue_sizes,
+      queue_total: Enum.sum(Enum.map(queue_sizes, fn {_mod, count} -> count end)),
       queued: Bob.Queue.queued_listing(@queued_page, socket.assigns.queued_offset),
       past: Bob.Queue.recent(@past_page, socket.assigns.past_offset)
     )
@@ -63,75 +68,158 @@ defmodule BobWeb.JobsLive do
   defp fmt(nil), do: "—"
   defp fmt(datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S")
 
+  defp fmt_duration(nil), do: "—"
+
+  defp fmt_duration(seconds) when seconds < 60, do: "#{seconds}s"
+
+  defp fmt_duration(seconds) when seconds < 3600 do
+    minutes = div(seconds, 60)
+    seconds = rem(seconds, 60)
+    "#{minutes}m #{seconds}s"
+  end
+
+  defp fmt_duration(seconds) do
+    hours = div(seconds, 3600)
+    minutes = div(rem(seconds, 3600), 60)
+    "#{hours}h #{minutes}m"
+  end
+
+  defp elapsed(datetime), do: duration(datetime, DateTime.utc_now())
+
+  defp duration(%{started_at: started_at, finished_at: finished_at}),
+    do: duration(started_at, finished_at)
+
+  defp duration(nil, _finished_at), do: nil
+  defp duration(_started_at, nil), do: nil
+
+  defp duration(started_at, finished_at) do
+    NaiveDateTime.diff(to_naive(finished_at), to_naive(started_at))
+    |> max(0)
+  end
+
+  defp to_naive(%DateTime{} = datetime), do: DateTime.to_naive(datetime)
+  defp to_naive(%NaiveDateTime{} = datetime), do: datetime
+
+  defp module_name(module_key), do: inspect(module_key)
+  defp args_text(args), do: inspect(args)
+
+  defp job_cat(module_key) do
+    module = inspect(module_key)
+
+    cond do
+      String.contains?(module, "Docker") -> "docker"
+      String.contains?(module, "Build") -> "build"
+      true -> "check"
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-10">
-      <section>
-        <h2 class="text-lg font-semibold mb-2">Running (<%= length(@running) %>)</h2>
+    <div class="fade-in">
+      <div class="page-head">
+        <div class="page-head__main">
+          <h1>Jobs</h1>
+        </div>
+        <div class="page-head__live">
+          <span class="live-dot"></span>
+          Live - updates automatically
+        </div>
+      </div>
+
+      <.section
+        title="Running"
+        count={length(@running)}
+        live={@running != []}
+        icon="bolt"
+        icon_class={if @running == [], do: "icon-muted", else: "icon-blue"}
+      >
         <.table :if={@running != []} rows={@running}>
-          <:col :let={j} label="Module"><code><%= inspect(j.module_key) %></code></:col>
-          <:col :let={j} label="Args"><code><%= inspect(j.args) %></code></:col>
-          <:col :let={j} label="Started"><%= fmt(j.started_at) %></:col>
+          <:col :let={_j} label="State" class="col-state">
+            <div class="c-state">
+              <.state_dot state="running" />
+              <span class="run-label">running</span>
+            </div>
+          </:col>
+          <:col :let={j} label="Module">
+            <.module_cell cat={job_cat(j.module_key)} module={module_name(j.module_key)} />
+          </:col>
+          <:col :let={j} label="Args" class="col-args">
+            <code class="c-args"><%= args_text(j.args) %></code>
+          </:col>
+          <:col :let={j} label="Started" class="col-time">
+            <span class="c-time"><%= fmt(j.started_at) %></span>
+          </:col>
+          <:col :let={j} label="Elapsed" class="col-time">
+            <span class="c-elapsed"><%= fmt_duration(elapsed(j.started_at)) %></span>
+          </:col>
         </.table>
-        <p :if={@running == []} class="text-sm text-gray-500">Nothing running.</p>
-      </section>
+        <div :if={@running == []} class="empty-mini">Nothing running.</div>
+      </.section>
 
-      <section>
-        <h2 class="text-lg font-semibold mb-2">Queue</h2>
-        <ul :if={@queue_sizes != []} class="text-sm mb-3 space-y-1">
-          <li :for={{mod, count} <- @queue_sizes}>
-            <code><%= inspect(mod) %></code> — <%= count %>
-          </li>
-        </ul>
+      <.section title="Queue" count={@queue_total} icon="queue">
+        <div :if={@queue_sizes != []} class="qsizes">
+          <div class="qsizes__label">Queued by job type</div>
+          <div class="qsizes__grid">
+            <div :for={{mod, count} <- @queue_sizes} class="qsize">
+              <span class="qsize__l">
+                <.cat_glyph cat={job_cat(mod)} size={14} />
+                <code class="qsize__mod"><%= module_name(mod) %></code>
+              </span>
+              <span class="qsize__count"><%= count %></span>
+            </div>
+          </div>
+        </div>
+        <div class="filter-bar">
+          <span class="filter-bar__meta">oldest first</span>
+        </div>
         <.table :if={@queued != []} rows={@queued}>
-          <:col :let={j} label="Module"><code><%= inspect(j.module_key) %></code></:col>
-          <:col :let={j} label="Args"><code><%= inspect(j.args) %></code></:col>
-          <:col :let={j} label="Queued"><%= fmt(j.inserted_at) %></:col>
+          <:col :let={j} label="Module">
+            <.module_cell cat={job_cat(j.module_key)} module={module_name(j.module_key)} />
+          </:col>
+          <:col :let={j} label="Args" class="col-args">
+            <code class="c-args"><%= args_text(j.args) %></code>
+          </:col>
+          <:col :let={j} label="Queued" class="col-time">
+            <span class="c-time"><%= fmt(j.inserted_at) %></span>
+          </:col>
         </.table>
-        <p :if={@queued == []} class="text-sm text-gray-500">Queue is empty.</p>
-        <.pager event="queued_page" offset={@queued_offset} count={length(@queued)} page={@queued_page} />
-      </section>
+        <div :if={@queued == []} class="empty-mini">Queue is empty.</div>
+        <.pager
+          event="queued_page"
+          offset={@queued_offset}
+          count={length(@queued)}
+          page={@queued_page}
+          unit="queued"
+        />
+      </.section>
 
-      <section>
-        <h2 class="text-lg font-semibold mb-2">Past</h2>
+      <.section title="Past" count={length(@past)} icon="clock">
         <.table :if={@past != []} rows={@past}>
-          <:col :let={j} label="State"><%= j.state %></:col>
-          <:col :let={j} label="Module"><code><%= inspect(j.module_key) %></code></:col>
-          <:col :let={j} label="Args"><code><%= inspect(j.args) %></code></:col>
-          <:col :let={j} label="Finished"><%= fmt(j.finished_at) %></:col>
+          <:col :let={j} label="State" class="col-state">
+            <.state_badge state={j.state} />
+          </:col>
+          <:col :let={j} label="Module">
+            <.module_cell cat={job_cat(j.module_key)} module={module_name(j.module_key)} />
+          </:col>
+          <:col :let={j} label="Args" class="col-args">
+            <code class="c-args"><%= args_text(j.args) %></code>
+          </:col>
+          <:col :let={j} label="Duration" class="col-time">
+            <span class="c-dur"><%= fmt_duration(duration(j)) %></span>
+          </:col>
+          <:col :let={j} label="Finished" class="col-time">
+            <span class="c-time"><%= fmt(j.finished_at) %></span>
+          </:col>
         </.table>
-        <p :if={@past == []} class="text-sm text-gray-500">No finished jobs.</p>
-        <.pager event="past_page" offset={@past_offset} count={length(@past)} page={@past_page} />
-      </section>
-    </div>
-    """
-  end
-
-  attr(:event, :string, required: true)
-  attr(:offset, :integer, required: true)
-  attr(:count, :integer, required: true)
-  attr(:page, :integer, required: true)
-
-  defp pager(assigns) do
-    ~H"""
-    <div class="flex gap-2 mt-2 text-sm">
-      <button
-        phx-click={@event}
-        phx-value-dir="prev"
-        disabled={@offset == 0}
-        class="px-2 py-1 border rounded disabled:opacity-40"
-      >
-        Prev
-      </button>
-      <button
-        phx-click={@event}
-        phx-value-dir="next"
-        disabled={@count < @page}
-        class="px-2 py-1 border rounded disabled:opacity-40"
-      >
-        Next
-      </button>
+        <div :if={@past == []} class="empty-mini">No finished jobs.</div>
+        <.pager
+          event="past_page"
+          offset={@past_offset}
+          count={length(@past)}
+          page={@past_page}
+        />
+      </.section>
     </div>
     """
   end

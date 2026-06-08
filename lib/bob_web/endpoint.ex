@@ -17,7 +17,7 @@ defmodule BobWeb.Endpoint do
   plug(Plug.Static,
     at: "/",
     from: :bob,
-    gzip: true,
+    gzip: Mix.env() != :dev,
     only: BobWeb.static_paths()
   )
 
