@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content={get_csrf_token()} />
+    <title>Bob</title>
+    <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} />
+    <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
+    </script>
+  </head>
+  <body class="h-full bg-gray-50 text-gray-900">
+    <nav class="bg-white border-b border-gray-200">
+      <div class="mx-auto max-w-6xl px-4 flex gap-6 h-14 items-center">
+        <span class="font-semibold">Bob</span>
+        <.link navigate={~p"/"} class="hover:underline">Jobs</.link>
+        <.link navigate={~p"/artifacts"} class="hover:underline">Artifacts</.link>
+        <.link navigate={~p"/docker"} class="hover:underline">Docker Tags</.link>
+      </div>
+    </nav>
+    <main class="mx-auto max-w-6xl px-4 py-6">
+      <%= @inner_content %>
+    </main>
+  </body>
+</html>
