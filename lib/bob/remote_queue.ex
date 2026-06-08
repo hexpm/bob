@@ -1,10 +1,10 @@
 defmodule Bob.RemoteQueue do
   def add(module, args) do
-    request("/queue/add", %{module: module, args: args})
+    request("/api/queue/add", %{module: module, args: args})
   end
 
   def docker_add(repo, tag, archs) do
-    request("/docker/add", %{repo: repo, tag: tag, archs: archs})
+    request("/api/docker/add", %{repo: repo, tag: tag, archs: archs})
   end
 
   def success({:local, id}) do
@@ -81,7 +81,7 @@ defmodule Bob.RemoteQueue do
   defp apply_job(module, fun, args), do: apply(module, fun, args)
 
   defp done_request(type, id) do
-    request("/queue/#{type}", %{id: id})
+    request("/api/queue/#{type}", %{id: id})
     :ok
   end
 
@@ -91,7 +91,7 @@ defmodule Bob.RemoteQueue do
 
   defp start_request(remote_jobs, max_weight, weights) do
     {:ok, %{jobs: jobs}} =
-      request("/queue/start", %{jobs: remote_jobs, max_weight: max_weight, weights: weights})
+      request("/api/queue/start", %{jobs: remote_jobs, max_weight: max_weight, weights: weights})
 
     jobs
   end

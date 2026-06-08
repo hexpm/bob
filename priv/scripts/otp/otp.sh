@@ -49,4 +49,4 @@ curl \
   -H "authorization: ${BOB_AGENT_SECRET}" \
   -H "content-type: application/json" \
   -d "{\"kind\":\"otp\",\"arch\":\"${arch}\",\"os\":\"${linux}\",\"name\":\"${ref_name}\",\"ref\":\"${ref}\",\"sha256\":\"${build_sha256}\",\"date\":\"${date}\"}" \
-  "${BOB_MASTER_URL}/artifacts/add"
+  "${BOB_MASTER_URL}/api/artifacts/add"
