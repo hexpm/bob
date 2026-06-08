@@ -65,5 +65,17 @@ defmodule Bob.RemoteQueueTest do
       assert [{_id1, SharedTestJob, [:arg1]}, {_id2, UnsharedTestJob, [:arg1]}] =
                RemoteQueue.start_jobs([SharedTestJob, UnsharedTestJob], 5, %{})
     end
+
+    test "starts every queued master checker job (each implements the job contract)" do
+      for module <- [
+            Bob.Job.OTPChecker,
+            Bob.Job.DockerChecker,
+            Bob.Job.Reconcile,
+            Bob.Job.ReconcileBaseImages
+          ] do
+        Bob.Queue.add(module, [])
+        assert [{_id, ^module, []}] = RemoteQueue.start_jobs([module], 100, %{})
+      end
+    end
   end
 end
