@@ -90,7 +90,8 @@ defmodule Bob.Artifacts do
           DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at, updated_at = EXCLUDED.updated_at
           WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
           """,
-          [token, repo, now]
+          [token, repo, now],
+          timeout: @swap_timeout
         )
 
         Repo.query!(
@@ -102,12 +103,14 @@ defmodule Bob.Artifacts do
               WHERE s.token = $1 AND s.repo = d.repo AND s.tag = d.tag
             )
           """,
-          [token, repo]
+          [token, repo],
+          timeout: @swap_timeout
         )
 
         Repo.query!(
           "DELETE FROM docker_tags_staging WHERE token = $1 AND repo = $2",
-          [token, repo]
+          [token, repo],
+          timeout: @swap_timeout
         )
       end,
       timeout: @swap_timeout
