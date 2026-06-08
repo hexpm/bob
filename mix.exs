@@ -36,7 +36,8 @@ defmodule Bob.Mixfile do
       {:sentry, "~> 10.2"},
       {:sweet_xml, "~> 0.5"},
       {:logster, "~> 1.0"},
-      {:observer_cli, "~> 1.7"}
+      {:observer_cli, "~> 1.7"},
+      {:phoenix_pubsub, "~> 2.1"}
     ]
   end
 

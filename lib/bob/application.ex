@@ -16,6 +16,7 @@ defmodule Bob.Application do
         [
           {Finch, name: Bob.Finch},
           {Task.Supervisor, [name: Bob.Tasks]},
+          {Phoenix.PubSub, name: Bob.PubSub},
           Bob.DockerHub.RateLimiter,
           Bob.DockerHub.Auth,
           runner_spec(),
