@@ -4,3 +4,7 @@ erl_crash.dump
 *.ez
 /tmp
 /persist
+
+# Generated assets
+/priv/static/assets/
+/priv/static/cache_manifest.json
