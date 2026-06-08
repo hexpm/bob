@@ -31,7 +31,7 @@ defmodule Bob.Fastly do
     ]
 
     Bob.HTTP.retry("Fastly", fn ->
-      :hackney.request(:post, url, headers, "", [:with_body])
+      Bob.HTTP.request(:post, url, headers, "")
     end)
   end
 end

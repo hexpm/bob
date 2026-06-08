@@ -5,11 +5,11 @@ defmodule Bob.DockerHub do
     url = @dockerhub_url <> "v2/users/login/"
     headers = [{"content-type", "application/json"}]
     body = %{username: username, password: password}
-    opts = [:with_body, recv_timeout: 10_000]
+    opts = [recv_timeout: 10_000]
 
     {:ok, 200, _headers, body} =
       Bob.HTTP.retry("DockerHub #{url}", fn ->
-        :hackney.request(:post, url, headers, JSON.encode!(body), opts)
+        Bob.HTTP.request(:post, url, headers, JSON.encode!(body), opts)
       end)
 
     result = JSON.decode!(body)
@@ -36,11 +36,11 @@ defmodule Bob.DockerHub do
   def fetch_tag(repo, tag) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
     headers = headers()
-    opts = [:with_body, recv_timeout: 20_000]
+    opts = [recv_timeout: 20_000]
 
     result =
       Bob.HTTP.retry("DockerHub #{url}", fn ->
-        :hackney.request(:get, url, headers, "", opts)
+        Bob.HTTP.request(:get, url, headers, "", opts)
       end)
 
     case result do
@@ -55,11 +55,11 @@ defmodule Bob.DockerHub do
   def delete_tag(repo, tag) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
     headers = headers()
-    opts = [:with_body, recv_timeout: 20_000]
+    opts = [recv_timeout: 20_000]
 
     result =
       Bob.HTTP.retry("DockerHub #{url}", fn ->
-        :hackney.request(:delete, url, headers, "", opts)
+        Bob.HTTP.request(:delete, url, headers, "", opts)
       end)
 
     case result do

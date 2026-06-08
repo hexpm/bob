@@ -58,6 +58,10 @@ config :mime, :types, %{
 
 config :porcelain, driver: Porcelain.Driver.Basic
 
+config :ex_aws, http_client: ExAws.Request.Req
+
+config :sentry, client: Bob.SentryClient
+
 config :logger, :default_formatter, format: "$metadata[$level] $message\n"
 
 import_config "#{Mix.env()}.exs"

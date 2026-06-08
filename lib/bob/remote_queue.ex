@@ -100,11 +100,10 @@ defmodule Bob.RemoteQueue do
     url = Application.get_env(:bob, :master_url) <> url
     secret = Application.get_env(:bob, :agent_secret)
 
-    opts = [:with_body]
     headers = [{"authorization", secret}, {"content-type", "application/vnd.bob+erlang"}]
     body = Bob.Plug.ErlangFormat.encode_to_iodata!(body)
 
-    case Bob.HTTP.retry("BobMaster", fn -> :hackney.request(:post, url, headers, body, opts) end) do
+    case Bob.HTTP.retry("BobMaster", fn -> Bob.HTTP.request(:post, url, headers, body) end) do
       {:ok, 200, _headers, body} ->
         {:ok, body} = Bob.Plug.ErlangFormat.decode(body)
         {:ok, body}

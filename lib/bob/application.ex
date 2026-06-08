@@ -14,6 +14,7 @@ defmodule Bob.Application do
     children =
       repo_children() ++
         [
+          {Finch, name: Bob.Finch},
           {Task.Supervisor, [name: Bob.Tasks]},
           Bob.DockerHub.RateLimiter,
           Bob.DockerHub.Auth,

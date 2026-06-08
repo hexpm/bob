@@ -9,6 +9,36 @@ defmodule Bob.HTTP do
   # retry, long enough to look like a hang.
   @max_sleep_time 30_000
 
+  def request(method, url, headers, body, opts \\ []) do
+    headers = put_basic_auth(headers, Keyword.get(opts, :basic_auth))
+
+    method
+    |> Finch.build(url, headers, body)
+    |> Finch.request(Bob.Finch, request_opts(opts))
+    |> read_response()
+  end
+
+  defp put_basic_auth(headers, nil), do: headers
+
+  defp put_basic_auth(headers, {user, password}) do
+    [{"authorization", "Basic " <> Base.encode64("#{user}:#{password}")} | headers]
+  end
+
+  defp request_opts(opts) do
+    case Keyword.get(opts, :recv_timeout) do
+      nil -> []
+      timeout -> [receive_timeout: timeout]
+    end
+  end
+
+  defp read_response({:ok, %Finch.Response{status: status, headers: headers, body: body}}) do
+    {:ok, status, headers, body}
+  end
+
+  defp read_response({:error, reason}) do
+    {:error, reason}
+  end
+
   def retry(name, fun, opts \\ []) do
     retry(name, fun, 0, opts)
   end

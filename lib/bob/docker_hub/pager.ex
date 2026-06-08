@@ -96,14 +96,14 @@ defmodule Bob.DockerHub.Pager do
   # attempt waits for the window to reset rather than hammering.
   defp fetch_page(url, attempts) do
     headers = Bob.DockerHub.headers()
-    opts = [:with_body, recv_timeout: 20_000]
+    opts = [recv_timeout: 20_000]
 
     RateLimiter.acquire()
 
     result =
       Bob.HTTP.retry(
         "DockerHub #{url}",
-        fn -> :hackney.request(:get, url, headers, "", opts) end,
+        fn -> Bob.HTTP.request(:get, url, headers, "", opts) end,
         retry_rate_limit?: false
       )
 

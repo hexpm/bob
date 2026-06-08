@@ -17,10 +17,10 @@ defmodule Bob.GitHub do
     user = Application.get_env(:bob, :github_user)
     token = Application.get_env(:bob, :github_token)
 
-    opts = [:with_body, basic_auth: {user, token}]
+    opts = [basic_auth: {user, token}]
 
     {:ok, 200, headers, body} =
-      Bob.HTTP.retry("GitHub #{url}", fn -> :hackney.request(:get, url, [], "", opts) end)
+      Bob.HTTP.retry("GitHub #{url}", fn -> Bob.HTTP.request(:get, url, [], "", opts) end)
 
     body = JSON.decode!(body)
 
