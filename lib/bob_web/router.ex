@@ -29,5 +29,6 @@ defmodule BobWeb.Router do
     pipe_through(:browser)
 
     live("/", JobsLive)
+    live("/artifacts", ArtifactsLive)
   end
 end
