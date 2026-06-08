@@ -30,7 +30,6 @@ defmodule Bob.Mixfile do
       {:ex_aws_s3, "~> 2.0"},
       {:finch, "~> 0.19"},
       {:req, "~> 0.5"},
-      {:plug_cowboy, "~> 2.0"},
       {:porcelain, "~> 2.0"},
       {:postgrex, "~> 0.19"},
       {:sentry, "~> 10.2"},
