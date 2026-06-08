@@ -428,6 +428,66 @@ defmodule Bob.ArtifactsTest do
     end
   end
 
+  describe "search" do
+    setup do
+      Bob.Artifacts.upsert(%{
+        kind: "otp",
+        arch: "amd64",
+        os: "ubuntu-24.04",
+        name: "OTP-27.0",
+        ref: "aaa",
+        built_at: ~U[2026-01-01 00:00:00Z]
+      })
+
+      Bob.Artifacts.upsert(%{
+        kind: "otp",
+        arch: "arm64",
+        os: "ubuntu-22.04",
+        name: "OTP-26.2",
+        ref: "bbb",
+        built_at: ~U[2026-02-01 00:00:00Z]
+      })
+
+      :ok
+    end
+
+    test "search_artifacts/1 with blank filters returns newest first" do
+      assert [%{name: "OTP-26.2"}, %{name: "OTP-27.0"}] = Bob.Artifacts.search_artifacts(%{})
+    end
+
+    test "search_artifacts/1 filters by free-text on name" do
+      assert [%{name: "OTP-27.0"}] = Bob.Artifacts.search_artifacts(%{query: "27.0"})
+    end
+
+    test "search_artifacts/1 filters by arch" do
+      assert [%{arch: "arm64"}] = Bob.Artifacts.search_artifacts(%{arch: "arm64"})
+    end
+
+    test "distinct value helpers" do
+      assert Bob.Artifacts.distinct_kinds() == ["otp"]
+      assert Bob.Artifacts.distinct_arches() == ["amd64", "arm64"]
+      assert Bob.Artifacts.distinct_oses() == ["ubuntu-22.04", "ubuntu-24.04"]
+    end
+
+    test "search_docker_tags/1 filters by repo and tag text" do
+      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-alpine", ["amd64"])
+      Bob.Artifacts.add_docker_tag("hexpm/elixir", "1.18.0-alpine", ["amd64"])
+
+      assert [%{repo: "hexpm/erlang"}] = Bob.Artifacts.search_docker_tags(%{repo: "hexpm/erlang"})
+      assert [%{tag: "1.18.0-alpine"}] = Bob.Artifacts.search_docker_tags(%{query: "1.18"})
+      assert Bob.Artifacts.distinct_repos() == ["hexpm/elixir", "hexpm/erlang"]
+    end
+
+    test "search_artifacts/1 does not treat % as a LIKE wildcard" do
+      assert Bob.Artifacts.search_artifacts(%{query: "%"}) == []
+    end
+
+    test "search_artifacts/3 respects limit and offset" do
+      assert [%{name: "OTP-26.2"}] = Bob.Artifacts.search_artifacts(%{}, 1, 0)
+      assert [%{name: "OTP-27.0"}] = Bob.Artifacts.search_artifacts(%{}, 1, 1)
+    end
+  end
+
   defp replace(repo, tag_archs) do
     token = Ecto.UUID.generate()
     Artifacts.stage_docker_tags(token, repo, tag_archs)

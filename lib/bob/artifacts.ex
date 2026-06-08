@@ -188,6 +188,63 @@ defmodule Bob.Artifacts do
     num_rows
   end
 
+  def search_artifacts(filters \\ %{}, limit \\ 100, offset \\ 0) do
+    query = blank_to_nil(Map.get(filters, :query))
+
+    from(a in Artifact, order_by: [desc: a.built_at, desc: a.id], limit: ^limit, offset: ^offset)
+    |> text_filter(query, [:name, :ref])
+    |> eq_filter(:kind, Map.get(filters, :kind))
+    |> eq_filter(:arch, Map.get(filters, :arch))
+    |> eq_filter(:os, Map.get(filters, :os))
+    |> Repo.all()
+  end
+
+  def search_docker_tags(filters \\ %{}, limit \\ 100, offset \\ 0) do
+    query = blank_to_nil(Map.get(filters, :query))
+
+    from(d in DockerTag, order_by: [desc: d.built_at, desc: d.id], limit: ^limit, offset: ^offset)
+    |> text_filter(query, [:tag])
+    |> eq_filter(:repo, Map.get(filters, :repo))
+    |> Repo.all()
+  end
+
+  def distinct_kinds(), do: distinct_values(Artifact, :kind)
+  def distinct_arches(), do: distinct_values(Artifact, :arch)
+  def distinct_oses(), do: distinct_values(Artifact, :os)
+  def distinct_repos(), do: distinct_values(DockerTag, :repo)
+
+  defp distinct_values(schema, field) do
+    Repo.all(
+      from(s in schema, distinct: true, select: field(s, ^field), order_by: field(s, ^field))
+    )
+  end
+
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
+
+  defp eq_filter(query, _field, nil), do: query
+  defp eq_filter(query, _field, ""), do: query
+  defp eq_filter(query, field, value), do: from(s in query, where: field(s, ^field) == ^value)
+
+  defp text_filter(query, nil, _fields), do: query
+
+  defp text_filter(query, text, [first_field | rest_fields]) do
+    pattern = "%" <> escape_like(text) <> "%"
+
+    conditions =
+      Enum.reduce(rest_fields, dynamic([s], ilike(field(s, ^first_field), ^pattern)), fn field,
+                                                                                         acc ->
+        dynamic([s], ^acc or ilike(field(s, ^field), ^pattern))
+      end)
+
+    from(s in query, where: ^conditions)
+  end
+
+  defp escape_like(string) do
+    String.replace(string, ~r/([\\%_])/, "\\\\\\1")
+  end
+
   def docker_tags(repo) do
     Repo.all(
       from(d in DockerTag,
