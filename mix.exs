@@ -37,14 +37,25 @@ defmodule Bob.Mixfile do
       {:sweet_xml, "~> 0.5"},
       {:logster, "~> 1.0"},
       {:observer_cli, "~> 1.7"},
-      {:phoenix_pubsub, "~> 2.1"}
+      {:phoenix_pubsub, "~> 2.1"},
+      {:phoenix, "~> 1.7"},
+      {:phoenix_html, "~> 4.1"},
+      {:phoenix_live_view, "~> 1.0"},
+      {:phoenix_live_reload, "~> 1.5", only: :dev},
+      {:bandit, "~> 1.5"},
+      {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
+      {:tailwind, "~> 0.2", runtime: Mix.env() == :dev},
+      {:floki, ">= 0.30.0", only: :test}
     ]
   end
 
   defp aliases() do
     [
       "ecto.setup": ["ecto.create", "ecto.migrate"],
-      "ecto.reset": ["ecto.drop", "ecto.setup"]
+      "ecto.reset": ["ecto.drop", "ecto.setup"],
+      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
+      "assets.build": ["tailwind bob", "esbuild bob"],
+      "assets.deploy": ["tailwind bob --minify", "esbuild bob --minify", "phx.digest"]
     ]
   end
 
