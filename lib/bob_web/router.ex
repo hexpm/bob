@@ -24,4 +24,10 @@ defmodule BobWeb.Router do
     post("/artifacts/add", ArtifactController, :add)
     post("/docker/add", ArtifactController, :add_docker)
   end
+
+  scope "/", BobWeb do
+    pipe_through(:browser)
+
+    live("/", JobsLive)
+  end
 end

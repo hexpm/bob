@@ -44,7 +44,7 @@ defmodule Bob.Mixfile do
       {:bandit, "~> 1.5"},
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.2", runtime: Mix.env() == :dev},
-      {:floki, ">= 0.30.0", only: :test}
+      {:lazy_html, ">= 0.1.0", only: :test}
     ]
   end
 
