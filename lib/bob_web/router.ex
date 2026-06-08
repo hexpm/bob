@@ -30,5 +30,6 @@ defmodule BobWeb.Router do
 
     live("/", JobsLive)
     live("/artifacts", ArtifactsLive)
+    live("/docker", DockerTagsLive)
   end
 end
