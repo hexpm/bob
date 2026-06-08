@@ -97,7 +97,7 @@ defmodule Bob.Reconcile do
 
   defp swap_docker_tags(stream, repo, transform) do
     stage(stream, repo, transform, fn token ->
-      if Artifacts.staged_tag_count(token, repo) > 0 do
+      if Artifacts.staged_any?(token, repo) do
         Artifacts.swap_docker_tags(token, repo)
       else
         Logger.warning("RECONCILE empty fetch for #{repo}, skipping")

@@ -122,6 +122,21 @@ defmodule Bob.Artifacts do
     :ok
   end
 
+  @doc """
+  Whether any tag is staged under `token` for `repo`. `EXISTS` stops at the
+  first matching row via the `(token, repo, tag)` index, so this stays cheap even
+  when a full repo (~1M rows) is staged — unlike counting every distinct tag.
+  """
+  def staged_any?(token, repo) do
+    %{rows: [[exists?]]} =
+      Repo.query!(
+        "SELECT EXISTS(SELECT 1 FROM docker_tags_staging WHERE token = $1 AND repo = $2)",
+        [token, repo]
+      )
+
+    exists?
+  end
+
   @doc "Number of distinct tags staged under `token` for `repo`."
   def staged_tag_count(token, repo) do
     %{rows: [[count]]} =

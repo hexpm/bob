@@ -293,6 +293,17 @@ defmodule Bob.ArtifactsTest do
     end
   end
 
+  describe "staged_any?/2" do
+    test "is true only when a tag is staged for the token and repo" do
+      token = Ecto.UUID.generate()
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"a", ["amd64"]}])
+
+      assert Artifacts.staged_any?(token, "hexpm/erlang-amd64")
+      refute Artifacts.staged_any?(token, "hexpm/elixir-amd64")
+      refute Artifacts.staged_any?(Ecto.UUID.generate(), "hexpm/erlang-amd64")
+    end
+  end
+
   describe "staged_tag_count/2" do
     test "counts distinct staged tags for the token and repo" do
       token = Ecto.UUID.generate()
