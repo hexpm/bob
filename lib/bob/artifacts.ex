@@ -10,9 +10,12 @@ defmodule Bob.Artifacts do
   # so a page is inserted in chunks well under that ceiling.
   @staging_chunk 5000
 
-  # The swap reads and rewrites the whole repo (up to ~1M rows for hexpm/elixir)
-  # in two set-based statements, which can run longer than the 15s default.
-  @swap_timeout 5 * 60 * 1000
+  # Reconcile/backfill rewrites a repo's entire tag set through
+  # docker_tags_staging (up to ~1M rows for hexpm/elixir). Queries over that full
+  # set can run longer than Postgrex's 15s default, so each passes this timeout
+  # explicitly — a transaction's :timeout does not propagate to the queries it
+  # wraps.
+  @long_query_timeout 5 * 60 * 1000
 
   def add(attrs) do
     upsert(attrs)
@@ -91,7 +94,7 @@ defmodule Bob.Artifacts do
           WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
           """,
           [token, repo, now],
-          timeout: @swap_timeout
+          timeout: @long_query_timeout
         )
 
         Repo.query!(
@@ -104,16 +107,16 @@ defmodule Bob.Artifacts do
             )
           """,
           [token, repo],
-          timeout: @swap_timeout
+          timeout: @long_query_timeout
         )
 
         Repo.query!(
           "DELETE FROM docker_tags_staging WHERE token = $1 AND repo = $2",
           [token, repo],
-          timeout: @swap_timeout
+          timeout: @long_query_timeout
         )
       end,
-      timeout: @swap_timeout
+      timeout: @long_query_timeout
     )
 
     :ok
@@ -124,7 +127,8 @@ defmodule Bob.Artifacts do
     %{rows: [[count]]} =
       Repo.query!(
         "SELECT count(DISTINCT tag) FROM docker_tags_staging WHERE token = $1 AND repo = $2",
-        [token, repo]
+        [token, repo],
+        timeout: @long_query_timeout
       )
 
     count
@@ -135,7 +139,8 @@ defmodule Bob.Artifacts do
     %{rows: rows} =
       Repo.query!(
         "SELECT DISTINCT tag FROM docker_tags_staging WHERE token = $1 AND repo = $2 AND archs @> $3",
-        [token, repo, archs]
+        [token, repo, archs],
+        timeout: @long_query_timeout
       )
 
     Enum.map(rows, fn [tag] -> tag end)
@@ -143,7 +148,10 @@ defmodule Bob.Artifacts do
 
   @doc "Drops every staging row for `token` (used when a fetch fails partway)."
   def discard_staging(token) do
-    Repo.query!("DELETE FROM docker_tags_staging WHERE token = $1", [token])
+    Repo.query!("DELETE FROM docker_tags_staging WHERE token = $1", [token],
+      timeout: @long_query_timeout
+    )
+
     :ok
   end
 
@@ -158,7 +166,9 @@ defmodule Bob.Artifacts do
       |> NaiveDateTime.add(-older_than_seconds, :second)
 
     %{num_rows: num_rows} =
-      Repo.query!("DELETE FROM docker_tags_staging WHERE inserted_at < $1", [cutoff])
+      Repo.query!("DELETE FROM docker_tags_staging WHERE inserted_at < $1", [cutoff],
+        timeout: @long_query_timeout
+      )
 
     num_rows
   end
