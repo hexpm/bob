@@ -24,6 +24,14 @@ defmodule BobWeb.JobsLiveTest do
     assert html =~ "done"
   end
 
+  test "root layout links favicon assets", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/")
+
+    assert html =~ ~s(href="/favicon.ico")
+    assert html =~ ~s(href="/images/favicon-64.png")
+    assert html =~ ~s(href="/images/favicon-160.png")
+  end
+
   test "refreshes when a :jobs_changed broadcast arrives", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/")
     refute render(view) =~ ":refreshed"

@@ -16,7 +16,7 @@ config :bob, BobWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "kQv8mZr2hP0sJX4bN6wL9cT1dY3fA5gH7uE2iO4kR6mS8tV0xZ2bC4dF6hJ8lN0",
+  secret_key_base: "kQv8mZr2hP0sJX4bN6wL9cT1dY3fA5gH7uE2iO4kR6mS8tV0xZ2bC4dF6hJ8lN09",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:bob, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:bob, ~w(--watch)]}

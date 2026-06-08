@@ -8,6 +8,7 @@ defmodule Bob.Mixfile do
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
+      listeners: [Phoenix.CodeReloader],
       releases: releases(),
       aliases: aliases(),
       deps: deps()
@@ -26,6 +27,7 @@ defmodule Bob.Mixfile do
 
   defp deps() do
     [
+      {:tidewave, "~> 0.5", only: [:dev]},
       {:ecto_sql, "~> 3.12"},
       {:ex_aws_s3, "~> 2.0"},
       {:finch, "~> 0.19"},
@@ -44,6 +46,7 @@ defmodule Bob.Mixfile do
       {:bandit, "~> 1.5"},
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.2", runtime: Mix.env() == :dev},
+      {:igniter, "~> 0.8.1", only: [:dev, :test], runtime: false},
       {:lazy_html, ">= 0.1.0", only: :test}
     ]
   end
