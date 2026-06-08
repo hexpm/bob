@@ -9,11 +9,13 @@ defmodule Bob.Runner do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
 
+  # The master owns the Postgres-backed queue and runs jobs from it. Agents have
+  # no Bob.Repo and only pull work from the master over HTTP, so they must never
+  # touch the local queue. Dispatch every poll on the node's role.
   def init(state) do
     if Application.get_env(:bob, :master?) do
       Process.send_after(self(), :local_timeout, 0)
     else
-      Process.send_after(self(), :local_timeout, 0)
       Process.send_after(self(), :remote_timeout, 0)
     end
 
@@ -92,9 +94,11 @@ defmodule Bob.Runner do
   defp apply_task(module, fun, args), do: apply(module, fun, args)
 
   defp start_any_jobs(state) do
-    state
-    |> start_jobs(&Bob.RemoteQueue.local_queue/2)
-    |> start_jobs(&Bob.RemoteQueue.remote_queue/2)
+    if Application.get_env(:bob, :master?) do
+      start_jobs(state, &Bob.RemoteQueue.local_queue/2)
+    else
+      start_jobs(state, &Bob.RemoteQueue.remote_queue/2)
+    end
   end
 
   defp start_jobs(state, fun) do
