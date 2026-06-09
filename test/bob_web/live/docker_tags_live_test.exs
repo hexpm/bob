@@ -48,8 +48,8 @@ defmodule BobWeb.DockerTagsLiveTest do
         "os_version" => ""
       })
 
-    assert html =~ "<code>1.18.0-erlang-27.0-ubuntu-noble-20250101</code>"
-    refute html =~ "<code>27.0-ubuntu-noble-20250101</code>"
+    assert docker_tag?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
+    refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
   end
 
   test "filters by structured inputs", %{conn: conn} do
@@ -66,9 +66,9 @@ defmodule BobWeb.DockerTagsLiveTest do
         "os_version" => "noble"
       })
 
-    assert html =~ "<code>1.18.0-erlang-27.0-ubuntu-noble-20250101</code>"
-    refute html =~ "<code>1.17.3-erlang-26.2-debian-bookworm-20250113-slim</code>"
-    refute html =~ "<code>27.0-ubuntu-noble-20250101</code>"
+    assert docker_tag?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
+    refute docker_tag?(html, "1.17.3-erlang-26.2-debian-bookworm-20250113-slim")
+    refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
   end
 
   test "tag prefix keeps arch filtering and disables parsed tag filters", %{conn: conn} do
@@ -85,9 +85,9 @@ defmodule BobWeb.DockerTagsLiveTest do
         "os_version" => "bookworm"
       })
 
-    assert html =~ "<code>1.18.0-erlang-27.0-ubuntu-noble-20250101</code>"
-    refute html =~ "<code>1.18.1-erlang-27.0-ubuntu-noble-20250101</code>"
-    refute html =~ "<code>1.17.3-erlang-26.2-debian-bookworm-20250113-slim</code>"
+    assert docker_tag?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
+    refute docker_tag?(html, "1.18.1-erlang-27.0-ubuntu-noble-20250101")
+    refute docker_tag?(html, "1.17.3-erlang-26.2-debian-bookworm-20250113-slim")
 
     refute control_html(html, "arch") =~ "disabled"
 
@@ -134,5 +134,10 @@ defmodule BobWeb.DockerTagsLiveTest do
   defp control_position(html, name) do
     {position, _length} = :binary.match(html, ~s(name="#{name}"))
     position
+  end
+
+  defp docker_tag?(html, tag) do
+    html =~
+      ~r/<td class="col-dk-tag"><code[^>]*>#{Regex.escape(tag)}<\/code><\/td>/
   end
 end

@@ -44,6 +44,32 @@
               <.icon name="external" /> hexpm/bob
             </a>
           </div>
+
+          <details class="bob-menu">
+            <summary class="bob-menu__button" aria-label="Open navigation menu">
+              <.icon name="menu" />
+              <span>Menu</span>
+            </summary>
+            <nav class="bob-menu__panel" aria-label="Mobile primary">
+              <.link href={~p"/"} class={menu_class(@conn.request_path, "/")}>
+                <.icon name="queue" /> Jobs
+              </.link>
+              <.link href={~p"/artifacts"} class={menu_class(@conn.request_path, "/artifacts")}>
+                <.icon name="box" /> Artifacts
+              </.link>
+              <.link href={~p"/docker"} class={menu_class(@conn.request_path, "/docker")}>
+                <.icon name="docker" /> Docker Tags
+              </.link>
+              <a
+                class="bob-menu__item bob-menu__item--external"
+                href="https://github.com/hexpm/bob"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <.icon name="external" /> hexpm/bob
+              </a>
+            </nav>
+          </details>
         </div>
       </header>
 

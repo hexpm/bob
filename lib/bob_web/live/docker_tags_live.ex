@@ -157,16 +157,16 @@ defmodule BobWeb.DockerTagsLive do
         <div :if={@loading} class="empty-mini">Loading tags...</div>
 
         <.table :if={!@loading and @results != []} rows={@results} class="jt--dk">
-          <:col :let={d} label="repo">
+          <:col :let={d} label="repo" class="col-dk-repo">
             <div class="dk-repo">
               <.icon name="docker" class="icon-blue" />
               <code class="mono-cell mono-cell--name"><%= d.repo %></code>
             </div>
           </:col>
-          <:col :let={d} label="tag">
-            <code><%= d.tag %></code>
+          <:col :let={d} label="tag" class="col-dk-tag">
+            <code class="dk-tag-code" title={d.tag}><%= d.tag %></code>
           </:col>
-          <:col :let={d} label="archs">
+          <:col :let={d} label="archs" class="col-dk-archs">
             <div class="arch-list">
               <span :for={arch <- d.archs} class="arch-tag"><%= arch %></span>
             </div>

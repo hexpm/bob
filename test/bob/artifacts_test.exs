@@ -609,7 +609,12 @@ defmodule Bob.ArtifactsTest do
       assert Bob.Artifacts.distinct_oses() == ["ubuntu-22.04", "ubuntu-24.04"]
     end
 
-    test "distinct Docker value helpers" do
+    test "distinct Docker filter helpers" do
+      assert Bob.Artifacts.distinct_docker_arches() == ["amd64", "arm64"]
+      assert Bob.Artifacts.distinct_docker_oses() == ["alpine", "debian", "ubuntu"]
+    end
+
+    test "distinct Docker repositories" do
       Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
         "amd64",
         "arm64"
@@ -622,8 +627,6 @@ defmodule Bob.ArtifactsTest do
       )
 
       assert Bob.Artifacts.distinct_repos() == ["hexpm/elixir", "hexpm/erlang"]
-      assert Bob.Artifacts.distinct_docker_arches() == ["amd64", "arm64"]
-      assert Bob.Artifacts.distinct_docker_oses() == ["debian", "ubuntu"]
     end
 
     test "search_docker_tags/1 filters by structured prefixes" do

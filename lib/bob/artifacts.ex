@@ -250,29 +250,9 @@ defmodule Bob.Artifacts do
     }
   end
 
-  def distinct_docker_arches() do
-    %{rows: rows} =
-      Repo.query!("""
-      SELECT DISTINCT arches.arch
-      FROM docker_tags
-      CROSS JOIN LATERAL unnest(archs) AS arches(arch)
-      ORDER BY arches.arch
-      """)
+  def distinct_docker_arches(), do: DockerTagSearch.arches()
 
-    Enum.map(rows, fn [arch] -> arch end)
-  end
-
-  def distinct_docker_oses() do
-    %{rows: rows} =
-      Repo.query!("""
-      SELECT DISTINCT search->>'os' AS os
-      FROM docker_tags
-      WHERE search->>'os' IS NOT NULL
-      ORDER BY os
-      """)
-
-    Enum.map(rows, fn [os] -> os end)
-  end
+  def distinct_docker_oses(), do: DockerTagSearch.oses()
 
   defp distinct_values(schema, field) do
     Repo.all(

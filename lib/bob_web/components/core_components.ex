@@ -263,6 +263,7 @@ defmodule BobWeb.CoreComponents do
   defp icon_paths("x"), do: ["M6 18L18 6M6 6l12 12"]
   defp icon_paths("bolt"), do: ["M3.75 13.5l10.5-11.25-1.5 9h6.75L9 22.5l1.5-9h-6.75z"]
   defp icon_paths("clock"), do: ["M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"]
+  defp icon_paths("menu"), do: icon_paths("queue")
   defp icon_paths("queue"), do: ["M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5"]
 
   defp icon_paths("box"),
