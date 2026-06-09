@@ -206,9 +206,6 @@ defmodule BobWeb.JobsLive do
             </div>
           </div>
         </div>
-        <div class="filter-bar">
-          <span class="filter-bar__meta">oldest first</span>
-        </div>
         <.table :if={!@loading and @queued != []} rows={@queued}>
           <:col :let={j} label="Module">
             <.module_cell cat={job_cat(j.module_key)} module={module_name(j.module_key)} />
