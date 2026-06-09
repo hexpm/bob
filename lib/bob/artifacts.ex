@@ -110,7 +110,6 @@ defmodule Bob.Artifacts do
             updated_at = EXCLUDED.updated_at
           WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
              OR docker_tags.search IS DISTINCT FROM EXCLUDED.search
-             -- TODO: Remove this built_at comparison after production Docker tag rows are corrected.
              OR docker_tags.built_at IS DISTINCT FROM EXCLUDED.built_at
           """,
           [token, repo, now],

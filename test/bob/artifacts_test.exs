@@ -569,6 +569,25 @@ defmodule Bob.ArtifactsTest do
       assert [%{name: "OTP-26.2"}, %{name: "OTP-27.0"}] = Bob.Artifacts.search_artifacts(%{})
     end
 
+    test "search_docker_tags/1 with blank filters returns newest first" do
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "old-ubuntu-noble-20250101",
+        ["amd64"],
+        ~U[2025-01-01 00:00:00Z]
+      )
+
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "new-ubuntu-noble-20250101",
+        ["amd64"],
+        ~U[2025-02-01 00:00:00Z]
+      )
+
+      assert [%{tag: "new-ubuntu-noble-20250101"}, %{tag: "old-ubuntu-noble-20250101"}] =
+               Bob.Artifacts.search_docker_tags(%{})
+    end
+
     test "search_artifacts/1 filters by free-text on name" do
       assert [%{name: "OTP-27.0"}] = Bob.Artifacts.search_artifacts(%{query: "27.0"})
     end
