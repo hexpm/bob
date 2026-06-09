@@ -5,6 +5,8 @@ defmodule BobWeb.DockerTagsLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    options = Bob.Artifacts.docker_tag_filter_options()
+
     socket =
       socket
       |> assign(
@@ -17,11 +19,15 @@ defmodule BobWeb.DockerTagsLive do
         os_version: "",
         offset: 0,
         page: @page,
-        repos: Bob.Artifacts.distinct_repos(),
-        arches: Bob.Artifacts.distinct_docker_arches(),
-        oses: Bob.Artifacts.distinct_docker_oses()
+        repos: options.repos,
+        arches: options.arches,
+        oses: options.oses,
+        total: nil,
+        loading: true,
+        results: []
       )
-      |> load()
+
+    socket = if connected?(socket), do: load(socket), else: socket
 
     {:ok, socket}
   end
@@ -70,26 +76,37 @@ defmodule BobWeb.DockerTagsLive do
       offset: offset
     } = socket.assigns
 
-    results =
-      Bob.Artifacts.search_docker_tags(
-        %{
-          repo: repo,
-          tag: tag,
-          arch: arch,
-          elixir_version: elixir_version,
-          erlang_version: erlang_version,
-          os: os,
-          os_version: os_version
-        },
-        @page,
-        offset
-      )
+    filters = %{
+      repo: repo,
+      tag: tag,
+      arch: arch,
+      elixir_version: elixir_version,
+      erlang_version: erlang_version,
+      os: os,
+      os_version: os_version
+    }
 
-    assign(socket, results: results)
+    results =
+      Bob.Artifacts.search_docker_tags(filters, @page, offset)
+
+    total =
+      if offset == 0 and results == [] do
+        0
+      else
+        filters
+        |> Bob.Artifacts.count_docker_tags()
+        |> max(offset + length(results))
+      end
+
+    assign(socket, results: results, total: total, loading: false)
   end
 
   defp fmt(nil), do: "—"
   defp fmt(datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S")
+
+  defp count_label(nil), do: "Loading tags"
+  defp count_label(0), do: "0 tags"
+  defp count_label(count), do: "#{format_count(count)} #{format_unit("tags", count)}"
 
   @impl true
   def render(assigns) do
@@ -134,10 +151,12 @@ defmodule BobWeb.DockerTagsLive do
             />
           </div>
           <.filter_select name="arch" label="arch" value={@arch} options={@arches} />
-          <span class="filter-bar__meta"><%= length(@results) %> tags</span>
+          <span class="filter-bar__meta"><%= count_label(@total) %></span>
         </form>
 
-        <.table :if={@results != []} rows={@results} class="jt--dk">
+        <div :if={@loading} class="empty-mini">Loading tags...</div>
+
+        <.table :if={!@loading and @results != []} rows={@results} class="jt--dk">
           <:col :let={d} label="repo">
             <div class="dk-repo">
               <.icon name="docker" class="icon-blue" />
@@ -156,9 +175,17 @@ defmodule BobWeb.DockerTagsLive do
             <span class="c-time"><%= fmt(d.built_at) %></span>
           </:col>
         </.table>
-        <div :if={@results == []} class="empty-mini">No matching tags.</div>
+        <div :if={!@loading and @results == []} class="empty-mini">No matching tags.</div>
 
-        <.pager event="page" offset={@offset} count={length(@results)} page={@page} unit="tags" />
+        <.pager
+          :if={!@loading}
+          event="page"
+          offset={@offset}
+          count={length(@results)}
+          page={@page}
+          unit="tags"
+          total={@total}
+        />
       </section>
     </div>
     """

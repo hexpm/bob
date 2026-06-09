@@ -1,10 +1,16 @@
 defmodule Bob.Artifacts.DockerTagSearch do
+  @archs ~w(amd64 arm64)
   @erlang_repos ~w(hexpm/erlang hexpm/erlang-amd64 hexpm/erlang-arm64)
   @elixir_repos ~w(hexpm/elixir hexpm/elixir-amd64 hexpm/elixir-arm64)
+  @oses ~w(alpine debian ubuntu)
 
   @erlang_tag_regex ~r/^(.+)-(alpine|ubuntu|debian)-(.+)$/
   @elixir_tag_regex ~r/^(.+)-erlang-(.+)-(alpine|ubuntu|debian)-(.+)$/
   @version_regex ~r/^\d+(?:\.\d+)*(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/
+
+  def repos(), do: Enum.sort(@erlang_repos ++ @elixir_repos)
+  def arches(), do: @archs
+  def oses(), do: @oses
 
   def metadata(repo, tag) when repo in @erlang_repos do
     case Regex.run(@erlang_tag_regex, tag, capture: :all_but_first) do

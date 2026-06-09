@@ -22,6 +22,8 @@ defmodule BobWeb.JobsLiveTest do
     assert html =~ "Past"
     assert html =~ "OTPChecker"
     assert html =~ "done"
+    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>1<\/b>\s*queued\s*of\s*1 queued/
+    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>1<\/b>\s*job\s*of\s*1 job/
   end
 
   test "root layout links favicon assets", %{conn: conn} do

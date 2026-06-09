@@ -274,5 +274,19 @@ defmodule Bob.QueueTest do
       assert Enum.map(recent, & &1.state) |> Enum.sort() == ["done", "failed"]
       assert hd(recent).finished_at >= List.last(recent).finished_at
     end
+
+    test "finished_count/0 counts done and failed jobs" do
+      Bob.Queue.add(Bob.Job.OTPChecker, [:done])
+      {:ok, {done_id, _}} = Bob.Queue.start(Bob.Job.OTPChecker)
+      Bob.Queue.success(done_id)
+
+      Bob.Queue.add(Bob.Job.OTPChecker, [:failed])
+      {:ok, {failed_id, _}} = Bob.Queue.start(Bob.Job.OTPChecker)
+      Bob.Queue.failure(failed_id)
+
+      Bob.Queue.add(Bob.Job.OTPChecker, [:queued])
+
+      assert Bob.Queue.finished_count() == 2
+    end
   end
 end

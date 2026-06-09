@@ -3,6 +3,20 @@ defmodule Bob.Artifacts.DockerTagSearchTest do
 
   alias Bob.Artifacts.DockerTagSearch
 
+  test "returns known Docker tag dimensions" do
+    assert DockerTagSearch.repos() == [
+             "hexpm/elixir",
+             "hexpm/elixir-amd64",
+             "hexpm/elixir-arm64",
+             "hexpm/erlang",
+             "hexpm/erlang-amd64",
+             "hexpm/erlang-arm64"
+           ]
+
+    assert DockerTagSearch.arches() == ["amd64", "arm64"]
+    assert DockerTagSearch.oses() == ["alpine", "debian", "ubuntu"]
+  end
+
   test "parses per-arch Erlang tags" do
     assert DockerTagSearch.metadata(
              "hexpm/erlang-amd64",

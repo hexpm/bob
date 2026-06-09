@@ -4,6 +4,9 @@ defmodule Bob.ArtifactsTest do
   alias Bob.Artifacts
   alias Bob.Artifacts.{Artifact, BaseImageTag, DockerTag, DockerTagStaging}
 
+  @docker_built_at ~U[2025-01-02 03:04:05.000000Z]
+  @newer_docker_built_at ~U[2025-02-03 04:05:06.000000Z]
+
   describe "Artifact.changeset/2" do
     test "casts a posted artifact, parsing the ISO8601 date" do
       changeset =
@@ -202,6 +205,17 @@ defmodule Bob.ArtifactsTest do
              ] = Repo.all(DockerTag)
     end
 
+    test "stores the supplied Docker Hub timestamp as built_at" do
+      Artifacts.add_docker_tag(
+        "hexpm/erlang-amd64",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        @docker_built_at
+      )
+
+      assert [%DockerTag{built_at: @docker_built_at}] = Repo.all(DockerTag)
+    end
+
     test "unions archs on conflicting (repo, tag)" do
       Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
       Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["arm64"])
@@ -235,11 +249,12 @@ defmodule Bob.ArtifactsTest do
       token = Ecto.UUID.generate()
 
       Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [
-        {"27.0-ubuntu-noble-20250101", ["amd64"]}
+        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"])
       ])
 
       assert [
                %DockerTagStaging{
+                 built_at: @docker_built_at,
                  search: %{
                    "erlang_version" => "27.0",
                    "os" => "ubuntu",
@@ -259,6 +274,33 @@ defmodule Bob.ArtifactsTest do
                  }
                }
              ] = Repo.all(DockerTag)
+    end
+
+    test "swaps the staged Docker Hub timestamp into built_at" do
+      replace("hexpm/erlang-amd64", [
+        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @docker_built_at)
+      ])
+
+      assert [%DockerTag{built_at: @docker_built_at}] = Repo.all(DockerTag)
+    end
+
+    test "updates built_at for otherwise unchanged rows" do
+      Artifacts.add_docker_tag(
+        "hexpm/erlang-amd64",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        @docker_built_at
+      )
+
+      inserted = Repo.one(DockerTag)
+
+      replace("hexpm/erlang-amd64", [
+        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @newer_docker_built_at)
+      ])
+
+      updated = Repo.one(DockerTag)
+      assert updated.built_at == @newer_docker_built_at
+      assert DateTime.compare(updated.updated_at, inserted.updated_at) == :gt
     end
 
     test "inserts the staged tags with their arch lists" do
@@ -302,11 +344,19 @@ defmodule Bob.ArtifactsTest do
 
     test "collapses duplicate tags staged across pages (Docker Hub returns dupes)" do
       token = Ecto.UUID.generate()
-      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"27.0", ["amd64"]}])
-      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"27.0", ["amd64"]}])
+
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [
+        docker_tag("27.0", ["amd64"], @docker_built_at)
+      ])
+
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [
+        docker_tag("27.0", ["amd64"], @newer_docker_built_at)
+      ])
+
       assert Artifacts.swap_docker_tags(token, "hexpm/erlang-amd64") == :ok
 
       assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"27.0", ["amd64"]}]
+      assert [%DockerTag{built_at: @newer_docker_built_at}] = Repo.all(DockerTag)
     end
 
     test "streams more tags than fit in a single statement's parameter limit" do
@@ -316,7 +366,7 @@ defmodule Bob.ArtifactsTest do
         Artifacts.stage_docker_tags(
           token,
           "hexpm/erlang-amd64",
-          Enum.map(page, &{"tag-#{&1}", ["amd64"]})
+          Enum.map(page, &docker_tag("tag-#{&1}", ["amd64"]))
         )
       end
 
@@ -328,8 +378,13 @@ defmodule Bob.ArtifactsTest do
       a = Ecto.UUID.generate()
       b = Ecto.UUID.generate()
 
-      Artifacts.stage_docker_tags(a, "hexpm/erlang-amd64", [{"from-a", ["amd64"]}])
-      Artifacts.stage_docker_tags(b, "hexpm/erlang-amd64", [{"from-b", ["amd64"]}])
+      Artifacts.stage_docker_tags(a, "hexpm/erlang-amd64", [
+        docker_tag("from-a", ["amd64"])
+      ])
+
+      Artifacts.stage_docker_tags(b, "hexpm/erlang-amd64", [
+        docker_tag("from-b", ["amd64"])
+      ])
 
       assert Artifacts.staged_tag_count(a, "hexpm/erlang-amd64") == 1
       assert Artifacts.swap_docker_tags(a, "hexpm/erlang-amd64") == :ok
@@ -343,7 +398,10 @@ defmodule Bob.ArtifactsTest do
   describe "staged_any?/2" do
     test "is true only when a tag is staged for the token and repo" do
       token = Ecto.UUID.generate()
-      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"a", ["amd64"]}])
+
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [
+        docker_tag("a", ["amd64"])
+      ])
 
       assert Artifacts.staged_any?(token, "hexpm/erlang-amd64")
       refute Artifacts.staged_any?(token, "hexpm/elixir-amd64")
@@ -356,11 +414,13 @@ defmodule Bob.ArtifactsTest do
       token = Ecto.UUID.generate()
 
       Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [
-        {"a", ["amd64"]},
-        {"b", ["amd64"]}
+        docker_tag("a", ["amd64"]),
+        docker_tag("b", ["amd64"])
       ])
 
-      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"a", ["amd64"]}])
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [
+        docker_tag("a", ["amd64"])
+      ])
 
       assert Artifacts.staged_tag_count(token, "hexpm/erlang-amd64") == 2
       assert Artifacts.staged_tag_count(token, "hexpm/elixir-amd64") == 0
@@ -372,8 +432,8 @@ defmodule Bob.ArtifactsTest do
       token = Ecto.UUID.generate()
 
       Artifacts.stage_docker_tags(token, "library/alpine", [
-        {"3.23.5", ["amd64", "arm64", "386"]},
-        {"3.22.1", ["amd64"]}
+        docker_tag("3.23.5", ["amd64", "arm64", "386"]),
+        docker_tag("3.22.1", ["amd64"])
       ])
 
       assert Artifacts.staged_multi_arch_tags(token, "library/alpine", ["amd64", "arm64"]) ==
@@ -384,7 +444,10 @@ defmodule Bob.ArtifactsTest do
   describe "discard_staging/1" do
     test "drops every row for the token" do
       token = Ecto.UUID.generate()
-      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"a", ["amd64"]}])
+
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [
+        docker_tag("a", ["amd64"])
+      ])
 
       assert Artifacts.discard_staging(token) == :ok
       assert Artifacts.staged_tag_count(token, "hexpm/erlang-amd64") == 0
@@ -394,7 +457,10 @@ defmodule Bob.ArtifactsTest do
   describe "prune_staging/1" do
     test "deletes rows older than the threshold and keeps fresh ones" do
       token = Ecto.UUID.generate()
-      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [{"fresh", ["amd64"]}])
+
+      Artifacts.stage_docker_tags(token, "hexpm/erlang-amd64", [
+        docker_tag("fresh", ["amd64"])
+      ])
 
       stale = Ecto.UUID.generate()
 
@@ -404,6 +470,7 @@ defmodule Bob.ArtifactsTest do
           repo: "hexpm/erlang-amd64",
           tag: "stale",
           archs: ["amd64"],
+          built_at: @docker_built_at,
           inserted_at: NaiveDateTime.add(NaiveDateTime.utc_now(), -7 * 60 * 60, :second)
         }
       ])
@@ -508,6 +575,13 @@ defmodule Bob.ArtifactsTest do
 
     test "search_artifacts/1 filters by arch" do
       assert [%{arch: "arm64"}] = Bob.Artifacts.search_artifacts(%{arch: "arm64"})
+    end
+
+    test "count_artifacts/1 counts exact matching artifacts" do
+      assert Bob.Artifacts.count_artifacts(%{}) == 2
+      assert Bob.Artifacts.count_artifacts(%{query: "27.0"}) == 1
+      assert Bob.Artifacts.count_artifacts(%{arch: "arm64"}) == 1
+      assert Bob.Artifacts.count_artifacts(%{os: "missing"}) == 0
     end
 
     test "distinct value helpers" do
@@ -618,6 +692,30 @@ defmodule Bob.ArtifactsTest do
                })
     end
 
+    test "count_docker_tags/1 counts exact matching tags" do
+      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
+        "amd64",
+        "arm64"
+      ])
+
+      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.1-ubuntu-noble-20250101", ["arm64"])
+
+      count =
+        Bob.Artifacts.count_docker_tags(%{
+          repo: "hexpm/erl",
+          tag: "27",
+          arch: "arm",
+          erlang_version: "27",
+          os: "ub",
+          os_version: "noble"
+        })
+
+      assert count == 2
+      assert Bob.Artifacts.count_docker_tags(%{arch: "amd64"}) == 1
+      assert Bob.Artifacts.count_docker_tags(%{arch: "arm64"}) == 2
+      assert Bob.Artifacts.count_docker_tags(%{tag: "missing"}) == 0
+    end
+
     test "search_artifacts/1 does not treat % as a LIKE wildcard" do
       assert Bob.Artifacts.search_artifacts(%{query: "%"}) == []
     end
@@ -640,9 +738,14 @@ defmodule Bob.ArtifactsTest do
 
   defp replace(repo, tag_archs) do
     token = Ecto.UUID.generate()
-    Artifacts.stage_docker_tags(token, repo, tag_archs)
+    Artifacts.stage_docker_tags(token, repo, Enum.map(tag_archs, &docker_tag_tuple/1))
     Artifacts.swap_docker_tags(token, repo)
   end
+
+  defp docker_tag(tag, archs, built_at \\ @docker_built_at), do: {tag, archs, built_at}
+
+  defp docker_tag_tuple({tag, archs}), do: docker_tag(tag, archs)
+  defp docker_tag_tuple({tag, archs, built_at}), do: docker_tag(tag, archs, built_at)
 
   defp attrs() do
     %{

@@ -24,14 +24,15 @@ defmodule Bob.Artifacts do
     :ok
   end
 
-  def add_docker_tag(repo, tag, archs) do
+  def add_docker_tag(repo, tag, archs, built_at \\ DateTime.utc_now()) do
     now = NaiveDateTime.utc_now()
+    built_at = dump_utc_datetime(built_at)
     search = DockerTagSearch.metadata(repo, tag)
 
     Repo.query!(
       """
       INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $5, $5)
+      VALUES ($1, $2, $3, $4, $5, $6, $6)
       ON CONFLICT (repo, tag)
       DO UPDATE SET
         archs = (
@@ -42,14 +43,14 @@ defmodule Bob.Artifacts do
         built_at = EXCLUDED.built_at,
         updated_at = EXCLUDED.updated_at
       """,
-      [repo, tag, archs, search, now]
+      [repo, tag, archs, search, built_at, now]
     )
 
     :ok
   end
 
   @doc """
-  Inserts a page of `{tag, archs}` pairs into the staging table under `token`.
+  Inserts a page of `{tag, archs, built_at}` tuples into the staging table under `token`.
 
   Reconcile streams Docker Hub a page at a time into staging so the full tag
   list (up to ~1M for hexpm/elixir) is never held in memory and no connection is
@@ -59,17 +60,18 @@ defmodule Bob.Artifacts do
   """
   def stage_docker_tags(_token, _repo, []), do: :ok
 
-  def stage_docker_tags(token, repo, tag_archs) do
+  def stage_docker_tags(token, repo, tag_archs_built_at) do
     now = NaiveDateTime.utc_now()
 
-    tag_archs
-    |> Enum.map(fn {tag, archs} ->
+    tag_archs_built_at
+    |> Enum.map(fn {tag, archs, built_at} ->
       %{
         token: token,
         repo: repo,
         tag: tag,
         archs: archs,
         search: DockerTagSearch.metadata(repo, tag),
+        built_at: built_at,
         inserted_at: now
       }
     end)
@@ -96,10 +98,10 @@ defmodule Bob.Artifacts do
         Repo.query!(
           """
           INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
-          SELECT DISTINCT ON (repo, tag) repo, tag, archs, search, $3, $3, $3
+          SELECT DISTINCT ON (repo, tag) repo, tag, archs, search, built_at, $3, $3
           FROM docker_tags_staging
           WHERE token = $1 AND repo = $2
-          ORDER BY repo, tag
+          ORDER BY repo, tag, built_at DESC
           ON CONFLICT (repo, tag)
           DO UPDATE SET
             archs = EXCLUDED.archs,
@@ -108,6 +110,8 @@ defmodule Bob.Artifacts do
             updated_at = EXCLUDED.updated_at
           WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
              OR docker_tags.search IS DISTINCT FROM EXCLUDED.search
+             -- TODO: Remove this built_at comparison after production Docker tag rows are corrected.
+             OR docker_tags.built_at IS DISTINCT FROM EXCLUDED.built_at
           """,
           [token, repo, now],
           timeout: @long_query_timeout
@@ -205,32 +209,47 @@ defmodule Bob.Artifacts do
   end
 
   def search_artifacts(filters \\ %{}, limit \\ 100, offset \\ 0) do
-    query = blank_to_nil(Map.get(filters, :query))
-
-    from(a in Artifact, order_by: [desc: a.built_at, desc: a.id], limit: ^limit, offset: ^offset)
-    |> text_filter(query, [:name, :ref])
-    |> eq_filter(:kind, Map.get(filters, :kind))
-    |> eq_filter(:arch, Map.get(filters, :arch))
-    |> eq_filter(:os, Map.get(filters, :os))
+    filters
+    |> artifact_search_query()
+    |> order_by([a], desc: a.built_at, desc: a.id)
+    |> limit(^limit)
+    |> offset(^offset)
     |> Repo.all()
   end
 
+  def count_artifacts(filters \\ %{}) do
+    filters
+    |> artifact_search_query()
+    |> Repo.aggregate(:count, :id)
+  end
+
   def search_docker_tags(filters \\ %{}, limit \\ 100, offset \\ 0) do
-    from(d in DockerTag, order_by: [desc: d.built_at, desc: d.id], limit: ^limit, offset: ^offset)
-    |> prefix_filter(:repo, Map.get(filters, :repo))
-    |> prefix_filter(:tag, Map.get(filters, :tag))
-    |> arch_prefix_filter(Map.get(filters, :arch))
-    |> search_metadata_prefix_filter(:elixir_version, Map.get(filters, :elixir_version))
-    |> search_metadata_prefix_filter(:erlang_version, Map.get(filters, :erlang_version))
-    |> search_metadata_prefix_filter(:os, Map.get(filters, :os))
-    |> search_metadata_prefix_filter(:os_version, Map.get(filters, :os_version))
+    filters
+    |> docker_tag_search_query()
+    |> order_by([d], desc: d.built_at, desc: d.id)
+    |> limit(^limit)
+    |> offset(^offset)
     |> Repo.all()
+  end
+
+  def count_docker_tags(filters \\ %{}) do
+    filters
+    |> docker_tag_search_query()
+    |> Repo.aggregate(:count, :id)
   end
 
   def distinct_kinds(), do: distinct_values(Artifact, :kind)
   def distinct_arches(), do: distinct_values(Artifact, :arch)
   def distinct_oses(), do: distinct_values(Artifact, :os)
   def distinct_repos(), do: distinct_values(DockerTag, :repo)
+
+  def docker_tag_filter_options() do
+    %{
+      repos: DockerTagSearch.repos(),
+      arches: DockerTagSearch.arches(),
+      oses: DockerTagSearch.oses()
+    }
+  end
 
   def distinct_docker_arches() do
     %{rows: rows} =
@@ -262,9 +281,40 @@ defmodule Bob.Artifacts do
     )
   end
 
+  defp artifact_search_query(filters) do
+    query = blank_to_nil(Map.get(filters, :query))
+
+    Artifact
+    |> text_filter(query, [:name, :ref])
+    |> eq_filter(:kind, Map.get(filters, :kind))
+    |> eq_filter(:arch, Map.get(filters, :arch))
+    |> eq_filter(:os, Map.get(filters, :os))
+  end
+
+  defp docker_tag_search_query(filters) do
+    DockerTag
+    |> prefix_filter(:repo, Map.get(filters, :repo))
+    |> prefix_filter(:tag, Map.get(filters, :tag))
+    |> arch_prefix_filter(Map.get(filters, :arch))
+    |> search_metadata_prefix_filter(:elixir_version, Map.get(filters, :elixir_version))
+    |> search_metadata_prefix_filter(:erlang_version, Map.get(filters, :erlang_version))
+    |> search_metadata_prefix_filter(:os, Map.get(filters, :os))
+    |> search_metadata_prefix_filter(:os_version, Map.get(filters, :os_version))
+  end
+
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
+
+  defp dump_utc_datetime(%DateTime{} = datetime) do
+    datetime
+    |> DateTime.to_naive()
+    |> NaiveDateTime.truncate(:microsecond)
+  end
+
+  defp dump_utc_datetime(%NaiveDateTime{} = datetime) do
+    NaiveDateTime.truncate(datetime, :microsecond)
+  end
 
   defp eq_filter(query, _field, nil), do: query
   defp eq_filter(query, _field, ""), do: query
@@ -280,6 +330,10 @@ defmodule Bob.Artifacts do
 
   defp arch_prefix_filter(query, nil), do: query
   defp arch_prefix_filter(query, ""), do: query
+
+  defp arch_prefix_filter(query, value) when value in ["amd64", "arm64"] do
+    from(d in query, where: fragment("? @> ?", d.archs, ^[value]))
+  end
 
   defp arch_prefix_filter(query, value) do
     pattern = prefix_pattern(value)

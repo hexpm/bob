@@ -34,6 +34,8 @@ defmodule BobWeb.DockerTagsLiveTest do
     {:ok, view, html} = live(conn, ~p"/docker")
     assert html =~ "27.0-ubuntu-noble-20250101"
     assert html =~ "1.18.0-erlang-27.0-ubuntu-noble-20250101"
+    assert html =~ "4 tags"
+    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>4<\/b>\s*tags\s*of\s*4 tags/
 
     html =
       render_change(view, "search", %{

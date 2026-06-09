@@ -16,9 +16,17 @@ defmodule BobWeb.JobsLive do
         past_offset: 0,
         refresh_scheduled: false,
         queued_page: @queued_page,
-        past_page: @past_page
+        past_page: @past_page,
+        loading: true,
+        running: [],
+        queue_sizes: [],
+        queue_total: 0,
+        queued: [],
+        past: [],
+        past_total: 0
       )
-      |> load()
+
+    socket = if connected?(socket), do: load(socket), else: socket
 
     {:ok, socket}
   end
@@ -61,7 +69,9 @@ defmodule BobWeb.JobsLive do
       queue_sizes: queue_sizes,
       queue_total: Enum.sum(Enum.map(queue_sizes, fn {_mod, count} -> count end)),
       queued: Bob.Queue.queued_listing(@queued_page, socket.assigns.queued_offset),
-      past: Bob.Queue.recent(@past_page, socket.assigns.past_offset)
+      past: Bob.Queue.recent(@past_page, socket.assigns.past_offset),
+      past_total: Bob.Queue.finished_count(),
+      loading: false
     )
   end
 
@@ -134,7 +144,9 @@ defmodule BobWeb.JobsLive do
         icon="bolt"
         icon_class={if @running == [], do: "icon-muted", else: "icon-blue"}
       >
-        <.table :if={@running != []} rows={@running}>
+        <div :if={@loading} class="empty-mini">Loading jobs...</div>
+
+        <.table :if={!@loading and @running != []} rows={@running}>
           <:col :let={_j} label="State" class="col-state">
             <div class="c-state">
               <.state_dot state="running" />
@@ -154,11 +166,13 @@ defmodule BobWeb.JobsLive do
             <span class="c-elapsed"><%= fmt_duration(elapsed(j.started_at)) %></span>
           </:col>
         </.table>
-        <div :if={@running == []} class="empty-mini">Nothing running.</div>
+        <div :if={!@loading and @running == []} class="empty-mini">Nothing running.</div>
       </.section>
 
       <.section title="Queue" count={@queue_total} icon="queue">
-        <div :if={@queue_sizes != []} class="qsizes">
+        <div :if={@loading} class="empty-mini">Loading queue...</div>
+
+        <div :if={!@loading and @queue_sizes != []} class="qsizes">
           <div class="qsizes__label">Queued by job type</div>
           <div class="qsizes__grid">
             <div :for={{mod, count} <- @queue_sizes} class="qsize">
@@ -173,7 +187,7 @@ defmodule BobWeb.JobsLive do
         <div class="filter-bar">
           <span class="filter-bar__meta">oldest first</span>
         </div>
-        <.table :if={@queued != []} rows={@queued}>
+        <.table :if={!@loading and @queued != []} rows={@queued}>
           <:col :let={j} label="Module">
             <.module_cell cat={job_cat(j.module_key)} module={module_name(j.module_key)} />
           </:col>
@@ -184,18 +198,22 @@ defmodule BobWeb.JobsLive do
             <span class="c-time"><%= fmt(j.inserted_at) %></span>
           </:col>
         </.table>
-        <div :if={@queued == []} class="empty-mini">Queue is empty.</div>
+        <div :if={!@loading and @queued == []} class="empty-mini">Queue is empty.</div>
         <.pager
+          :if={!@loading}
           event="queued_page"
           offset={@queued_offset}
           count={length(@queued)}
           page={@queued_page}
           unit="queued"
+          total={@queue_total}
         />
       </.section>
 
-      <.section title="Past" count={length(@past)} icon="clock">
-        <.table :if={@past != []} rows={@past}>
+      <.section title="Past" count={@past_total} icon="clock">
+        <div :if={@loading} class="empty-mini">Loading finished jobs...</div>
+
+        <.table :if={!@loading and @past != []} rows={@past}>
           <:col :let={j} label="State" class="col-state">
             <.state_badge state={j.state} />
           </:col>
@@ -212,12 +230,15 @@ defmodule BobWeb.JobsLive do
             <span class="c-time"><%= fmt(j.finished_at) %></span>
           </:col>
         </.table>
-        <div :if={@past == []} class="empty-mini">No finished jobs.</div>
+        <div :if={!@loading and @past == []} class="empty-mini">No finished jobs.</div>
         <.pager
+          :if={!@loading}
           event="past_page"
           offset={@past_offset}
           count={length(@past)}
           page={@past_page}
+          unit="jobs"
+          total={@past_total}
         />
       </.section>
     </div>

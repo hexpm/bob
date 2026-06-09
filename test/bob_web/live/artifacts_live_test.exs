@@ -29,12 +29,16 @@ defmodule BobWeb.ArtifactsLiveTest do
     {:ok, view, html} = live(conn, ~p"/artifacts")
     assert html =~ "OTP-27.0"
     assert html =~ "OTP-26.2"
+    assert html =~ "2 artifacts"
+    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>2<\/b>\s*artifacts\s*of\s*2 artifacts/
 
     html =
       render_change(view, "search", %{"query" => "27.0", "kind" => "", "arch" => "", "os" => ""})
 
     assert html =~ "OTP-27.0"
     refute html =~ "OTP-26.2"
+    assert html =~ "1 artifact"
+    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>1<\/b>\s*artifact\s*of\s*1 artifact/
   end
 
   test "filters by arch dropdown", %{conn: conn} do

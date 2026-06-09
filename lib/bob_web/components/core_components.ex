@@ -92,31 +92,68 @@ defmodule BobWeb.CoreComponents do
   attr(:count, :integer, required: true)
   attr(:page, :integer, required: true)
   attr(:unit, :string, default: nil)
+  attr(:total, :integer, default: nil)
 
   def pager(assigns) do
     assigns =
       assigns
       |> assign(:from, if(assigns.count == 0, do: 0, else: assigns.offset + 1))
       |> assign(:to, assigns.offset + assigns.count)
+      |> assign(:range_unit, format_unit(assigns.unit, assigns.count))
+      |> assign(:next_disabled, next_disabled?(assigns))
 
     ~H"""
     <div class="pager">
       <div class="pager__info">
         <span :if={@count == 0}>Nothing to show</span>
         <span :if={@count > 0}>
-          Showing <b><%= @from %></b>-<b><%= @to %></b><%= if @unit, do: " " <> @unit %>
+          Showing <b><%= @from %></b>-<b><%= @to %></b><%= if @range_unit,
+            do: " " <> @range_unit %>
+          <%= total_text(@total, @unit) %>
         </span>
       </div>
       <div class="pager__btns">
         <button class="pg-btn" phx-click={@event} phx-value-dir="prev" disabled={@offset == 0}>
           <.icon name="chevL" size={14} /> Prev
         </button>
-        <button class="pg-btn" phx-click={@event} phx-value-dir="next" disabled={@count < @page}>
+        <button class="pg-btn" phx-click={@event} phx-value-dir="next" disabled={@next_disabled}>
           Next <.icon name="chevR" size={14} />
         </button>
       </div>
     </div>
     """
+  end
+
+  def format_count(count) do
+    count
+    |> Integer.to_string()
+    |> String.replace(~r/\B(?=(\d{3})+(?!\d))/, ",")
+  end
+
+  def format_unit(nil, _count), do: nil
+  def format_unit(unit, 1), do: singular_unit(unit)
+  def format_unit(unit, _count), do: unit
+
+  defp next_disabled?(%{count: count, page: page}) when count < page, do: true
+
+  defp next_disabled?(%{total: total, offset: offset, count: count}) when not is_nil(total),
+    do: offset + count >= total
+
+  defp next_disabled?(_assigns), do: false
+
+  defp total_text(nil, _unit), do: nil
+
+  defp total_text(total, unit) do
+    unit = if unit, do: " " <> format_unit(unit, total), else: ""
+    " of #{format_count(total)}#{unit}"
+  end
+
+  defp singular_unit(unit) do
+    if String.ends_with?(unit, "s") do
+      String.trim_trailing(unit, "s")
+    else
+      unit
+    end
   end
 
   attr(:state, :any, required: true)

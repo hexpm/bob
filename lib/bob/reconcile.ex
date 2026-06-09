@@ -71,7 +71,7 @@ defmodule Bob.Reconcile do
   defp sync_per_arch_repos(stream) do
     Enum.each(@per_arch_repos, fn {repo, arch} ->
       swap_docker_tags(stream, repo, fn page ->
-        Enum.map(page, fn {tag, _archs} -> {tag, [arch]} end)
+        Enum.map(page, fn {tag, _archs, built_at} -> {tag, [arch], built_at} end)
       end)
     end)
   end
@@ -79,7 +79,7 @@ defmodule Bob.Reconcile do
   defp sync_manifest_repos(stream) do
     Enum.each(@manifest_repos, fn repo ->
       swap_docker_tags(stream, repo, fn page ->
-        Enum.map(page, fn {tag, archs} -> {tag, known_archs(archs)} end)
+        Enum.map(page, fn {tag, archs, built_at} -> {tag, known_archs(archs), built_at} end)
       end)
     end)
   end

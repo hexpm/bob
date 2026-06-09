@@ -14,11 +14,15 @@ defmodule BobWeb.ArtifactsLive do
         os: "",
         offset: 0,
         page: @page,
-        kinds: Bob.Artifacts.distinct_kinds(),
-        arches: Bob.Artifacts.distinct_arches(),
-        oses: Bob.Artifacts.distinct_oses()
+        kinds: [],
+        arches: [],
+        oses: [],
+        total: nil,
+        loading: true,
+        results: []
       )
-      |> load()
+
+    socket = if connected?(socket), do: socket |> load_options() |> load(), else: socket
 
     {:ok, socket}
   end
@@ -47,17 +51,27 @@ defmodule BobWeb.ArtifactsLive do
   defp step("next"), do: @page
   defp step("prev"), do: -@page
 
+  defp load_options(socket) do
+    assign(socket,
+      kinds: Bob.Artifacts.distinct_kinds(),
+      arches: Bob.Artifacts.distinct_arches(),
+      oses: Bob.Artifacts.distinct_oses()
+    )
+  end
+
   defp load(socket) do
     %{query: q, kind: kind, arch: arch, os: os, offset: offset} = socket.assigns
 
-    results =
-      Bob.Artifacts.search_artifacts(
-        %{query: q, kind: kind, arch: arch, os: os},
-        @page,
-        offset
-      )
+    filters = %{query: q, kind: kind, arch: arch, os: os}
 
-    assign(socket, results: results)
+    results =
+      Bob.Artifacts.search_artifacts(filters, @page, offset)
+
+    assign(socket,
+      results: results,
+      total: Bob.Artifacts.count_artifacts(filters),
+      loading: false
+    )
   end
 
   defp fmt(nil), do: "—"
@@ -87,10 +101,12 @@ defmodule BobWeb.ArtifactsLive do
           <.filter_select name="kind" label="kind" value={@kind} options={@kinds} />
           <.filter_select name="arch" label="arch" value={@arch} options={@arches} />
           <.filter_select name="os" label="os" value={@os} options={@oses} />
-          <span class="filter-bar__meta"><%= length(@results) %> artifacts</span>
+          <span class="filter-bar__meta"><%= artifact_count_label(@total) %></span>
         </form>
 
-        <.table :if={@results != []} rows={@results} class="jt--art">
+        <div :if={@loading} class="empty-mini">Loading artifacts...</div>
+
+        <.table :if={!@loading and @results != []} rows={@results} class="jt--art">
           <:col :let={a} label="kind">
             <span class="kind-badge"><%= a.kind %></span>
           </:col>
@@ -116,17 +132,25 @@ defmodule BobWeb.ArtifactsLive do
             <span class="c-time"><%= fmt(a.built_at) %></span>
           </:col>
         </.table>
-        <div :if={@results == []} class="empty-mini">No matching artifacts.</div>
+        <div :if={!@loading and @results == []} class="empty-mini">No matching artifacts.</div>
 
         <.pager
+          :if={!@loading}
           event="page"
           offset={@offset}
           count={length(@results)}
           page={@page}
           unit="artifacts"
+          total={@total}
         />
       </section>
     </div>
     """
+  end
+
+  defp artifact_count_label(nil), do: "Loading artifacts"
+
+  defp artifact_count_label(count) do
+    "#{format_count(count)} #{format_unit("artifacts", count)}"
   end
 end

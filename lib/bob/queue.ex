@@ -174,6 +174,10 @@ defmodule Bob.Queue do
     )
   end
 
+  def finished_count() do
+    Repo.aggregate(from(j in Job, where: j.state in ["done", "failed"]), :count, :id)
+  end
+
   def recent(limit \\ 50, offset \\ 0) do
     Repo.all(
       from(j in Job,
