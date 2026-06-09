@@ -3,7 +3,10 @@ defmodule Bob.ReconcileTest do
 
   alias Bob.{Artifacts, Reconcile}
 
-  # Streamer stub: invokes on_page once with the canned {tag, archs} list for the
+  @docker_built_at ~U[2025-01-02 03:04:05.000000Z]
+  @newer_docker_built_at ~U[2025-02-03 04:05:06.000000Z]
+
+  # Streamer stub: invokes on_page once with the canned {tag, archs, built_at} list for the
   # repo (mimicking a single Docker Hub page), or nothing for an empty repo.
   defp streamer(map) do
     fn repo, on_page ->
@@ -20,8 +23,16 @@ defmodule Bob.ReconcileTest do
     test "stores per-arch erlang/elixir tags with the arch forced from the repo name" do
       stream =
         streamer(%{
-          "hexpm/erlang-amd64" => [{"27.0-ubuntu-noble-20250101", ["amd64", "arm64"]}],
-          "hexpm/elixir-arm64" => [{"1.18.0-erlang-27.0-ubuntu-noble-20250101", ["amd64"]}]
+          "hexpm/erlang-amd64" => [
+            docker_tag("27.0-ubuntu-noble-20250101", ["amd64", "arm64"], @docker_built_at)
+          ],
+          "hexpm/elixir-arm64" => [
+            docker_tag(
+              "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+              ["amd64"],
+              @newer_docker_built_at
+            )
+          ]
         })
 
       Reconcile.reconcile(stream)
@@ -31,12 +42,26 @@ defmodule Bob.ReconcileTest do
 
       assert Artifacts.docker_tags("hexpm/elixir-arm64") ==
                [{"1.18.0-erlang-27.0-ubuntu-noble-20250101", ["arm64"]}]
+
+      assert %Bob.Artifacts.DockerTag{built_at: @docker_built_at} =
+               Repo.get_by!(Bob.Artifacts.DockerTag,
+                 repo: "hexpm/erlang-amd64",
+                 tag: "27.0-ubuntu-noble-20250101"
+               )
+
+      assert %Bob.Artifacts.DockerTag{built_at: @newer_docker_built_at} =
+               Repo.get_by!(Bob.Artifacts.DockerTag,
+                 repo: "hexpm/elixir-arm64",
+                 tag: "1.18.0-erlang-27.0-ubuntu-noble-20250101"
+               )
     end
 
     test "stores manifest tags with the upstream archs intersected with known archs, sorted" do
       stream =
         streamer(%{
-          "hexpm/erlang" => [{"27.0-ubuntu-noble-20250101", ["arm64", "amd64", "ppc64le"]}]
+          "hexpm/erlang" => [
+            docker_tag("27.0-ubuntu-noble-20250101", ["arm64", "amd64", "ppc64le"])
+          ]
         })
 
       Reconcile.reconcile(stream)
@@ -49,8 +74,8 @@ defmodule Bob.ReconcileTest do
       stream =
         streamer(%{
           "library/alpine" => [
-            {"3.23.5", ["amd64", "arm64", "386"]},
-            {"3.22.1", ["amd64"]}
+            docker_tag("3.23.5", ["amd64", "arm64", "386"]),
+            docker_tag("3.22.1", ["amd64"])
           ]
         })
 
@@ -62,7 +87,7 @@ defmodule Bob.ReconcileTest do
     test "keeps existing base image tags when no upstream tag is fully multi-arch" do
       Artifacts.replace_base_image_tags("library/alpine", ["3.23.5"])
 
-      stream = streamer(%{"library/alpine" => [{"3.24.0", ["amd64"]}]})
+      stream = streamer(%{"library/alpine" => [docker_tag("3.24.0", ["amd64"])]})
 
       Reconcile.reconcile(stream)
 
@@ -72,7 +97,7 @@ defmodule Bob.ReconcileTest do
     test "prunes docker tags that vanished upstream" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "stale-tag", ["amd64"])
 
-      stream = streamer(%{"hexpm/erlang-amd64" => [{"fresh-tag", ["amd64"]}]})
+      stream = streamer(%{"hexpm/erlang-amd64" => [docker_tag("fresh-tag", ["amd64"])]})
 
       Reconcile.reconcile(stream)
 
@@ -92,7 +117,7 @@ defmodule Bob.ReconcileTest do
 
       stream = fn
         "hexpm/erlang-amd64", _on_page -> :error
-        "hexpm/elixir-arm64", on_page -> on_page.([{"fresh-tag", ["arm64"]}])
+        "hexpm/elixir-arm64", on_page -> on_page.([docker_tag("fresh-tag", ["arm64"])])
         _repo, _on_page -> :ok
       end
 
@@ -107,7 +132,7 @@ defmodule Bob.ReconcileTest do
 
       stream = fn
         "hexpm/erlang-amd64", _on_page -> raise "DockerHub paging blew up"
-        "hexpm/elixir-arm64", on_page -> on_page.([{"fresh-tag", ["arm64"]}])
+        "hexpm/elixir-arm64", on_page -> on_page.([docker_tag("fresh-tag", ["arm64"])])
         _repo, _on_page -> :ok
       end
 
@@ -120,8 +145,8 @@ defmodule Bob.ReconcileTest do
     test "leaves no staging rows behind after a run" do
       stream =
         streamer(%{
-          "hexpm/erlang-amd64" => [{"27.0", ["amd64"]}],
-          "library/alpine" => [{"3.23.5", ["amd64", "arm64"]}]
+          "hexpm/erlang-amd64" => [docker_tag("27.0", ["amd64"])],
+          "library/alpine" => [docker_tag("3.23.5", ["amd64", "arm64"])]
         })
 
       Reconcile.reconcile(stream)
@@ -134,7 +159,7 @@ defmodule Bob.ReconcileTest do
     test "reconciles the per-arch repos only" do
       Artifacts.add_docker_tag("hexpm/erlang", "untouched", ["amd64"])
 
-      stream = streamer(%{"hexpm/erlang-amd64" => [{"27.0", ["amd64", "arm64"]}]})
+      stream = streamer(%{"hexpm/erlang-amd64" => [docker_tag("27.0", ["amd64", "arm64"])]})
 
       Reconcile.reconcile_per_arch_repos(stream)
 
@@ -147,7 +172,7 @@ defmodule Bob.ReconcileTest do
     test "reconciles the manifest repos only" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "untouched", ["amd64"])
 
-      stream = streamer(%{"hexpm/erlang" => [{"27.0", ["arm64", "amd64", "ppc64le"]}]})
+      stream = streamer(%{"hexpm/erlang" => [docker_tag("27.0", ["arm64", "amd64", "ppc64le"])]})
 
       Reconcile.reconcile_manifest_repos(stream)
 
@@ -160,7 +185,7 @@ defmodule Bob.ReconcileTest do
     test "reconciles the base image repos only" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "untouched", ["amd64"])
 
-      stream = streamer(%{"library/alpine" => [{"3.23.5", ["amd64", "arm64"]}]})
+      stream = streamer(%{"library/alpine" => [docker_tag("3.23.5", ["amd64", "arm64"])]})
 
       Reconcile.reconcile_base_images(stream)
 
@@ -223,4 +248,6 @@ defmodule Bob.ReconcileTest do
       assert Artifacts.built_otp_refs("amd64", "ubuntu-24.04") == %{"OTP-27.0" => "ref27"}
     end
   end
+
+  defp docker_tag(tag, archs, built_at \\ @docker_built_at), do: {tag, archs, built_at}
 end

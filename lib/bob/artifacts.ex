@@ -6,7 +6,7 @@ defmodule Bob.Artifacts do
 
   @builds_txt_lock 4_771_002
 
-  # Each staging row binds five parameters; Postgres caps a statement at 65535,
+  # Each staging row binds six parameters; Postgres caps a statement at 65535,
   # so a page is inserted in chunks well under that ceiling.
   @staging_chunk 5000
 
@@ -24,11 +24,14 @@ defmodule Bob.Artifacts do
     :ok
   end
 
-  def add_docker_tag(repo, tag, archs) do
+  def add_docker_tag(repo, tag, archs, built_at \\ DateTime.utc_now()) do
+    now = NaiveDateTime.utc_now()
+    built_at = dump_utc_datetime(built_at)
+
     Repo.query!(
       """
       INSERT INTO docker_tags (repo, tag, archs, built_at, inserted_at, updated_at)
-      VALUES ($1, $2, $3, $4, $4, $4)
+      VALUES ($1, $2, $3, $4, $5, $5)
       ON CONFLICT (repo, tag)
       DO UPDATE SET
         archs = (
@@ -38,14 +41,15 @@ defmodule Bob.Artifacts do
         built_at = EXCLUDED.built_at,
         updated_at = EXCLUDED.updated_at
       """,
-      [repo, tag, archs, NaiveDateTime.utc_now()]
+      [repo, tag, archs, built_at, now]
     )
 
     :ok
   end
 
   @doc """
-  Inserts a page of `{tag, archs}` pairs into the staging table under `token`.
+  Inserts a page of `{tag, archs, built_at}` tuples into the staging table under
+  `token`.
 
   Reconcile streams Docker Hub a page at a time into staging so the full tag
   list (up to ~1M for hexpm/elixir) is never held in memory and no connection is
@@ -59,8 +63,8 @@ defmodule Bob.Artifacts do
     now = NaiveDateTime.utc_now()
 
     tag_archs
-    |> Enum.map(fn {tag, archs} ->
-      %{token: token, repo: repo, tag: tag, archs: archs, inserted_at: now}
+    |> Enum.map(fn {tag, archs, built_at} ->
+      %{token: token, repo: repo, tag: tag, archs: archs, built_at: built_at, inserted_at: now}
     end)
     |> Enum.chunk_every(@staging_chunk)
     |> Enum.each(&Repo.insert_all(DockerTagStaging, &1))
@@ -85,13 +89,15 @@ defmodule Bob.Artifacts do
         Repo.query!(
           """
           INSERT INTO docker_tags (repo, tag, archs, built_at, inserted_at, updated_at)
-          SELECT DISTINCT ON (repo, tag) repo, tag, archs, $3, $3, $3
+          SELECT DISTINCT ON (repo, tag) repo, tag, archs, built_at, $3, $3
           FROM docker_tags_staging
           WHERE token = $1 AND repo = $2
-          ORDER BY repo, tag
+          ORDER BY repo, tag, built_at DESC
           ON CONFLICT (repo, tag)
           DO UPDATE SET archs = EXCLUDED.archs, built_at = EXCLUDED.built_at, updated_at = EXCLUDED.updated_at
           WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
+             -- TODO: Remove this built_at comparison after production Docker tag rows are corrected.
+             OR docker_tags.built_at IS DISTINCT FROM EXCLUDED.built_at
           """,
           [token, repo, now],
           timeout: @long_query_timeout
@@ -319,5 +325,15 @@ defmodule Bob.Artifacts do
 
   defp format_date(built_at) do
     Calendar.strftime(built_at, "%Y-%m-%dT%H:%M:%SZ")
+  end
+
+  defp dump_utc_datetime(%DateTime{} = datetime) do
+    datetime
+    |> DateTime.to_naive()
+    |> NaiveDateTime.truncate(:microsecond)
+  end
+
+  defp dump_utc_datetime(%NaiveDateTime{} = datetime) do
+    NaiveDateTime.truncate(datetime, :microsecond)
   end
 end

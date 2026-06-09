@@ -7,6 +7,7 @@ defmodule Bob.Artifacts.DockerTagStaging do
     field(:repo, :string)
     field(:tag, :string)
     field(:archs, {:array, :string})
+    field(:built_at, :utc_datetime_usec)
     field(:inserted_at, :naive_datetime_usec)
   end
 end
