@@ -4,6 +4,7 @@ defmodule BobWeb.JobsLive do
   @queued_page 100
   @past_page 50
   @debounce_ms 250
+  @tick_ms 1000
 
   @impl true
   def mount(_params, _session, socket) do
@@ -18,6 +19,8 @@ defmodule BobWeb.JobsLive do
         queued_page: @queued_page,
         past_page: @past_page,
         loading: true,
+        now: DateTime.utc_now(),
+        tick_scheduled: false,
         running: [],
         queue_sizes: [],
         queue_total: 0,
@@ -27,6 +30,7 @@ defmodule BobWeb.JobsLive do
       )
 
     socket = if connected?(socket), do: load(socket), else: socket
+    socket = if connected?(socket), do: schedule_tick(socket), else: socket
 
     {:ok, socket}
   end
@@ -42,7 +46,16 @@ defmodule BobWeb.JobsLive do
   end
 
   def handle_info(:refresh, socket) do
-    {:noreply, socket |> assign(refresh_scheduled: false) |> load()}
+    {:noreply, socket |> assign(refresh_scheduled: false) |> load() |> schedule_tick()}
+  end
+
+  def handle_info(:tick, socket) do
+    socket =
+      socket
+      |> assign(now: DateTime.utc_now(), tick_scheduled: false)
+      |> schedule_tick()
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -66,6 +79,7 @@ defmodule BobWeb.JobsLive do
 
     assign(socket,
       running: Bob.Queue.running(),
+      now: DateTime.utc_now(),
       queue_sizes: queue_sizes,
       queue_total: Enum.sum(Enum.map(queue_sizes, fn {_mod, count} -> count end)),
       queued: Bob.Queue.queued_listing(@queued_page, socket.assigns.queued_offset),
@@ -73,6 +87,14 @@ defmodule BobWeb.JobsLive do
       past_total: Bob.Queue.finished_count(),
       loading: false
     )
+  end
+
+  defp schedule_tick(%{assigns: %{running: [], tick_scheduled: false}} = socket), do: socket
+  defp schedule_tick(%{assigns: %{tick_scheduled: true}} = socket), do: socket
+
+  defp schedule_tick(socket) do
+    Process.send_after(self(), :tick, @tick_ms)
+    assign(socket, tick_scheduled: true)
   end
 
   defp fmt(nil), do: "—"
@@ -94,7 +116,7 @@ defmodule BobWeb.JobsLive do
     "#{hours}h #{minutes}m"
   end
 
-  defp elapsed(datetime), do: duration(datetime, DateTime.utc_now())
+  defp elapsed(datetime, now), do: duration(datetime, now)
 
   defp duration(%{started_at: started_at, finished_at: finished_at}),
     do: duration(started_at, finished_at)
@@ -163,7 +185,7 @@ defmodule BobWeb.JobsLive do
             <span class="c-time"><%= fmt(j.started_at) %></span>
           </:col>
           <:col :let={j} label="Elapsed" class="col-time">
-            <span class="c-elapsed"><%= fmt_duration(elapsed(j.started_at)) %></span>
+            <span class="c-elapsed"><%= fmt_duration(elapsed(j.started_at, @now)) %></span>
           </:col>
         </.table>
         <div :if={!@loading and @running == []} class="empty-mini">Nothing running.</div>

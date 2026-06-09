@@ -1,6 +1,7 @@
 defmodule BobWeb.JobsLiveTest do
   use BobWeb.ConnCase
 
+  import Ecto.Query
   import Phoenix.LiveViewTest
 
   @debounce_pause 400
@@ -44,5 +45,22 @@ defmodule BobWeb.JobsLiveTest do
     # The add/start broadcasts :jobs_changed; the view reloads after the debounce window.
     Process.sleep(@debounce_pause)
     assert render(view) =~ ":refreshed"
+  end
+
+  test "ticks elapsed time for running jobs", %{conn: conn} do
+    Bob.Queue.add(Bob.Job.OTPChecker, [:elapsed_tick])
+    {:ok, {id, _args}} = Bob.Queue.start(Bob.Job.OTPChecker)
+
+    started_at = DateTime.add(DateTime.utc_now(), -10, :second)
+
+    Bob.Repo.update_all(
+      from(j in Bob.Queue.Job, where: j.id == ^id),
+      set: [started_at: started_at, updated_at: started_at]
+    )
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    Process.sleep(1600)
+    assert render(view) =~ ~r/1[1-3]s/
   end
 end
