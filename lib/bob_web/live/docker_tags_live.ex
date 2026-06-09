@@ -95,6 +95,8 @@ defmodule BobWeb.DockerTagsLive do
       else
         filters
         |> Bob.Artifacts.count_docker_tags()
+        # The page and count are separate queries, so keep the pager coherent if
+        # tags change between them.
         |> max(offset + length(results))
       end
 

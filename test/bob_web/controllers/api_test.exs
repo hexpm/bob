@@ -53,6 +53,17 @@ defmodule BobWeb.ApiTest do
     assert Repo.all(Artifact) == []
   end
 
+  test "POST /api/artifacts/add rejects an invalid secret before parsing the body", %{conn: conn} do
+    conn =
+      conn
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("authorization", "public")
+      |> post(~p"/api/artifacts/add", "{")
+
+    assert conn.status == 401
+    assert Repo.all(Artifact) == []
+  end
+
   test "POST /api/docker/add upserts a docker tag and returns 204", %{conn: conn} do
     body =
       Bob.Plug.ErlangFormat.encode_to_iodata!(%{

@@ -30,10 +30,12 @@ if config_env() == :prod do
       bob_hostname: System.fetch_env!("BOB_HOSTNAME")
     }
 
+  bob_host = System.fetch_env!("BOB_HOST")
+
   config :bob, BobWeb.Endpoint,
     server: true,
-    url: [host: System.fetch_env!("BOB_HOST"), port: 443, scheme: "https"],
+    url: [host: bob_host, port: 443, scheme: "https"],
     http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("BOB_PORT") || "4003")],
     secret_key_base: System.fetch_env!("SECRET_KEY_BASE"),
-    check_origin: [System.fetch_env!("BOB_HOST")]
+    check_origin: ["https://#{bob_host}"]
 end

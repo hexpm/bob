@@ -6,10 +6,10 @@ defmodule Bob.Repo.Migrations.AddDockerTagSearchMetadata do
   @version_regex "^[0-9]+(\\.[0-9]+)*(-[0-9A-Za-z][0-9A-Za-z.-]*)?$"
 
   def up do
-    execute("ALTER TABLE docker_tags ADD COLUMN search jsonb NOT NULL DEFAULT '{}'::jsonb")
+    execute("ALTER TABLE docker_tags ADD COLUMN IF NOT EXISTS search jsonb NOT NULL DEFAULT '{}'::jsonb")
 
     execute(
-      "ALTER TABLE docker_tags_staging ADD COLUMN search jsonb NOT NULL DEFAULT '{}'::jsonb"
+      "ALTER TABLE docker_tags_staging ADD COLUMN IF NOT EXISTS search jsonb NOT NULL DEFAULT '{}'::jsonb"
     )
 
     execute("""
@@ -49,42 +49,42 @@ defmodule Bob.Repo.Migrations.AddDockerTagSearchMetadata do
     """)
 
     execute(
-      "CREATE INDEX CONCURRENTLY docker_tags_repo_prefix_index ON docker_tags (repo text_pattern_ops)"
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS docker_tags_repo_prefix_index ON docker_tags (repo text_pattern_ops)"
     )
 
     execute(
-      "CREATE INDEX CONCURRENTLY docker_tags_tag_prefix_index ON docker_tags (tag text_pattern_ops)"
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS docker_tags_tag_prefix_index ON docker_tags (tag text_pattern_ops)"
     )
 
     execute("""
-    CREATE INDEX CONCURRENTLY docker_tags_elixir_version_prefix_index
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS docker_tags_elixir_version_prefix_index
     ON docker_tags ((search->>'elixir_version') text_pattern_ops)
     """)
 
     execute("""
-    CREATE INDEX CONCURRENTLY docker_tags_erlang_version_prefix_index
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS docker_tags_erlang_version_prefix_index
     ON docker_tags ((search->>'erlang_version') text_pattern_ops)
     """)
 
     execute("""
-    CREATE INDEX CONCURRENTLY docker_tags_os_prefix_index
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS docker_tags_os_prefix_index
     ON docker_tags ((search->>'os') text_pattern_ops)
     """)
 
     execute("""
-    CREATE INDEX CONCURRENTLY docker_tags_os_version_prefix_index
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS docker_tags_os_version_prefix_index
     ON docker_tags ((search->>'os_version') text_pattern_ops)
     """)
   end
 
   def down do
-    execute("DROP INDEX CONCURRENTLY docker_tags_os_version_prefix_index")
-    execute("DROP INDEX CONCURRENTLY docker_tags_os_prefix_index")
-    execute("DROP INDEX CONCURRENTLY docker_tags_erlang_version_prefix_index")
-    execute("DROP INDEX CONCURRENTLY docker_tags_elixir_version_prefix_index")
-    execute("DROP INDEX CONCURRENTLY docker_tags_tag_prefix_index")
-    execute("DROP INDEX CONCURRENTLY docker_tags_repo_prefix_index")
-    execute("ALTER TABLE docker_tags_staging DROP COLUMN search")
-    execute("ALTER TABLE docker_tags DROP COLUMN search")
+    execute("DROP INDEX CONCURRENTLY IF EXISTS docker_tags_os_version_prefix_index")
+    execute("DROP INDEX CONCURRENTLY IF EXISTS docker_tags_os_prefix_index")
+    execute("DROP INDEX CONCURRENTLY IF EXISTS docker_tags_erlang_version_prefix_index")
+    execute("DROP INDEX CONCURRENTLY IF EXISTS docker_tags_elixir_version_prefix_index")
+    execute("DROP INDEX CONCURRENTLY IF EXISTS docker_tags_tag_prefix_index")
+    execute("DROP INDEX CONCURRENTLY IF EXISTS docker_tags_repo_prefix_index")
+    execute("ALTER TABLE docker_tags_staging DROP COLUMN IF EXISTS search")
+    execute("ALTER TABLE docker_tags DROP COLUMN IF EXISTS search")
   end
 end

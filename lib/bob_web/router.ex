@@ -10,13 +10,7 @@ defmodule BobWeb.Router do
     plug(:put_secure_browser_headers)
   end
 
-  pipeline :api do
-    plug(BobWeb.Plugs.Secret)
-  end
-
   scope "/api", BobWeb do
-    pipe_through(:api)
-
     post("/queue/start", QueueController, :start)
     post("/queue/success", QueueController, :success)
     post("/queue/failure", QueueController, :failure)
