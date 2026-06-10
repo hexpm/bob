@@ -22,7 +22,10 @@ defmodule Bob.Queue.Term do
 
   def encode(term), do: :erlang.term_to_binary(term, [:deterministic])
 
-  def decode(binary), do: Plug.Crypto.non_executable_binary_to_term(binary, [:safe])
+  # No :safe — stored terms may contain atoms the reading VM has not created
+  # yet (e.g. args enqueued before a restart), and a row that cannot be decoded
+  # poisons every queue read. Executable terms are still rejected.
+  def decode(binary), do: Plug.Crypto.non_executable_binary_to_term(binary)
 
   def digest(term), do: :crypto.hash(:sha256, encode(term))
 end

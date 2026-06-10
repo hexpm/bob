@@ -17,6 +17,19 @@ defmodule Bob.Queue.TermTest do
     end
   end
 
+  test "decodes atoms not yet known to this VM" do
+    name = "term_test_unknown_atom_#{System.unique_integer([:positive])}"
+    binary = <<131, 119, byte_size(name), name::binary>>
+
+    assert binary |> Term.decode() |> Atom.to_string() == name
+  end
+
+  test "rejects executable terms" do
+    binary = :erlang.term_to_binary(fn -> :ok end)
+
+    assert_raise ArgumentError, fn -> Term.decode(binary) end
+  end
+
   test "encode is deterministic regardless of map insertion order" do
     a = Map.new([{:b, 1}, {:a, 2}])
     b = Map.new([{:a, 2}, {:b, 1}])
