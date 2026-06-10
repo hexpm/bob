@@ -133,6 +133,37 @@ defmodule Bob.Queue do
     :ok
   end
 
+  @doc """
+  Puts a running job back in the queue, e.g. when its node shuts down mid-run.
+
+  Unlike `failure/1` this records no backoff — the job was interrupted, not
+  broken. The row keeps its `inserted_at`, so it returns to the front of the
+  FIFO and is picked up as soon as a runner polls.
+  """
+  def requeue(id) do
+    now = DateTime.utc_now()
+
+    {_count, rows} =
+      Repo.update_all(
+        from(j in Job,
+          where: j.id == ^id and j.state == "running",
+          select: {j.module_key, j.args}
+        ),
+        set: [state: "queued", started_at: nil, updated_at: now]
+      )
+
+    case rows do
+      [{module_key, args}] ->
+        Logger.info("REQUEUED #{inspect(module_key)} #{inspect(args)}")
+        broadcast()
+
+      [] ->
+        :ok
+    end
+
+    :ok
+  end
+
   def queue_sizes() do
     Repo.all(
       from(j in Job,

@@ -1,8 +1,9 @@
 defmodule Bob.Queue.Maintenance do
   @moduledoc """
   Periodic queue maintenance, guarded by a Postgres advisory lock so exactly
-  one master instance does the work: times out stale running jobs, prunes
-  expired backoff rows, and prunes old job history.
+  one master instance does the work: requeues stale running jobs (failing them
+  once their requeues are exhausted), prunes expired backoff rows, and prunes
+  old job history.
   """
 
   use GenServer
@@ -14,6 +15,10 @@ defmodule Bob.Queue.Maintenance do
 
   @interval_seconds 60
   @job_timeout_seconds 3 * 60 * 60
+  # A job stuck in running this long means its node died hard (OOM, node loss),
+  # so the work itself is not suspect — requeue it. The cap stops a job that
+  # reliably kills its node or genuinely exceeds the timeout from looping.
+  @max_timeout_requeues 2
   @backoff_expiry_seconds 7 * 24 * 60 * 60
   @history_retention_seconds 90 * 24 * 60 * 60
   @advisory_lock_key 4_771_001
@@ -60,16 +65,26 @@ defmodule Bob.Queue.Maintenance do
     now = DateTime.utc_now()
     cutoff = DateTime.add(now, -@job_timeout_seconds, :second)
 
-    {count, _} =
+    stale =
+      from(j in Job,
+        where: j.state == "running" and not is_nil(j.started_at) and j.started_at < ^cutoff
+      )
+
+    {requeued, _} =
       Repo.update_all(
-        from(j in Job,
-          where: j.state == "running" and not is_nil(j.started_at) and j.started_at < ^cutoff
-        ),
+        from(j in stale, where: j.requeues < @max_timeout_requeues),
+        set: [state: "queued", started_at: nil, updated_at: now],
+        inc: [requeues: 1]
+      )
+
+    {failed, _} =
+      Repo.update_all(
+        from(j in stale, where: j.requeues >= @max_timeout_requeues),
         set: [state: "failed", finished_at: now, updated_at: now]
       )
 
-    if count > 0 do
-      Logger.info("SWEEP timed out #{count} running job(s)")
+    if requeued > 0 or failed > 0 do
+      Logger.info("SWEEP requeued #{requeued} and timed out #{failed} running job(s)")
     end
   end
 

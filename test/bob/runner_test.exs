@@ -10,6 +10,13 @@ defmodule Bob.RunnerTest do
     def concurrency(), do: :shared
   end
 
+  defmodule BlockingJob do
+    def run(), do: Process.sleep(:infinity)
+    def priority(), do: 1
+    def weight(), do: 1
+    def concurrency(), do: :shared
+  end
+
   setup do
     on_exit(fn ->
       case Process.whereis(Bob.Runner) do
@@ -42,6 +49,57 @@ defmodule Bob.RunnerTest do
       :sys.get_state(runner)
 
       assert Bob.Queue.start(QuietJob) == :error
+    end
+
+    test "shutdown requeues in-flight jobs" do
+      # The runner exits with :shutdown, which would propagate over the
+      # start_link link and kill the test.
+      Process.flag(:trap_exit, true)
+
+      previous = Application.get_env(:bob, :local_jobs)
+      Application.put_env(:bob, :local_jobs, [BlockingJob])
+      on_exit(fn -> Application.put_env(:bob, :local_jobs, previous) end)
+
+      Bob.Queue.add(BlockingJob, [])
+
+      {:ok, runner} = Bob.Runner.start_link([])
+      send(runner, :local_timeout)
+      :sys.get_state(runner)
+
+      # The job is claimed and its task is blocked inside run/0.
+      assert Bob.Queue.start(BlockingJob) == :error
+      [%{state: "running"} = job] = Bob.Queue.running()
+
+      :ok = GenServer.stop(runner, :shutdown)
+
+      assert Bob.Repo.get!(Bob.Queue.Job, job.id).state == "queued"
+    end
+
+    test "shutdown kills the in-flight task before requeueing" do
+      task = Task.Supervisor.async_nolink(Bob.Tasks, fn -> Process.sleep(:infinity) end)
+
+      Bob.Queue.add(QuietJob, [:terminate_test])
+      {:ok, {id, [:terminate_test]}} = Bob.Queue.start(QuietJob)
+
+      state = %{tasks: %{task.ref => {QuietJob, [:terminate_test], {:local, id}, task.pid}}}
+      Bob.Runner.terminate(:shutdown, state)
+
+      refute Process.alive?(task.pid)
+      assert Bob.Repo.get!(Bob.Queue.Job, id).state == "queued"
+    end
+
+    test "an abnormal task exit marks the job failed" do
+      Bob.Queue.add(QuietJob, [:down_test])
+      {:ok, {id, [:down_test]}} = Bob.Queue.start(QuietJob)
+
+      ref = make_ref()
+      state = %{tasks: %{ref => {QuietJob, [:down_test], {:local, id}, self()}}}
+
+      {:noreply, new_state} =
+        Bob.Runner.handle_info({:DOWN, ref, :process, self(), :killed}, state)
+
+      assert new_state.tasks == %{}
+      assert Bob.Repo.get!(Bob.Queue.Job, id).state == "failed"
     end
   end
 

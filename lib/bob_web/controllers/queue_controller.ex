@@ -22,6 +22,11 @@ defmodule BobWeb.QueueController do
     send_resp(conn, 204, "")
   end
 
+  def requeue(conn, params) do
+    Bob.Queue.requeue(params.id)
+    send_resp(conn, 204, "")
+  end
+
   def add(conn, params) do
     Bob.Queue.add(params.module, params.args)
     send_resp(conn, 204, "")

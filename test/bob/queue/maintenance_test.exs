@@ -38,13 +38,27 @@ defmodule Bob.Queue.MaintenanceTest do
 
   defp ago(seconds), do: DateTime.add(DateTime.utc_now(), -seconds, :second)
 
-  test "sweeps stale running jobs to failed without recording backoff" do
+  test "requeues stale running jobs without recording backoff" do
     old = ago(4 * @hour)
     insert_job(state: "running", inserted_at: old, started_at: old)
 
     Maintenance.run()
 
-    assert [%Job{state: "failed", finished_at: finished}] = Repo.all(Job)
+    assert [%Job{state: "queued", started_at: nil, requeues: 1, inserted_at: inserted}] =
+             Repo.all(Job)
+
+    # inserted_at is kept so the requeued job stays at the front of the queue.
+    assert DateTime.compare(inserted, old) == :eq
+    assert Repo.all(Failure) == []
+  end
+
+  test "fails a stale running job once its requeues are exhausted" do
+    old = ago(4 * @hour)
+    insert_job(state: "running", inserted_at: old, started_at: old, requeues: 2)
+
+    Maintenance.run()
+
+    assert [%Job{state: "failed", finished_at: finished, requeues: 2}] = Repo.all(Job)
     assert finished != nil
     assert Repo.all(Failure) == []
   end

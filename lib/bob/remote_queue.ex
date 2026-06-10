@@ -23,6 +23,14 @@ defmodule Bob.RemoteQueue do
     done_request(:failure, id)
   end
 
+  def requeue({:local, id}) do
+    Bob.Queue.requeue(id)
+  end
+
+  def requeue({:remote, id}) do
+    done_request(:requeue, id)
+  end
+
   def local_queue(max_weight, weights) do
     Application.get_env(:bob, :local_jobs)
     |> prioritize()

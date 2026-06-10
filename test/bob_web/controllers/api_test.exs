@@ -118,6 +118,22 @@ defmodule BobWeb.ApiTest do
     assert [{Bob.Job.OTPChecker, [:tags]}] = Bob.Queue.queued()
   end
 
+  test "POST /api/queue/requeue puts a running job back in the queue", %{conn: conn} do
+    Bob.Queue.add(Bob.Job.OTPChecker, [:tags])
+    {:ok, {id, [:tags]}} = Bob.Queue.start(Bob.Job.OTPChecker)
+
+    body = Bob.Plug.ErlangFormat.encode_to_iodata!(%{id: id})
+
+    conn =
+      conn
+      |> put_req_header("content-type", "application/vnd.bob+erlang")
+      |> put_req_header("authorization", "secret")
+      |> post(~p"/api/queue/requeue", body)
+
+    assert conn.status == 204
+    assert [{Bob.Job.OTPChecker, [:tags]}] = Bob.Queue.queued()
+  end
+
   test "GET /status still returns 200 at the root", %{conn: conn} do
     conn = get(conn, "/status")
     assert conn.status == 200

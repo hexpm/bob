@@ -159,6 +159,44 @@ defmodule Bob.QueueTest do
     assert size(TestJob) == 1
   end
 
+  test "requeue puts a running job back at the front of the queue" do
+    Queue.add(TestJob, [:a])
+    Queue.add(TestJob, [:b])
+    {:ok, {id, [:a]}} = Queue.start(TestJob)
+
+    assert Queue.requeue(id) == :ok
+
+    job = Repo.get!(Bob.Queue.Job, id)
+    assert job.state == "queued"
+    assert job.started_at == nil
+
+    # The old inserted_at is kept, so the requeued job is picked before [:b].
+    assert {:ok, {^id, [:a]}} = Queue.start(TestJob)
+  end
+
+  test "requeue does not record a failure" do
+    Queue.add(TestJob, [:a])
+    {:ok, {id, [:a]}} = Queue.start(TestJob)
+
+    Queue.requeue(id)
+
+    assert Repo.all(Bob.Queue.Failure) == []
+  end
+
+  test "requeue on a job that is not running is a no-op" do
+    Queue.add(TestJob, [:a])
+    queued = Repo.one(Bob.Queue.Job)
+    assert Queue.requeue(queued.id) == :ok
+    assert Repo.get!(Bob.Queue.Job, queued.id).state == "queued"
+
+    {:ok, {id, [:a]}} = Queue.start(TestJob)
+    Queue.success(id)
+    assert Queue.requeue(id) == :ok
+    assert Repo.get!(Bob.Queue.Job, id).state == "done"
+
+    assert Queue.requeue(-1) == :ok
+  end
+
   test "success on an unknown id is a no-op" do
     assert Queue.success(-1) == :ok
   end
@@ -220,6 +258,15 @@ defmodule Bob.QueueTest do
       Bob.Queue.add(Bob.Job.OTPChecker, [:a])
       assert_receive :jobs_changed
       {:ok, _} = Bob.Queue.start(Bob.Job.OTPChecker)
+      assert_receive :jobs_changed
+    end
+
+    test "requeue broadcasts :jobs_changed" do
+      Bob.Queue.add(Bob.Job.OTPChecker, [:a])
+      assert_receive :jobs_changed
+      {:ok, {id, _}} = Bob.Queue.start(Bob.Job.OTPChecker)
+      assert_receive :jobs_changed
+      Bob.Queue.requeue(id)
       assert_receive :jobs_changed
     end
 

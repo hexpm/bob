@@ -1,5 +1,7 @@
 defmodule Bob.Runner do
-  use GenServer
+  # The shutdown timeout must leave terminate/2 room to requeue every in-flight
+  # job; agents do that over HTTP to the master.
+  use GenServer, shutdown: 15_000
   require Logger
 
   @local_timeout 1_000
@@ -13,6 +15,10 @@ defmodule Bob.Runner do
   # no Bob.Repo and only pull work from the master over HTTP, so they must never
   # touch the local queue. Dispatch every poll on the node's role.
   def init(state) do
+    # Trap exits so terminate/2 runs on shutdown and a crashing task does not
+    # take the runner (and its bookkeeping of the other running jobs) with it.
+    Process.flag(:trap_exit, true)
+
     if Application.get_env(:bob, :master?) do
       Process.send_after(self(), :local_timeout, 0)
     else
@@ -40,7 +46,7 @@ defmodule Bob.Runner do
   end
 
   def handle_info({ref, result}, state) when is_reference(ref) do
-    {key, args, job_id} = Map.fetch!(state.tasks, ref)
+    {key, args, job_id, _pid} = Map.fetch!(state.tasks, ref)
 
     case result do
       :ok ->
@@ -58,6 +64,27 @@ defmodule Bob.Runner do
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, :normal}, state) do
+    {:noreply, state}
+  end
+
+  # run_task only rescues exceptions; a throw/exit kills the task without a
+  # result message, so the abnormal :DOWN is where that job gets accounted for.
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    case Map.pop(state.tasks, ref) do
+      {nil, _tasks} ->
+        {:noreply, state}
+
+      {{key, args, job_id, _pid}, tasks} ->
+        if job_id, do: Bob.RemoteQueue.failure(job_id)
+        Logger.error("FAILED #{inspect(key)} #{inspect(args)} (#{inspect(reason)})")
+        state = start_any_jobs(%{state | tasks: tasks})
+        {:noreply, state}
+    end
+  end
+
+  # Tasks are linked and exits are trapped; the :DOWN clauses above do the
+  # bookkeeping for both normal and abnormal task ends.
+  def handle_info({:EXIT, _pid, _reason}, state) do
     {:noreply, state}
   end
 
@@ -108,8 +135,21 @@ defmodule Bob.Runner do
     end)
   end
 
+  def terminate(_reason, state) do
+    Enum.each(state.tasks, fn {_ref, {key, args, job_id, pid}} ->
+      # Kill the task before requeueing so a straggler completion report can't
+      # finish a row that another node may have re-claimed by then.
+      Task.Supervisor.terminate_child(Bob.Tasks, pid)
+
+      if job_id do
+        Logger.info("REQUEUING ON SHUTDOWN #{inspect(key)} #{inspect(args)}")
+        Bob.RemoteQueue.requeue(job_id)
+      end
+    end)
+  end
+
   defp current_weight(state) do
-    Enum.reduce(state.tasks, %{}, fn {_ref, {module, _args, _id}}, weights ->
+    Enum.reduce(state.tasks, %{}, fn {_ref, {module, _args, _id, _pid}}, weights ->
       concurrency_key = apply_task(module, :concurrency, [])
       weight = apply_task(module, :weight, [])
       Map.update(weights, concurrency_key, weight, &(&1 + weight))
@@ -119,7 +159,7 @@ defmodule Bob.Runner do
   defp start_job(id, key, args, state) do
     Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
     task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(key, args) end)
-    put_in(state.tasks[task.ref], {key, args, id})
+    put_in(state.tasks[task.ref], {key, args, id, task.pid})
   end
 
   defp new_state do

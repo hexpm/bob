@@ -14,6 +14,7 @@ defmodule BobWeb.Router do
     post("/queue/start", QueueController, :start)
     post("/queue/success", QueueController, :success)
     post("/queue/failure", QueueController, :failure)
+    post("/queue/requeue", QueueController, :requeue)
     post("/queue/add", QueueController, :add)
     post("/artifacts/add", ArtifactController, :add)
     post("/docker/add", ArtifactController, :add_docker)
