@@ -91,7 +91,10 @@ defmodule BobWeb.JobsLive do
   defp step("prev", page), do: -page
 
   defp load(socket) do
-    modules = Bob.Queue.job_modules()
+    modules =
+      Bob.Queue.job_modules()
+      |> Enum.sort_by(&{housekeeping?(&1), module_name(&1)})
+
     selected = socket.assigns.selected
     filter = Enum.filter(modules, &MapSet.member?(selected, module_name(&1)))
     queued_counts = Map.new(Bob.Queue.queue_sizes())
@@ -160,6 +163,13 @@ defmodule BobWeb.JobsLive do
 
   defp module_name(module_key), do: inspect(module_key)
   defp args_text(args), do: inspect(args)
+
+  defp housekeeping?(module_key) do
+    name = module_name(module_key)
+
+    String.contains?(name, "Checker") or String.contains?(name, "Reconcile") or
+      String.contains?(name, "Clean")
+  end
 
   defp job_cat(module_key) do
     module = inspect(module_key)

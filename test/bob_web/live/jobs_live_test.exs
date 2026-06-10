@@ -68,6 +68,25 @@ defmodule BobWeb.JobsLiveTest do
     assert html =~ ":docker_done"
   end
 
+  test "orders work chips before checker and maintenance chips", %{conn: conn} do
+    Bob.Queue.add(Bob.Job.DockerChecker, [:a])
+    Bob.Queue.add(Bob.Job.OTPChecker, [:b])
+    Bob.Queue.add({Bob.Job.BuildOTP, "amd64"}, [:c])
+    Bob.Queue.add(Bob.Job.DockerManifest, [:d])
+
+    {:ok, _view, html} = live(conn, ~p"/")
+
+    {build_pos, _} = :binary.match(html, "Bob.Job.BuildOTP")
+    {manifest_pos, _} = :binary.match(html, "Bob.Job.DockerManifest")
+    {docker_checker_pos, _} = :binary.match(html, "Bob.Job.DockerChecker")
+    {otp_checker_pos, _} = :binary.match(html, "Bob.Job.OTPChecker")
+
+    assert build_pos < docker_checker_pos
+    assert build_pos < otp_checker_pos
+    assert manifest_pos < docker_checker_pos
+    assert manifest_pos < otp_checker_pos
+  end
+
   test "root layout links favicon assets", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
 
