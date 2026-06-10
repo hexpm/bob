@@ -1,8 +1,11 @@
 defmodule Bob.Job.DockerChecker do
+  require Logger
+
   @erlang_tag_regex ~r"^(.+)-(alpine|ubuntu|debian)-(.+)$"
   @elixir_tag_regex ~r"^(.+)-erlang-(.+)-(alpine|ubuntu|debian)-(.+)$"
 
   @archs ["amd64", "arm64"]
+  @erlang_arch_repos Enum.map(@archs, &"hexpm/erlang-#{&1}")
 
   def builds() do
     [
@@ -64,12 +67,24 @@ defmodule Bob.Job.DockerChecker do
   def concurrency(), do: :shared
 
   def erlang() do
-    diff(expected_erlang_tags(), erlang_tags())
+    expected_erlang_tags()
+    |> Enum.group_by(fn {_erlang, _os, _os_version, arch} -> arch end)
+    |> Enum.flat_map(fn {arch, expected} ->
+      present =
+        Bob.Artifacts.docker_tags_present(
+          "hexpm/erlang-#{arch}",
+          Enum.map(expected, &erlang_tag_name/1)
+        )
+
+      Enum.reject(expected, &MapSet.member?(present, erlang_tag_name(&1)))
+    end)
     |> Enum.map(fn {erlang, os, os_version, arch} ->
       {{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}
     end)
     |> Bob.Queue.add_many()
   end
+
+  defp erlang_tag_name({erlang, os, os_version, _arch}), do: "#{erlang}-#{os}-#{os_version}"
 
   def expected_erlang_tags() do
     refs = erlang_refs()
@@ -254,32 +269,33 @@ defmodule Bob.Job.DockerChecker do
     {components, pre || []}
   end
 
-  def erlang_tags() do
-    Enum.flat_map(@archs, &erlang_tags/1)
-  end
-
-  def erlang_tags(arch) do
-    "hexpm/erlang-#{arch}"
-    |> Bob.Artifacts.docker_tags()
-    |> Enum.map(fn {tag, [^arch]} ->
-      [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
-      {erlang, os, os_version, arch}
-    end)
-  end
-
   def elixir() do
-    diff(expected_elixir_tags(), elixir_tags())
+    expected_elixir_tags()
+    |> Enum.group_by(fn {_elixir, _erlang, _os, _os_version, arch} -> arch end)
+    |> Enum.flat_map(fn {arch, expected} ->
+      present =
+        Bob.Artifacts.docker_tags_present(
+          "hexpm/elixir-#{arch}",
+          Enum.map(expected, &elixir_tag_name/1)
+        )
+
+      Enum.reject(expected, &MapSet.member?(present, elixir_tag_name(&1)))
+    end)
     |> Enum.map(fn {elixir, erlang, os, os_version, arch} ->
       {{Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version]}
     end)
     |> Bob.Queue.add_many()
   end
 
+  defp elixir_tag_name({elixir, erlang, os, os_version, _arch}) do
+    "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
+  end
+
   def expected_elixir_tags() do
     builds = builds()
     refs = elixir_builds()
 
-    Stream.flat_map(erlang_tags(), fn {erlang, os, os_version, erlang_arch} ->
+    Stream.flat_map(current_erlang_tags(builds), fn {erlang, os, os_version, erlang_arch} ->
       if not skip_elixir_for_erlang?(erlang) and os_version in builds[os] do
         Stream.flat_map(refs, fn {"v" <> elixir, otp_major} ->
           if compatible_elixir_and_erlang?(otp_major, erlang) do
@@ -294,6 +310,20 @@ defmodule Bob.Job.DockerChecker do
     end)
   end
 
+  # Erlang per-arch tags scoped to the current base-image os_versions — the
+  # only ones expected_elixir_tags/0 can use. Rows returned here always carry
+  # search metadata, so the tag is guaranteed to match @erlang_tag_regex.
+  defp current_erlang_tags(builds) do
+    os_versions = builds |> Map.values() |> List.flatten()
+
+    @erlang_arch_repos
+    |> Bob.Artifacts.erlang_tags_for_os_versions(os_versions)
+    |> Enum.map(fn {"hexpm/erlang-" <> arch, tag} ->
+      [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
+      {erlang, os, os_version, arch}
+    end)
+  end
+
   def elixir_builds() do
     "builds/elixir"
     |> Bob.Store.fetch_built_refs()
@@ -303,21 +333,6 @@ defmodule Bob.Job.DockerChecker do
     |> Enum.sort(&cmp_elixir_tags/2)
     |> Enum.reject(fn {_elixir, otp} -> otp == nil end)
     |> Enum.reject(fn {"v" <> elixir, _otp} -> skip_elixir?(elixir) end)
-  end
-
-  def elixir_tags() do
-    Stream.flat_map(@archs, &elixir_tags/1)
-  end
-
-  def elixir_tags(arch) do
-    "hexpm/elixir-#{arch}"
-    |> Bob.Artifacts.docker_tags()
-    |> Enum.map(fn {tag, [^arch]} ->
-      [elixir, erlang, os, os_version] =
-        Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
-
-      {elixir, erlang, os, os_version, arch}
-    end)
   end
 
   defp split_elixir_build(build_name) do
@@ -358,18 +373,6 @@ defmodule Bob.Job.DockerChecker do
     end
   end
 
-  def diff(expected, current) do
-    current = MapSet.new(current)
-
-    Stream.flat_map(expected, fn key ->
-      if MapSet.member?(current, key) do
-        []
-      else
-        [key]
-      end
-    end)
-  end
-
   defp compatible_elixir_and_erlang?(otp_major, erlang) do
     String.starts_with?(erlang, otp_major <> ".")
   end
@@ -386,53 +389,39 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def manifest() do
-    erlang_tags = group_archs(erlang_tags())
-    erlang_manifest_tags = erlang_manifest_tags()
-    diff_manifests("erlang", erlang_tags, erlang_manifest_tags)
-
-    elixir_tags = group_archs(elixir_tags())
-    elixir_manifest_tags = elixir_manifest_tags()
-    diff_manifests("elixir", elixir_tags, elixir_manifest_tags)
+    check_manifests("erlang")
+    check_manifests("elixir")
   end
 
-  def erlang_manifest_tags() do
-    "hexpm/erlang"
-    |> Bob.Artifacts.docker_tags()
-    |> Map.new(fn {tag, archs} ->
-      [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
-      {{erlang, os, os_version}, archs}
-    end)
-  end
+  # The whole per-arch vs manifest diff runs in Postgres; only mismatched tags
+  # (normally none) come back, so just those few need parsing into job args.
+  defp check_manifests(kind) do
+    "hexpm/#{kind}"
+    |> Bob.Artifacts.manifest_mismatches("hexpm/#{kind}-amd64", "hexpm/#{kind}-arm64")
+    |> Enum.flat_map(fn {tag, _archs} ->
+      case manifest_key(kind, tag) do
+        {:ok, key} ->
+          [{Bob.Job.DockerManifest, [kind, key]}]
 
-  def elixir_manifest_tags() do
-    "hexpm/elixir"
-    |> Bob.Artifacts.docker_tags()
-    |> Map.new(fn {tag, archs} ->
-      [elixir, erlang, os, os_version] =
-        Regex.run(@elixir_tag_regex, tag, capture: :all_but_first)
-
-      {{elixir, erlang, os, os_version}, archs}
-    end)
-  end
-
-  def group_archs(enum) do
-    Enum.group_by(
-      enum,
-      &Tuple.delete_at(&1, tuple_size(&1) - 1),
-      &elem(&1, tuple_size(&1) - 1)
-    )
-  end
-
-  def diff_manifests(kind, expected, current) do
-    expected
-    |> Enum.sort()
-    |> Enum.flat_map(fn {key, expected_archs} ->
-      if expected_archs -- Map.get(current, key, []) != [] do
-        [{Bob.Job.DockerManifest, [kind, key]}]
-      else
-        []
+        :error ->
+          Logger.error("DOCKER CHECKER skipping unparseable #{kind} tag #{inspect(tag)}")
+          []
       end
     end)
     |> Bob.Queue.add_many()
+  end
+
+  defp manifest_key("erlang", tag) do
+    case Regex.run(@erlang_tag_regex, tag, capture: :all_but_first) do
+      [erlang, os, os_version] -> {:ok, {erlang, os, os_version}}
+      nil -> :error
+    end
+  end
+
+  defp manifest_key("elixir", tag) do
+    case Regex.run(@elixir_tag_regex, tag, capture: :all_but_first) do
+      [elixir, erlang, os, os_version] -> {:ok, {elixir, erlang, os, os_version}}
+      nil -> :error
+    end
   end
 end

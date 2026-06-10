@@ -2,8 +2,8 @@ defmodule Bob.GitHub do
   @github_url "https://api.github.com/"
 
   def fetch_repo_refs(repo) do
-    branches = github_request(@github_url <> "repos/#{repo}/branches")
-    tags = github_request(@github_url <> "repos/#{repo}/tags")
+    branches = github_request(@github_url <> "repos/#{repo}/branches?per_page=100")
+    tags = github_request(@github_url <> "repos/#{repo}/tags?per_page=100")
     response_to_refs(branches) ++ response_to_refs(tags)
   end
 

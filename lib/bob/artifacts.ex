@@ -388,6 +388,73 @@ defmodule Bob.Artifacts do
     )
   end
 
+  @doc """
+  The subset of `tags` that exist for `repo`, as a set.
+
+  The checker probes its (small) expected tag set with this instead of loading
+  a repo's full tag history; the lookup runs on the unique `(repo, tag)` index.
+  """
+  def docker_tags_present(_repo, []), do: MapSet.new()
+
+  def docker_tags_present(repo, tags) do
+    Repo.all(
+      from(d in DockerTag,
+        where: d.repo == ^repo and d.tag in ^tags,
+        select: d.tag
+      ),
+      timeout: @long_query_timeout
+    )
+    |> MapSet.new()
+  end
+
+  @doc """
+  `{repo, tag}` for every tag of `repos` whose search metadata carries one of
+  `os_versions`. Scopes the checker's erlang reads to current base images —
+  a fraction of the full history.
+  """
+  def erlang_tags_for_os_versions(repos, os_versions) do
+    Repo.all(
+      from(d in DockerTag,
+        where:
+          d.repo in ^repos and
+            fragment("?->>'os_version' = ANY(?)", d.search, ^os_versions),
+        select: {d.repo, d.tag}
+      ),
+      timeout: @long_query_timeout
+    )
+  end
+
+  @doc """
+  `{tag, archs}` for every per-arch tag whose manifest is missing or lacks one
+  of the built archs. The whole diff runs in Postgres; only mismatches (normally
+  none) reach the caller. Tags that exist only in the manifest repo are ignored,
+  as is a manifest carrying more archs than were built.
+  """
+  def manifest_mismatches(manifest_repo, amd64_repo, arm64_repo) do
+    # The ::text[] cast is required: archs is varchar[] and array containment
+    # does not unify varchar[] with the aggregated text[].
+    %{rows: rows} =
+      Repo.query!(
+        """
+        SELECT p.tag, p.archs
+        FROM (
+          SELECT tag,
+                 array_agg(DISTINCT CASE WHEN repo = $2 THEN 'amd64' ELSE 'arm64' END) AS archs
+          FROM docker_tags
+          WHERE repo IN ($2, $3)
+          GROUP BY tag
+        ) AS p
+        LEFT JOIN docker_tags m ON m.repo = $1 AND m.tag = p.tag
+        WHERE m.id IS NULL OR NOT (m.archs::text[] @> p.archs)
+        ORDER BY p.tag COLLATE "C"
+        """,
+        [manifest_repo, amd64_repo, arm64_repo],
+        timeout: @long_query_timeout
+      )
+
+    Enum.map(rows, fn [tag, archs] -> {tag, archs} end)
+  end
+
   def base_image_tags(repo) do
     Repo.all(
       from(b in BaseImageTag,

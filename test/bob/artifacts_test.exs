@@ -481,16 +481,117 @@ defmodule Bob.ArtifactsTest do
     end
   end
 
-  describe "docker_tags/1" do
-    test "scopes to the requested repo" do
-      Artifacts.add_docker_tag("hexpm/erlang-amd64", "a", ["amd64"])
-      Artifacts.add_docker_tag("hexpm/erlang-arm64", "b", ["arm64"])
+  describe "docker_tags_present/2" do
+    test "returns the subset of the given tags that exist for the repo" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "26.2-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "25.3-ubuntu-noble-20250101", ["arm64"])
 
-      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"a", ["amd64"]}]
+      present =
+        Artifacts.docker_tags_present("hexpm/erlang-amd64", [
+          "27.0-ubuntu-noble-20250101",
+          "30.0-ubuntu-noble-20250101",
+          "25.3-ubuntu-noble-20250101"
+        ])
+
+      assert present == MapSet.new(["27.0-ubuntu-noble-20250101"])
     end
 
-    test "returns an empty list for an unknown repo" do
-      assert Artifacts.docker_tags("hexpm/erlang-amd64") == []
+    test "returns an empty set for no tags" do
+      assert Artifacts.docker_tags_present("hexpm/erlang-amd64", []) == MapSet.new()
+    end
+  end
+
+  describe "erlang_tags_for_os_versions/2" do
+    test "returns repo and tag for the requested repos and os_versions only" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-alpine-3.23.5", ["arm64"])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "26.2-ubuntu-noble-20240101", ["amd64"])
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"]
+      )
+
+      tags =
+        Artifacts.erlang_tags_for_os_versions(
+          ["hexpm/erlang-amd64", "hexpm/erlang-arm64"],
+          ["noble-20250101", "3.23.5"]
+        )
+
+      assert Enum.sort(tags) == [
+               {"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"},
+               {"hexpm/erlang-arm64", "27.0-alpine-3.23.5"}
+             ]
+    end
+  end
+
+  describe "manifest_mismatches/3" do
+    test "returns per-arch tags that have no manifest at all" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+
+      assert Artifacts.manifest_mismatches(
+               "hexpm/erlang",
+               "hexpm/erlang-amd64",
+               "hexpm/erlang-arm64"
+             ) == [{"27.0-ubuntu-noble-20250101", ["amd64", "arm64"]}]
+    end
+
+    test "returns tags whose manifest lacks one of the built archs" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
+
+      assert Artifacts.manifest_mismatches(
+               "hexpm/erlang",
+               "hexpm/erlang-amd64",
+               "hexpm/erlang-arm64"
+             ) == [{"27.0-ubuntu-noble-20250101", ["amd64", "arm64"]}]
+    end
+
+    test "skips tags whose manifest covers every built arch" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
+
+      assert Artifacts.manifest_mismatches(
+               "hexpm/erlang",
+               "hexpm/erlang-amd64",
+               "hexpm/erlang-arm64"
+             ) == []
+    end
+
+    test "skips a manifest that has more archs than were built" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
+
+      assert Artifacts.manifest_mismatches(
+               "hexpm/erlang",
+               "hexpm/erlang-amd64",
+               "hexpm/erlang-arm64"
+             ) == []
+    end
+
+    test "ignores tags that only exist in the manifest repo" do
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
+
+      assert Artifacts.manifest_mismatches(
+               "hexpm/erlang",
+               "hexpm/erlang-amd64",
+               "hexpm/erlang-arm64"
+             ) == []
+    end
+
+    test "returns a single-arch tag without a manifest with just that arch" do
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+
+      assert Artifacts.manifest_mismatches(
+               "hexpm/erlang",
+               "hexpm/erlang-amd64",
+               "hexpm/erlang-arm64"
+             ) == [{"27.0-ubuntu-noble-20250101", ["arm64"]}]
     end
   end
 
