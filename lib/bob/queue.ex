@@ -154,16 +154,17 @@ defmodule Bob.Queue do
     )
   end
 
-  def running() do
+  def running(modules \\ []) do
     Repo.all(
       from(j in Job,
         where: j.state == "running",
         order_by: [desc: j.started_at, desc: j.id]
       )
+      |> filter_modules(modules)
     )
   end
 
-  def queued_listing(limit \\ 100, offset \\ 0) do
+  def queued_listing(limit \\ 100, offset \\ 0, modules \\ []) do
     Repo.all(
       from(j in Job,
         where: j.state == "queued",
@@ -171,14 +172,17 @@ defmodule Bob.Queue do
         limit: ^limit,
         offset: ^offset
       )
+      |> filter_modules(modules)
     )
   end
 
-  def finished_count() do
-    Repo.aggregate(from(j in Job, where: j.state in ["done", "failed"]), :count, :id)
+  def finished_count(modules \\ []) do
+    from(j in Job, where: j.state in ["done", "failed"])
+    |> filter_modules(modules)
+    |> Repo.aggregate(:count, :id)
   end
 
-  def recent(limit \\ 50, offset \\ 0) do
+  def recent(limit \\ 50, offset \\ 0, modules \\ []) do
     Repo.all(
       from(j in Job,
         where: j.state in ["done", "failed"],
@@ -186,8 +190,18 @@ defmodule Bob.Queue do
         limit: ^limit,
         offset: ^offset
       )
+      |> filter_modules(modules)
     )
   end
+
+  @doc "Lists the distinct job modules present in the queue, in any state."
+  def job_modules() do
+    Repo.all(from(j in Job, distinct: true, select: j.module_key))
+    |> Enum.sort_by(&inspect/1)
+  end
+
+  defp filter_modules(query, []), do: query
+  defp filter_modules(query, modules), do: where(query, [j], j.module_key in ^modules)
 
   defp finish(id, state) do
     now = DateTime.utc_now()

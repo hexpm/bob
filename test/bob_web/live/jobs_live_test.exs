@@ -27,6 +27,47 @@ defmodule BobWeb.JobsLiveTest do
     assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>1<\/b>\s*job\s*of\s*1 job/
   end
 
+  test "filters jobs by toggling module chips", %{conn: conn} do
+    Bob.Queue.add(Bob.Job.DockerChecker, [:docker_done])
+    {:ok, {id, [:docker_done]}} = Bob.Queue.start(Bob.Job.DockerChecker)
+    Bob.Queue.success(id)
+
+    Bob.Queue.add(Bob.Job.OTPChecker, [:otp_queued])
+    Bob.Queue.add(Bob.Job.DockerChecker, [:docker_queued])
+
+    {:ok, view, html} = live(conn, ~p"/")
+    assert html =~ ":otp_queued"
+    assert html =~ ":docker_queued"
+    assert html =~ ":docker_done"
+
+    html =
+      view
+      |> element("button[phx-value-module='Bob.Job.OTPChecker']")
+      |> render_click()
+
+    assert html =~ ":otp_queued"
+    refute html =~ ":docker_queued"
+    refute html =~ ":docker_done"
+
+    html =
+      view
+      |> element("button[phx-value-module='Bob.Job.DockerChecker']")
+      |> render_click()
+
+    assert html =~ ":otp_queued"
+    assert html =~ ":docker_queued"
+    assert html =~ ":docker_done"
+
+    html =
+      view
+      |> element("button[phx-value-module='Bob.Job.OTPChecker']")
+      |> render_click()
+
+    refute html =~ ":otp_queued"
+    assert html =~ ":docker_queued"
+    assert html =~ ":docker_done"
+  end
+
   test "root layout links favicon assets", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
 

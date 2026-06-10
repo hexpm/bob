@@ -289,4 +289,57 @@ defmodule Bob.QueueTest do
       assert Bob.Queue.finished_count() == 2
     end
   end
+
+  describe "module filters" do
+    test "queued_listing/3 filters by module" do
+      Queue.add(TestJob, [:a])
+      Queue.add({TestJob, :variant}, [:b])
+      Queue.add(Bob.Job.OTPChecker, [:c])
+
+      assert [j1, j2] = Queue.queued_listing(100, 0, [TestJob, {TestJob, :variant}])
+      assert j1.module_key == TestJob
+      assert j2.module_key == {TestJob, :variant}
+
+      assert [j] = Queue.queued_listing(100, 0, [Bob.Job.OTPChecker])
+      assert j.module_key == Bob.Job.OTPChecker
+
+      assert length(Queue.queued_listing(100, 0, [])) == 3
+    end
+
+    test "running/1 filters by module" do
+      Queue.add(TestJob, [:a])
+      Queue.add(Bob.Job.OTPChecker, [:b])
+      {:ok, _} = Queue.start(TestJob)
+      {:ok, _} = Queue.start(Bob.Job.OTPChecker)
+
+      assert [j] = Queue.running([TestJob])
+      assert j.module_key == TestJob
+      assert length(Queue.running([])) == 2
+    end
+
+    test "recent/3 and finished_count/1 filter by module" do
+      Queue.add(TestJob, [:a])
+      {:ok, {id, _}} = Queue.start(TestJob)
+      Queue.success(id)
+
+      Queue.add(Bob.Job.OTPChecker, [:b])
+      {:ok, {id, _}} = Queue.start(Bob.Job.OTPChecker)
+      Queue.failure(id)
+
+      assert [j] = Queue.recent(50, 0, [TestJob])
+      assert j.module_key == TestJob
+      assert Queue.finished_count([TestJob]) == 1
+      assert Queue.finished_count([]) == 2
+    end
+
+    test "job_modules/0 lists distinct modules across all states" do
+      Queue.add(TestJob, [:a])
+      Queue.add(TestJob, [:b])
+      Queue.add({TestJob, :variant}, [:c])
+      {:ok, {id, _}} = Queue.start(TestJob)
+      Queue.success(id)
+
+      assert Queue.job_modules() == [TestJob, {TestJob, :variant}]
+    end
+  end
 end
