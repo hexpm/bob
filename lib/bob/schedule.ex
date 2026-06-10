@@ -30,7 +30,9 @@ defmodule Bob.Schedule do
 
   def handle_info({:run, module, args, time, period, queue?} = message, _) do
     if queue? do
-      Bob.Queue.add(module, args || [])
+      if Bob.Schedule.Ledger.claim(module, args || [], period) do
+        Bob.Queue.add(module, args || [])
+      end
     else
       Bob.Runner.run(module, args || [])
     end
