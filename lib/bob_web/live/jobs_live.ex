@@ -162,6 +162,10 @@ defmodule BobWeb.JobsLive do
   defp to_naive(%NaiveDateTime{} = datetime), do: datetime
 
   defp module_name(module_key), do: inspect(module_key)
+
+  defp module_label({module, key}), do: "#{inspect(module)} #{key}"
+  defp module_label(module), do: inspect(module)
+
   defp args_text(args), do: inspect(args)
 
   defp housekeeping?(module_key) do
@@ -204,7 +208,7 @@ defmodule BobWeb.JobsLive do
           phx-value-module={module_name(mod)}
         >
           <.cat_glyph cat={job_cat(mod)} size={13} />
-          <%= module_name(mod) %>
+          <%= module_label(mod) %>
           <span :if={@queued_counts[mod]} class="chip__n"><%= @queued_counts[mod] %></span>
         </button>
       </div>
@@ -226,7 +230,7 @@ defmodule BobWeb.JobsLive do
             </div>
           </:col>
           <:col :let={j} label="Module">
-            <.module_cell cat={job_cat(j.module_key)} module={module_name(j.module_key)} />
+            <.module_cell cat={job_cat(j.module_key)} module={module_label(j.module_key)} />
           </:col>
           <:col :let={j} label="Args" class="col-args">
             <code class="c-args"><%= args_text(j.args) %></code>
@@ -234,7 +238,7 @@ defmodule BobWeb.JobsLive do
           <:col :let={j} label="Started" class="col-time">
             <span class="c-time"><%= fmt(j.started_at) %></span>
           </:col>
-          <:col :let={j} label="Elapsed" class="col-time">
+          <:col :let={j} label="Elapsed" class="col-dur">
             <span class="c-elapsed"><%= fmt_duration(elapsed(j.started_at, @now)) %></span>
           </:col>
         </.table>
@@ -246,7 +250,7 @@ defmodule BobWeb.JobsLive do
 
         <.table :if={!@loading and @queued != []} rows={@queued}>
           <:col :let={j} label="Module">
-            <.module_cell cat={job_cat(j.module_key)} module={module_name(j.module_key)} />
+            <.module_cell cat={job_cat(j.module_key)} module={module_label(j.module_key)} />
           </:col>
           <:col :let={j} label="Args" class="col-args">
             <code class="c-args"><%= args_text(j.args) %></code>
@@ -275,12 +279,12 @@ defmodule BobWeb.JobsLive do
             <.state_badge state={j.state} />
           </:col>
           <:col :let={j} label="Module">
-            <.module_cell cat={job_cat(j.module_key)} module={module_name(j.module_key)} />
+            <.module_cell cat={job_cat(j.module_key)} module={module_label(j.module_key)} />
           </:col>
           <:col :let={j} label="Args" class="col-args">
             <code class="c-args"><%= args_text(j.args) %></code>
           </:col>
-          <:col :let={j} label="Duration" class="col-time">
+          <:col :let={j} label="Duration" class="col-dur">
             <span class="c-dur"><%= fmt_duration(duration(j)) %></span>
           </:col>
           <:col :let={j} label="Finished" class="col-time">

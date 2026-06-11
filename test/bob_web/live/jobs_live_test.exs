@@ -68,6 +68,15 @@ defmodule BobWeb.JobsLiveTest do
     assert html =~ ":docker_done"
   end
 
+  test "renders tuple module keys without inspect syntax", %{conn: conn} do
+    Bob.Queue.add({Bob.Job.BuildDockerElixir, "amd64"}, [:tuple_label])
+
+    {:ok, _view, html} = live(conn, ~p"/")
+
+    assert html =~ "Bob.Job.BuildDockerElixir amd64"
+    assert html =~ ~s(phx-value-module="{Bob.Job.BuildDockerElixir, &quot;amd64&quot;}")
+  end
+
   test "orders work chips before checker and maintenance chips", %{conn: conn} do
     Bob.Queue.add(Bob.Job.DockerChecker, [:a])
     Bob.Queue.add(Bob.Job.OTPChecker, [:b])

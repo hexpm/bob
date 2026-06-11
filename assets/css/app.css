@@ -612,6 +612,7 @@ pre,
   align-items: center;
   gap: 7px;
   height: 32px;
+  white-space: nowrap;
   padding: 0 12px;
   border: 1px solid var(--color-grey-200);
   border-radius: 999px;
@@ -734,6 +735,11 @@ pre,
 .col-time {
   width: 190px;
   min-width: 190px;
+  white-space: nowrap;
+}
+
+.col-dur {
+  width: 1%;
   white-space: nowrap;
 }
 
