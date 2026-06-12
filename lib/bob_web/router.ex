@@ -36,4 +36,12 @@ defmodule BobWeb.Router do
       live("/docker", DockerTagsLive)
     end
   end
+
+  scope "/", BobWeb do
+    pipe_through([:browser, :require_authenticated_user])
+
+    live_session :authenticated, on_mount: [{BobWeb.UserAuth, :ensure_authenticated}] do
+      live("/request", RequestLive)
+    end
+  end
 end

@@ -293,6 +293,17 @@ pre,
   font-size: 12.5px;
 }
 
+.req-intro {
+  padding: 14px 20px 0;
+  font-size: 13.5px;
+  color: var(--color-grey-600);
+}
+
+.req-heading {
+  padding: 14px 20px 0;
+  font-size: 14px;
+}
+
 .bob-main {
   flex: 1;
 }

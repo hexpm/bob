@@ -32,6 +32,9 @@
             <.link href={~p"/docker"} class={nav_class(@conn.request_path, "/docker")}>
               <.icon name="docker" /> Docker Tags
             </.link>
+            <.link href={~p"/request"} class={nav_class(@conn.request_path, "/request")}>
+              <.icon name="box" /> Request Build
+            </.link>
           </nav>
 
           <div class="bob-nav__right">
@@ -65,6 +68,9 @@
               </.link>
               <.link href={~p"/docker"} class={menu_class(@conn.request_path, "/docker")}>
                 <.icon name="docker" /> Docker Tags
+              </.link>
+              <.link href={~p"/request"} class={menu_class(@conn.request_path, "/request")}>
+                <.icon name="box" /> Request Build
               </.link>
               <a
                 class="bob-menu__item bob-menu__item--external"
