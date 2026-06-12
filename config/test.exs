@@ -2,7 +2,8 @@ import Config
 
 config :bob,
   master_schedule: [],
-  agent_schedule: []
+  agent_schedule: [],
+  github: Bob.FakeGitHub
 
 config :ex_aws,
   access_key_id: "test",

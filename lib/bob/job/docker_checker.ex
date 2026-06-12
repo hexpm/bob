@@ -87,7 +87,7 @@ defmodule Bob.Job.DockerChecker do
   defp erlang_tag_name({erlang, os, os_version, _arch}), do: "#{erlang}-#{os}-#{os_version}"
 
   def expected_erlang_tags() do
-    refs = erlang_refs()
+    refs = latest_erlang_refs(erlang_refs())
 
     Stream.flat_map(builds(), fn {os, os_versions} ->
       Stream.flat_map(refs, fn ref ->
@@ -111,6 +111,20 @@ defmodule Bob.Job.DockerChecker do
         end
       end)
     end)
+  end
+
+  def archs(), do: @archs
+
+  def erlang_versions() do
+    Enum.map(erlang_refs(), fn "OTP-" <> version -> version end)
+  end
+
+  # Whether the build rules allow this erlang/os/os_version combination on all archs.
+  def valid_erlang_build?(erlang, os, os_version) do
+    ref = "OTP-" <> erlang
+
+    build_erlang_ref?(os, ref) and build_erlang_ref?(os, os_version, ref) and
+      Enum.all?(@archs, &build_erlang_ref?(&1, os, os_version, ref))
   end
 
   defp build_erlang_ref?(_os, "OTP-18.0-rc2"), do: false
@@ -222,10 +236,30 @@ defmodule Bob.Job.DockerChecker do
 
   defp erlang_refs() do
     "erlang/otp"
-    |> Bob.GitHub.fetch_repo_refs()
+    |> github().fetch_repo_refs()
     |> Enum.map(fn {ref_name, _ref} -> ref_name end)
     |> Enum.filter(&String.starts_with?(&1, "OTP-"))
     |> Enum.sort(&(cmp_erlang_tags(&1, &2) != :lt))
+  end
+
+  defp github(), do: Application.get_env(:bob, :github, Bob.GitHub)
+
+  # Keeps only the newest ref per OTP major.minor line. Stable releases rank
+  # above prereleases within a line, so RCs drop out once a stable lands.
+  # Selection happens before the per-OS filters: a line whose newest ref an OS
+  # rule rejects gets no older fallback.
+  def latest_erlang_refs(refs) do
+    refs
+    |> Enum.sort(&(cmp_erlang_tags(&1, &2) != :lt))
+    |> Enum.uniq_by(fn "OTP-" <> version ->
+      version |> to_matchable() |> elem(0) |> Enum.take(2)
+    end)
+  end
+
+  defp latest_erlang_versions() do
+    erlang_refs()
+    |> latest_erlang_refs()
+    |> MapSet.new(fn "OTP-" <> version -> version end)
   end
 
   defp cmp_erlang_tags("OTP-" <> left, "OTP-" <> right) do
@@ -293,10 +327,12 @@ defmodule Bob.Job.DockerChecker do
 
   def expected_elixir_tags() do
     builds = builds()
-    refs = elixir_builds()
+    refs = latest_elixir_builds(elixir_builds())
+    latest_erlang = latest_erlang_versions()
 
     Stream.flat_map(current_erlang_tags(builds), fn {erlang, os, os_version, erlang_arch} ->
-      if not skip_elixir_for_erlang?(erlang) and os_version in builds[os] do
+      if MapSet.member?(latest_erlang, erlang) and not skip_elixir_for_erlang?(erlang) and
+           os_version in builds[os] do
         Stream.flat_map(refs, fn {"v" <> elixir, otp_major} ->
           if compatible_elixir_and_erlang?(otp_major, erlang) do
             [{elixir, erlang, os, os_version, erlang_arch}]
@@ -333,6 +369,24 @@ defmodule Bob.Job.DockerChecker do
     |> Enum.sort(&cmp_elixir_tags/2)
     |> Enum.reject(fn {_elixir, otp} -> otp == nil end)
     |> Enum.reject(fn {"v" <> elixir, _otp} -> skip_elixir?(elixir) end)
+  end
+
+  # Whether the build rules allow this elixir build on this exact erlang/os/os_version.
+  def valid_elixir_build?(elixir, otp_major, erlang, os, os_version) do
+    build_elixir_ref?({"v" <> elixir, otp_major}) and not skip_elixir?(elixir) and
+      not skip_elixir_for_erlang?(erlang) and compatible_elixir_and_erlang?(otp_major, erlang) and
+      valid_erlang_build?(erlang, os, os_version)
+  end
+
+  # Keeps only the newest build per {elixir major.minor, otp major} pair.
+  # Stable releases rank above prereleases within a pair.
+  def latest_elixir_builds(builds) do
+    builds
+    |> Enum.sort(&cmp_elixir_tags/2)
+    |> Enum.uniq_by(fn {"v" <> elixir, otp} ->
+      version = Version.parse!(normalize_version(elixir))
+      {version.major, version.minor, otp}
+    end)
   end
 
   defp split_elixir_build(build_name) do
