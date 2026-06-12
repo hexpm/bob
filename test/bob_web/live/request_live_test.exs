@@ -60,6 +60,8 @@ defmodule BobWeb.RequestLiveTest do
     html = render_async(view)
     refute html =~ "Loading versions"
     refute html =~ "choose"
+    assert html =~ "Pending requests"
+    assert html =~ "No pending requests."
 
     html = view |> element("form") |> render_change(%{"kind" => "erlang", "os" => "ubuntu"})
     assert html =~ "noble-20250101"
@@ -292,5 +294,50 @@ defmodule BobWeb.RequestLiveTest do
     assert html =~ "Your recent requests"
     assert html =~ "26.0-ubuntu-noble-20250101"
     assert html =~ "pending"
+  end
+
+  test "lists global pending requests", %{conn: conn} do
+    {:ok, _my_request} =
+      Bob.BuildRequests.create(%{
+        username: "eric",
+        kind: "erlang",
+        erlang: "26.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 2
+      })
+
+    {:ok, _other_request} =
+      Bob.BuildRequests.create(%{
+        username: "jose",
+        kind: "elixir",
+        elixir: "1.18.0",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 4
+      })
+
+    {:ok, completed_request} =
+      Bob.BuildRequests.create(%{
+        username: "dashbit",
+        kind: "erlang",
+        erlang: "28.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 2
+      })
+
+    completed_request
+    |> Ecto.Changeset.change(state: "completed")
+    |> Repo.update!()
+
+    {:ok, _view, html} = live(log_in(conn), ~p"/request")
+
+    assert html =~ "Pending requests"
+    assert html =~ "jose"
+    assert html =~ "1.18.0-erlang-27.0-ubuntu-noble-20250101"
+    refute html =~ "dashbit"
+    refute html =~ "28.0-ubuntu-noble-20250101"
   end
 end

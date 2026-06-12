@@ -6,6 +6,7 @@ defmodule BobWeb.RequestLive do
   alias Bob.Job.DockerChecker
 
   @options_ttl 10 * 60
+  @pending_limit 25
 
   @impl true
   def mount(_params, _session, socket) do
@@ -29,6 +30,7 @@ defmodule BobWeb.RequestLive do
         os_version: "",
         erlang: "",
         elixir: "",
+        pending_requests: pending_requests(),
         my_requests: my_requests(socket)
       )
 
@@ -115,7 +117,7 @@ defmodule BobWeb.RequestLive do
     case BuildRequests.submit(attrs) do
       {:ok, %BuildRequest{}} ->
         socket
-        |> assign(my_requests: my_requests(socket))
+        |> reload_request_lists()
         |> replace_flash(:info, "Build queued, follow the progress on the jobs dashboard.")
 
       {:ok, :already_built} ->
@@ -138,6 +140,14 @@ defmodule BobWeb.RequestLive do
     socket
     |> clear_flash()
     |> put_flash(kind, message)
+  end
+
+  defp reload_request_lists(socket) do
+    assign(socket, pending_requests: pending_requests(), my_requests: my_requests(socket))
+  end
+
+  defp pending_requests() do
+    BuildRequests.pending(@pending_limit)
   end
 
   defp my_requests(socket) do
@@ -273,6 +283,24 @@ defmodule BobWeb.RequestLive do
           first and the Elixir image follows automatically afterwards.
         </div>
       </section>
+
+      <.section title="Pending requests" count={length(@pending_requests)} icon="queue">
+        <.table :if={@pending_requests != []} rows={@pending_requests} class="jt--req">
+          <:col :let={request} label="user">
+            <span class="mono-cell mono-cell--name"><%= request.username %></span>
+          </:col>
+          <:col :let={request} label="image">
+            <span class="kind-badge"><%= request.kind %></span>
+          </:col>
+          <:col :let={request} label="tag">
+            <code class="dk-tag-code" title={target(request)}><%= target(request) %></code>
+          </:col>
+          <:col :let={request} label="requested">
+            <span class="c-time"><%= fmt(request.inserted_at) %></span>
+          </:col>
+        </.table>
+        <div :if={@pending_requests == []} class="empty-mini">No pending requests.</div>
+      </.section>
 
       <.section :if={@my_requests != []} title="Your recent requests" icon="clock">
         <.table rows={@my_requests} class="jt--req">

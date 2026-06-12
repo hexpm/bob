@@ -151,6 +151,42 @@ defmodule Bob.BuildRequestsTest do
     end
   end
 
+  describe "pending/1" do
+    test "returns a bounded oldest-first list of pending requests" do
+      {:ok, oldest} = BuildRequests.create(Map.put(@erlang_attrs, :builds_count, 2))
+      {:ok, completed} = BuildRequests.create(Map.put(@elixir_attrs, :builds_count, 4))
+
+      {:ok, newest} =
+        BuildRequests.create(
+          %{@erlang_attrs | username: "jose", erlang: "28.0"}
+          |> Map.put(:builds_count, 2)
+        )
+
+      oldest
+      |> Ecto.Changeset.change(inserted_at: DateTime.add(DateTime.utc_now(), -3, :hour))
+      |> Repo.update!()
+
+      completed
+      |> Ecto.Changeset.change(
+        state: "completed",
+        inserted_at: DateTime.add(DateTime.utc_now(), -2, :hour)
+      )
+      |> Repo.update!()
+
+      newest
+      |> Ecto.Changeset.change(inserted_at: DateTime.add(DateTime.utc_now(), -1, :hour))
+      |> Repo.update!()
+
+      assert [%BuildRequest{id: oldest_id}, %BuildRequest{id: newest_id}] =
+               BuildRequests.pending(10)
+
+      assert [oldest_id, newest_id] == [oldest.id, newest.id]
+
+      assert [%BuildRequest{id: oldest_id}] = BuildRequests.pending(1)
+      assert oldest_id == oldest.id
+    end
+  end
+
   defp submit(attrs) do
     BuildRequests.submit(attrs)
   end

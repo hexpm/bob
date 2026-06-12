@@ -97,10 +97,13 @@ defmodule Bob.BuildRequests do
   end
 
   def pending() do
+    Repo.all(pending_query())
+  end
+
+  def pending(limit) when is_integer(limit) and limit > 0 do
     Repo.all(
-      from(request in BuildRequest,
-        where: request.state == "pending",
-        order_by: [asc: request.inserted_at]
+      from(request in pending_query(),
+        limit: ^limit
       )
     )
   end
@@ -125,6 +128,13 @@ defmodule Bob.BuildRequests do
         order_by: [desc: request.inserted_at],
         limit: ^limit
       )
+    )
+  end
+
+  defp pending_query() do
+    from(request in BuildRequest,
+      where: request.state == "pending",
+      order_by: [asc: request.inserted_at]
     )
   end
 
