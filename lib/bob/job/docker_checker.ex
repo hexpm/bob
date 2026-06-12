@@ -55,11 +55,13 @@ defmodule Bob.Job.DockerChecker do
   def run() do
     erlang()
     elixir()
+    requests()
     manifest()
   end
 
   def run(:erlang), do: erlang()
   def run(:elixir), do: elixir()
+  def run(:requests), do: requests()
   def run(:manifest), do: manifest()
 
   def priority(), do: 1
@@ -440,6 +442,75 @@ defmodule Bob.Job.DockerChecker do
 
   defp skip_elixir?(elixir) do
     Version.compare(normalize_version(elixir), "1.10.0-0") == :lt
+  end
+
+  # Requests that still have no tags after this long are unbuildable; expiring
+  # them stops the reconciliation from re-enqueueing doomed jobs forever.
+  @request_ttl_days 14
+
+  # User-requested builds are one-time: pinned to the os_version current at
+  # request time and reconciled here until every target tag exists. Requests
+  # whose os_version rotated out of builds() expire instead.
+  def requests() do
+    builds = builds()
+
+    Enum.each(Bob.BuildRequests.pending(), fn request ->
+      cond do
+        request.os_version not in Map.get(builds, request.os, []) ->
+          Bob.BuildRequests.expire(request)
+
+        DateTime.diff(DateTime.utc_now(), request.inserted_at, :day) >= @request_ttl_days ->
+          Bob.BuildRequests.expire(request)
+
+        true ->
+          case request_jobs(request) do
+            [] -> Bob.BuildRequests.complete(request)
+            jobs -> Bob.Queue.add_many(jobs)
+          end
+      end
+    end)
+  end
+
+  def request_jobs(%{kind: "erlang"} = request) do
+    %{erlang: erlang, os: os, os_version: os_version} = request
+    tag = "#{erlang}-#{os}-#{os_version}"
+
+    Enum.flat_map(@archs, fn arch ->
+      if tag_present?("hexpm/erlang-#{arch}", tag) do
+        []
+      else
+        [{{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}]
+      end
+    end)
+  end
+
+  # The elixir image is built FROM the erlang image, and failed jobs are not
+  # retried by the queue, so the elixir job is only enqueued once its base tag
+  # exists; until then the erlang build is enqueued and the next reconciliation
+  # cycle picks the request up again.
+  def request_jobs(%{kind: "elixir"} = request) do
+    %{elixir: elixir, erlang: erlang, os: os, os_version: os_version} = request
+    erlang_tag = "#{erlang}-#{os}-#{os_version}"
+    elixir_tag = "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
+
+    Enum.flat_map(@archs, fn arch ->
+      cond do
+        tag_present?("hexpm/elixir-#{arch}", elixir_tag) ->
+          []
+
+        tag_present?("hexpm/erlang-#{arch}", erlang_tag) ->
+          [{{Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version]}]
+
+        true ->
+          [{{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}]
+      end
+    end)
+  end
+
+  defp tag_present?(repo, tag) do
+    repo
+    |> Bob.Artifacts.docker_tags_present([tag])
+    |> MapSet.member?(tag)
   end
 
   def manifest() do

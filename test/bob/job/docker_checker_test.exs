@@ -269,6 +269,116 @@ defmodule Bob.Job.DockerCheckerTest do
     end
   end
 
+  describe "requests/0" do
+    setup do
+      Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250101"})
+      :ok
+    end
+
+    test "enqueues missing builds and keeps the request pending" do
+      request = insert_request(kind: "erlang", erlang: "27.0")
+
+      DockerChecker.requests()
+
+      assert Enum.count(Repo.all(Job)) == 2
+      assert Repo.reload!(request).state == "pending"
+    end
+
+    test "completes an erlang request once both archs are built" do
+      request = insert_request(kind: "erlang", erlang: "27.0")
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+
+      DockerChecker.requests()
+
+      assert Repo.all(Job) == []
+      assert Repo.reload!(request).state == "completed"
+    end
+
+    test "stages an elixir request through the erlang base build" do
+      request = insert_request(kind: "elixir", elixir: "1.18.0", erlang: "27.0")
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+
+      DockerChecker.requests()
+
+      jobs = Repo.all(Job) |> Enum.map(&{&1.module_key, &1.args}) |> Enum.sort()
+
+      assert jobs ==
+               Enum.sort([
+                 {{Bob.Job.BuildDockerElixir, "amd64"},
+                  ["1.18.0", "27.0", "ubuntu", "noble-20250101"]},
+                 {{Bob.Job.BuildDockerErlang, "arm64"}, ["27.0", "ubuntu", "noble-20250101"]}
+               ])
+
+      assert Repo.reload!(request).state == "pending"
+    end
+
+    test "completes an elixir request once both archs are built" do
+      request = insert_request(kind: "elixir", elixir: "1.18.0", erlang: "27.0")
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"]
+      )
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-arm64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["arm64"]
+      )
+
+      DockerChecker.requests()
+
+      assert Repo.all(Job) == []
+      assert Repo.reload!(request).state == "completed"
+    end
+
+    test "expires requests whose os_version is no longer current" do
+      request = insert_request(kind: "erlang", erlang: "27.0", os_version: "noble-20240101")
+
+      DockerChecker.requests()
+
+      assert Repo.all(Job) == []
+      assert Repo.reload!(request).state == "expired"
+    end
+
+    test "expires requests that never completed within the ttl" do
+      request = insert_request(kind: "erlang", erlang: "27.0")
+
+      request
+      |> Ecto.Changeset.change(inserted_at: DateTime.add(DateTime.utc_now(), -15, :day))
+      |> Repo.update!()
+
+      DockerChecker.requests()
+
+      assert Repo.all(Job) == []
+      assert Repo.reload!(request).state == "expired"
+    end
+
+    test "does not duplicate jobs already queued" do
+      insert_request(kind: "erlang", erlang: "27.0")
+
+      DockerChecker.requests()
+      DockerChecker.requests()
+
+      assert Enum.count(Repo.all(Job)) == 2
+    end
+
+    defp insert_request(attrs) do
+      attrs =
+        Enum.into(attrs, %{
+          username: "eric",
+          os: "ubuntu",
+          os_version: "noble-20250101",
+          builds_count: 2
+        })
+
+      {:ok, request} = Bob.BuildRequests.create(attrs)
+      request
+    end
+  end
+
   describe "manifest/0" do
     test "enqueues manifest jobs for per-arch tags missing from the manifest repo" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
