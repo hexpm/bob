@@ -287,6 +287,12 @@ pre,
   color: var(--color-grey-400);
 }
 
+.nav-user {
+  color: var(--color-grey-300);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
 .bob-main {
   flex: 1;
 }

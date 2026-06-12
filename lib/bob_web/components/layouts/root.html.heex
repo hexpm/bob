@@ -43,6 +43,12 @@
             >
               <.icon name="external" /> hexpm/bob
             </a>
+            <%= if assigns[:current_user] do %>
+              <span class="nav-user">{@current_user["username"]}</span>
+              <.link class="nav-ext" href={~p"/oauth/logout"} method="post">Log out</.link>
+            <% else %>
+              <.link class="nav-ext" href={~p"/oauth/login"}>Log in</.link>
+            <% end %>
           </div>
 
           <details class="bob-menu">
@@ -68,6 +74,15 @@
               >
                 <.icon name="external" /> hexpm/bob
               </a>
+              <%= if assigns[:current_user] do %>
+                <.link class="bob-menu__item" href={~p"/oauth/logout"} method="post">
+                  Log out ({@current_user["username"]})
+                </.link>
+              <% else %>
+                <.link class="bob-menu__item" href={~p"/oauth/login"}>
+                  Log in
+                </.link>
+              <% end %>
             </nav>
           </details>
         </div>

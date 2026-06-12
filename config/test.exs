@@ -3,7 +3,11 @@ import Config
 config :bob,
   master_schedule: [],
   agent_schedule: [],
-  github: Bob.FakeGitHub
+  github: Bob.FakeGitHub,
+  hexpm_impl: Bob.FakeHexpm,
+  hexpm_url: "http://localhost:4000",
+  oauth_client_id: "b0b00000-0000-4000-8000-000000000b0b",
+  oauth_client_secret: "test_secret"
 
 config :ex_aws,
   access_key_id: "test",
