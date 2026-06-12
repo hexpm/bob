@@ -3,8 +3,20 @@ defmodule Bob.GitHub do
 
   def fetch_repo_refs(repo) do
     branches = github_request(@github_url <> "repos/#{repo}/branches?per_page=100")
-    tags = github_request(@github_url <> "repos/#{repo}/tags?per_page=100")
-    response_to_refs(branches) ++ response_to_refs(tags)
+    response_to_refs(branches) ++ fetch_repo_tags(repo)
+  end
+
+  def fetch_repo_tags(repo) do
+    repo
+    |> tags_url()
+    |> github_request()
+    |> response_to_refs()
+  end
+
+  def fetch_repo_releases(repo) do
+    repo
+    |> releases_url()
+    |> github_request()
   end
 
   defp response_to_refs(response) do
@@ -17,7 +29,7 @@ defmodule Bob.GitHub do
     user = Application.get_env(:bob, :github_user)
     token = Application.get_env(:bob, :github_token)
 
-    opts = [basic_auth: {user, token}]
+    opts = if user && token, do: [basic_auth: {user, token}], else: []
 
     {:ok, 200, headers, body} =
       Bob.HTTP.retry("GitHub #{url}", fn -> Bob.HTTP.request(:get, url, [], "", opts) end)
@@ -46,4 +58,8 @@ defmodule Bob.GitHub do
       end
     end)
   end
+
+  defp tags_url(repo), do: @github_url <> "repos/#{repo}/tags?per_page=100"
+
+  defp releases_url(repo), do: @github_url <> "repos/#{repo}/releases?per_page=100"
 end

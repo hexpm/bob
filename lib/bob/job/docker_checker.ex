@@ -3,6 +3,7 @@ defmodule Bob.Job.DockerChecker do
 
   @erlang_tag_regex ~r"^(.+)-(alpine|ubuntu|debian)-(.+)$"
   @elixir_tag_regex ~r"^(.+)-erlang-(.+)-(alpine|ubuntu|debian)-(.+)$"
+  @elixir_release_asset_regex ~r"^elixir-otp-(\d+)\.zip$"
 
   @archs ["amd64", "arm64"]
   @erlang_arch_repos Enum.map(@archs, &"hexpm/erlang-#{&1}")
@@ -363,13 +364,11 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def elixir_builds() do
-    "builds/elixir"
-    |> Bob.Store.fetch_built_refs()
-    |> Stream.map(fn {build_name, _ref} -> build_name end)
-    |> Stream.map(&split_elixir_build/1)
+    "elixir-lang/elixir"
+    |> github().fetch_repo_releases()
+    |> Stream.flat_map(&release_elixir_builds/1)
     |> Stream.filter(&build_elixir_ref?/1)
     |> Enum.sort(&cmp_elixir_tags/2)
-    |> Enum.reject(fn {_elixir, otp} -> otp == nil end)
     |> Enum.reject(fn {"v" <> elixir, _otp} -> skip_elixir?(elixir) end)
   end
 
@@ -389,13 +388,6 @@ defmodule Bob.Job.DockerChecker do
       version = Version.parse!(normalize_version(elixir))
       {version.major, version.minor, otp}
     end)
-  end
-
-  defp split_elixir_build(build_name) do
-    case String.split(build_name, "-otp-") do
-      [elixir, major_otp] -> {elixir, major_otp}
-      [elixir] -> {elixir, nil}
-    end
   end
 
   defp cmp_elixir_tags({"v" <> elixir_left, otp_left}, {"v" <> elixir_right, otp_right}) do
@@ -427,6 +419,15 @@ defmodule Bob.Job.DockerChecker do
       [_major, _minor | _rest] -> version
       _ -> version
     end
+  end
+
+  defp release_elixir_builds(%{"tag_name" => tag_name, "assets" => assets}) do
+    Enum.flat_map(assets, fn %{"name" => name} ->
+      case Regex.run(@elixir_release_asset_regex, name, capture: :all_but_first) do
+        [otp_major] -> [{tag_name, otp_major}]
+        _other -> []
+      end
+    end)
   end
 
   defp compatible_elixir_and_erlang?(otp_major, erlang) do

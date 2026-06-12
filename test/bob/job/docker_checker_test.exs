@@ -8,10 +8,7 @@ defmodule Bob.Job.DockerCheckerTest do
   alias Bob.Artifacts.BaseImageTag
   alias Bob.Queue.Job
 
-  @builds_txt_url "https://s3.amazonaws.com/s3.hex.pm/builds/elixir/builds.txt"
-
   setup do
-    Bob.FakeHttpClient.reset()
     Bob.FakeGitHub.reset()
     :ok
   end
@@ -73,6 +70,26 @@ defmodule Bob.Job.DockerCheckerTest do
       builds = [{"v1.18", "27"}, {"v1.18.4", "27"}]
 
       assert DockerChecker.latest_elixir_builds(builds) == [{"v1.18.4", "27"}]
+    end
+  end
+
+  describe "elixir_builds/0" do
+    test "uses OTP-specific zip assets from GitHub releases" do
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
+        release("v1.18.0", ["27", "26", "exe-25"]),
+        release("v1.18.4", ["27", "26"]),
+        release("v1.20-latest", ["29"]),
+        release("v1.9.4", ["21"]),
+        release("v1.11.0-rc.0", ["23"])
+      ])
+
+      assert DockerChecker.elixir_builds() ==
+               [
+                 {"v1.18.4", "27"},
+                 {"v1.18.4", "26"},
+                 {"v1.18.0", "27"},
+                 {"v1.18.0", "26"}
+               ]
     end
   end
 
@@ -194,16 +211,10 @@ defmodule Bob.Job.DockerCheckerTest do
     test "crosses current-os-version erlang tags with compatible elixir builds" do
       Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250101"})
       Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha"}])
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [release("v1.18.0", ["27", "26"])])
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
       # An erlang tag on a base image that is no longer current contributes nothing.
       Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20240101", ["arm64"])
-
-      Bob.FakeHttpClient.stub(
-        :get,
-        @builds_txt_url,
-        200,
-        "v1.18.0-otp-27 abc123\nv1.18.0-otp-26 def456\n"
-      )
 
       assert Enum.to_list(DockerChecker.expected_elixir_tags()) ==
                [{"1.18.0", "27.0", "ubuntu", "noble-20250101", "amd64"}]
@@ -212,12 +223,11 @@ defmodule Bob.Job.DockerCheckerTest do
     test "expands only over the latest patch per erlang minor" do
       Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250101"})
       Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha1"}, {"OTP-27.0.1", "sha2"}])
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [release("v1.18.0", ["27"])])
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0.1-ubuntu-noble-20250101", ["amd64"])
       # An erlang tag that is not the latest patch, e.g. built on user request,
       # contributes nothing.
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
-
-      Bob.FakeHttpClient.stub(:get, @builds_txt_url, 200, "v1.18.0-otp-27 abc123\n")
 
       assert Enum.to_list(DockerChecker.expected_elixir_tags()) ==
                [{"1.18.0", "27.0.1", "ubuntu", "noble-20250101", "amd64"}]
@@ -226,14 +236,13 @@ defmodule Bob.Job.DockerCheckerTest do
     test "expands only over the latest elixir build per minor and otp major" do
       Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250101"})
       Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha"}])
-      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
 
-      Bob.FakeHttpClient.stub(
-        :get,
-        @builds_txt_url,
-        200,
-        "v1.18.0-otp-27 abc123\nv1.18.4-otp-27 def456\n"
-      )
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
+        release("v1.18.0", ["27"]),
+        release("v1.18.4", ["27"])
+      ])
+
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
 
       assert Enum.to_list(DockerChecker.expected_elixir_tags()) ==
                [{"1.18.4", "27.0", "ubuntu", "noble-20250101", "amd64"}]
@@ -244,8 +253,8 @@ defmodule Bob.Job.DockerCheckerTest do
     setup do
       Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250101"})
       Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha"}])
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [release("v1.18.0", ["27"])])
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
-      Bob.FakeHttpClient.stub(:get, @builds_txt_url, 200, "v1.18.0-otp-27 abc123\n")
       :ok
     end
 
@@ -377,6 +386,16 @@ defmodule Bob.Job.DockerCheckerTest do
       {:ok, request} = Bob.BuildRequests.create(attrs)
       request
     end
+  end
+
+  defp release(tag_name, otp_majors) do
+    assets =
+      Enum.map(otp_majors, fn
+        "exe-" <> otp -> %{"name" => "elixir-otp-#{otp}.exe"}
+        otp -> %{"name" => "elixir-otp-#{otp}.zip"}
+      end)
+
+    %{"tag_name" => tag_name, "assets" => assets}
   end
 
   describe "manifest/0" do

@@ -72,13 +72,13 @@ pre,
 }
 
 .flash {
-  margin: 10px auto 0;
-  max-width: 1240px;
+  margin: 0 0 18px;
   border-radius: 8px;
   background: var(--color-grey-800);
   color: #fff;
-  padding: 8px 12px;
+  padding: 11px 14px;
   font-size: 13px;
+  line-height: 1.35;
 }
 
 .bob {
@@ -297,11 +297,6 @@ pre,
   padding: 14px 20px 0;
   font-size: 13.5px;
   color: var(--color-grey-600);
-}
-
-.req-heading {
-  padding: 14px 20px 0;
-  font-size: 14px;
 }
 
 .bob-main {

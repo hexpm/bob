@@ -28,7 +28,7 @@ defmodule BobWeb.RequestLive do
         os: "",
         os_version: "",
         erlang: "",
-        elixir_build: "",
+        elixir: "",
         my_requests: my_requests(socket)
       )
 
@@ -48,12 +48,13 @@ defmodule BobWeb.RequestLive do
   end
 
   def handle_async(:options, {:exit, _reason}, socket) do
-    {:noreply, put_flash(socket, :error, "Loading versions failed, reload the page to retry.")}
+    {:noreply,
+     replace_flash(socket, :error, "Loading versions failed, reload the page to retry.")}
   end
 
   @impl true
   def handle_event("validate", params, socket) do
-    {:noreply, apply_form(socket, params)}
+    {:noreply, socket |> apply_form(params) |> clear_flash()}
   end
 
   def handle_event("request", params, socket) do
@@ -62,11 +63,12 @@ defmodule BobWeb.RequestLive do
 
     cond do
       socket.assigns.erlang_versions == nil ->
-        {:noreply, put_flash(socket, :error, "Versions are still loading, try again shortly.")}
+        {:noreply,
+         replace_flash(socket, :error, "Versions are still loading, try again shortly.")}
 
       os == "" or os_version == "" or erlang == "" or
-          (kind == "elixir" and socket.assigns.elixir_build == "") ->
-        {:noreply, put_flash(socket, :error, "Select a value for every field.")}
+          (kind == "elixir" and socket.assigns.elixir == "") ->
+        {:noreply, replace_flash(socket, :error, "Select a value for every field.")}
 
       true ->
         {:noreply, submit(socket)}
@@ -82,17 +84,18 @@ defmodule BobWeb.RequestLive do
     os = keep_member(params["os"], socket.assigns.oses)
     os_version = keep_member(params["os_version"], Map.get(socket.assigns.builds, os, []))
 
-    elixir_build =
+    assigns = %{socket.assigns | kind: kind, os: os, os_version: os_version}
+    erlang = keep_member(params["erlang"], erlang_options(assigns))
+    assigns = %{assigns | erlang: erlang}
+
+    elixir =
       if kind == "elixir" do
-        keep_member(params["elixir_build"], elixir_build_options(socket.assigns.elixir_builds))
+        keep_member(params["elixir"], elixir_options(assigns))
       else
         ""
       end
 
-    socket =
-      assign(socket, kind: kind, os: os, os_version: os_version, elixir_build: elixir_build)
-
-    assign(socket, erlang: keep_member(params["erlang"], erlang_options(socket.assigns)))
+    assign(socket, kind: kind, os: os, os_version: os_version, elixir: elixir, erlang: erlang)
   end
 
   defp keep_member(value, options) do
@@ -113,13 +116,13 @@ defmodule BobWeb.RequestLive do
       {:ok, %BuildRequest{}} ->
         socket
         |> assign(my_requests: my_requests(socket))
-        |> put_flash(:info, "Build queued, follow the progress on the jobs dashboard.")
+        |> replace_flash(:info, "Build queued, follow the progress on the jobs dashboard.")
 
       {:ok, :already_built} ->
-        put_flash(socket, :info, "This image is already built, find it under Docker tags.")
+        replace_flash(socket, :info, "This image is already built, find it under Docker tags.")
 
       {:error, :rate_limited} ->
-        put_flash(
+        replace_flash(
           socket,
           :error,
           "You reached the limit of #{BuildRequests.hourly_build_limit()} requested builds " <>
@@ -127,8 +130,14 @@ defmodule BobWeb.RequestLive do
         )
 
       {:error, :invalid_combo} ->
-        put_flash(socket, :error, "This combination is not supported by the build rules.")
+        replace_flash(socket, :error, "This combination is not supported by the build rules.")
     end
+  end
+
+  defp replace_flash(socket, kind, message) do
+    socket
+    |> clear_flash()
+    |> put_flash(kind, message)
   end
 
   defp my_requests(socket) do
@@ -151,36 +160,35 @@ defmodule BobWeb.RequestLive do
   defp erlang_options(assigns) do
     %{erlang_versions: versions, os: os, os_version: os_version} = assigns
 
-    case {assigns.kind, decode_elixir_build(assigns.elixir_build)} do
-      {"elixir", {elixir, otp_major}} ->
-        Enum.filter(
-          versions,
-          &DockerChecker.valid_elixir_build?(elixir, otp_major, &1, os, os_version)
-        )
+    Enum.filter(versions, &DockerChecker.valid_erlang_build?(&1, os, os_version))
+  end
+
+  defp elixir_options(%{elixir_builds: nil}), do: []
+  defp elixir_options(%{erlang: ""}), do: []
+
+  defp elixir_options(%{
+         elixir_builds: elixir_builds,
+         erlang: erlang,
+         os: os,
+         os_version: os_version
+       }) do
+    otp_major = otp_major(erlang)
+
+    elixir_builds
+    |> Enum.filter(fn
+      {"v" <> elixir, ^otp_major} ->
+        DockerChecker.valid_elixir_build?(elixir, otp_major, erlang, os, os_version)
 
       _other ->
-        Enum.filter(versions, &DockerChecker.valid_erlang_build?(&1, os, os_version))
-    end
+        false
+    end)
+    |> Enum.map(fn {"v" <> elixir, _otp_major} -> elixir end)
+    |> Enum.uniq()
   end
 
-  defp elixir_build_options(nil), do: []
+  defp otp_major(erlang), do: erlang |> String.split(".") |> hd()
 
-  defp elixir_build_options(elixir_builds) do
-    Enum.map(elixir_builds, fn {"v" <> elixir, otp_major} -> "#{elixir}-otp-#{otp_major}" end)
-  end
-
-  defp decode_elixir_build(""), do: nil
-
-  defp decode_elixir_build(elixir_build) do
-    [elixir, otp_major] = String.split(elixir_build, "-otp-")
-    {elixir, otp_major}
-  end
-
-  defp selected_elixir(%{kind: "elixir", elixir_build: elixir_build}) do
-    {elixir, _otp_major} = decode_elixir_build(elixir_build)
-    elixir
-  end
-
+  defp selected_elixir(%{kind: "elixir", elixir: elixir}), do: elixir
   defp selected_elixir(_assigns), do: nil
 
   # The erlang base image gets built first when it is missing; surface that so
@@ -229,21 +237,14 @@ defmodule BobWeb.RequestLive do
 
         <form phx-change="validate" phx-submit="request" class="filter-bar filter-bar--wrap">
           <.form_select name="kind" label="image" value={@kind} options={~w(erlang elixir)} />
-          <.form_select name="os" label="os" value={@os} options={@oses} />
+          <.form_select name="os" label="os" value={@os} options={@oses} prompt="Select OS" />
           <.form_select
             name="os_version"
             label="os version"
             value={@os_version}
             options={Map.get(@builds, @os, [])}
             disabled={@os == ""}
-          />
-          <.form_select
-            :if={@kind == "elixir"}
-            name="elixir_build"
-            label="elixir"
-            value={@elixir_build}
-            options={elixir_build_options(@elixir_builds)}
-            disabled={@elixir_builds == nil}
+            prompt="Select OS version"
           />
           <.form_select
             name="erlang"
@@ -251,6 +252,16 @@ defmodule BobWeb.RequestLive do
             value={@erlang}
             options={erlang_options(assigns)}
             disabled={@erlang_versions == nil or @os_version == ""}
+            prompt="Select Erlang"
+          />
+          <.form_select
+            :if={@kind == "elixir"}
+            name="elixir"
+            label="elixir"
+            value={@elixir}
+            options={elixir_options(assigns)}
+            disabled={@elixir_builds == nil or @erlang == ""}
+            prompt="Select Elixir"
           />
           <button class="pg-btn" type="submit">Request build</button>
         </form>
@@ -263,9 +274,7 @@ defmodule BobWeb.RequestLive do
         </div>
       </section>
 
-      <section :if={@my_requests != []} class="sec">
-        <h2 class="req-heading">Your recent requests</h2>
-
+      <.section :if={@my_requests != []} title="Your recent requests" icon="clock">
         <.table rows={@my_requests} class="jt--req">
           <:col :let={request} label="image">
             <%= request.kind %>
@@ -280,7 +289,7 @@ defmodule BobWeb.RequestLive do
             <span class="c-time"><%= fmt(request.inserted_at) %></span>
           </:col>
         </.table>
-      </section>
+      </.section>
     </div>
     """
   end
@@ -290,13 +299,16 @@ defmodule BobWeb.RequestLive do
   attr(:value, :string, default: "")
   attr(:options, :list, required: true)
   attr(:disabled, :boolean, default: false)
+  attr(:prompt, :string, default: nil)
 
   defp form_select(assigns) do
     ~H"""
     <label class={["fsel", @disabled && "fsel--off"]}>
       <span class="fsel__label"><%= @label %>:</span>
       <select name={@name} disabled={@disabled}>
-        <option value="">choose</option>
+        <option :if={@prompt} value="" disabled selected={@value == ""} hidden>
+          <%= @prompt %>
+        </option>
         <option :for={option <- @options} value={option} selected={option == @value}>
           <%= option %>
         </option>

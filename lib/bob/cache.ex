@@ -1,7 +1,7 @@
 defmodule Bob.Cache do
   @moduledoc """
   Read-through cache with per-key TTLs for values that are expensive to fetch
-  (GitHub refs, S3 build lists) but fine to serve slightly stale.
+  (external version metadata, refs) but fine to serve slightly stale.
   """
 
   use GenServer

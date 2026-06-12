@@ -7,16 +7,19 @@ defmodule BobWeb.RequestLiveTest do
   alias Bob.BuildRequests.BuildRequest
   alias Bob.Queue.Job
 
-  @builds_txt_url "https://s3.amazonaws.com/s3.hex.pm/builds/elixir/builds.txt"
-
   setup %{conn: conn} do
-    Bob.FakeHttpClient.reset()
     Bob.FakeGitHub.reset()
     Bob.Cache.clear()
 
     Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250101"})
     Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha1"}, {"OTP-27.0.1", "sha2"}])
-    Bob.FakeHttpClient.stub(:get, @builds_txt_url, 200, "v1.18.0-otp-27 abc123\n")
+
+    Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
+      %{
+        "tag_name" => "v1.18.0",
+        "assets" => [%{"name" => "elixir-otp-27.zip"}]
+      }
+    ])
 
     {:ok, conn: conn}
   end
@@ -26,6 +29,12 @@ defmodule BobWeb.RequestLiveTest do
       "current_user" => %{"username" => "eric"},
       "token_expires_at" => System.system_time(:second) + 1800
     })
+  end
+
+  defp select_names(html) do
+    ~r/<select name="([^"]+)"/
+    |> Regex.scan(html, capture: :all_but_first)
+    |> List.flatten()
   end
 
   defp select_erlang(view, erlang) do
@@ -48,7 +57,9 @@ defmodule BobWeb.RequestLiveTest do
 
     assert html =~ "Request a build"
     assert html =~ "Loading versions"
-    refute render_async(view) =~ "Loading versions"
+    html = render_async(view)
+    refute html =~ "Loading versions"
+    refute html =~ "choose"
 
     html = view |> element("form") |> render_change(%{"kind" => "erlang", "os" => "ubuntu"})
     assert html =~ "noble-20250101"
@@ -64,6 +75,48 @@ defmodule BobWeb.RequestLiveTest do
 
     assert html =~ "27.0"
     refute html =~ ">24.1<"
+  end
+
+  test "offers erlang before bare elixir releases and infers OTP from erlang", %{conn: conn} do
+    Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha1"}, {"OTP-28.0", "sha2"}])
+
+    Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
+      %{"tag_name" => "v1.19.0", "assets" => [%{"name" => "elixir-otp-28.zip"}]},
+      %{"tag_name" => "v1.18.0", "assets" => [%{"name" => "elixir-otp-27.zip"}]}
+    ])
+
+    {:ok, view, _html} = live(log_in(conn), ~p"/request")
+    render_async(view)
+
+    html =
+      view
+      |> element("form")
+      |> render_change(%{
+        "kind" => "elixir",
+        "os" => "ubuntu",
+        "os_version" => "noble-20250101"
+      })
+
+    assert select_names(html) == ["kind", "os", "os_version", "erlang", "elixir"]
+    assert html =~ "27.0"
+    assert html =~ "28.0"
+    refute html =~ ~s(value="1.19.0")
+    refute html =~ ~s(value="1.18.0")
+    refute html =~ "otp-"
+
+    html =
+      view
+      |> element("form")
+      |> render_change(%{
+        "kind" => "elixir",
+        "os" => "ubuntu",
+        "os_version" => "noble-20250101",
+        "erlang" => "27.0"
+      })
+
+    assert html =~ ~s(value="1.18.0")
+    refute html =~ ~s(value="1.19.0")
+    refute html =~ "otp-"
   end
 
   test "submits an erlang build request", %{conn: conn} do
@@ -98,7 +151,7 @@ defmodule BobWeb.RequestLiveTest do
       "kind" => "elixir",
       "os" => "ubuntu",
       "os_version" => "noble-20250101",
-      "elixir_build" => "1.18.0-otp-27",
+      "elixir" => "1.18.0",
       "erlang" => "27.0"
     }
 
@@ -139,6 +192,40 @@ defmodule BobWeb.RequestLiveTest do
     assert html =~ "already built"
     assert Repo.all(BuildRequest) == []
     assert Repo.all(Job) == []
+  end
+
+  test "replaces old flash messages", %{conn: conn} do
+    Bob.Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+    Bob.Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+
+    {:ok, view, _html} = live(log_in(conn), ~p"/request")
+    render_async(view)
+    select_erlang(view, "27.0")
+
+    html =
+      view
+      |> element("form")
+      |> render_submit(%{
+        "kind" => "erlang",
+        "os" => "ubuntu",
+        "os_version" => "noble-20250101",
+        "erlang" => "27.0"
+      })
+
+    assert html =~ "already built"
+
+    html =
+      view
+      |> element("form")
+      |> render_submit(%{
+        "kind" => "erlang",
+        "os" => "ubuntu",
+        "os_version" => "noble-20250101",
+        "erlang" => "24.1"
+      })
+
+    assert html =~ "Select a value for every field"
+    refute html =~ "already built"
   end
 
   test "rejects submissions over the hourly build limit", %{conn: conn} do
