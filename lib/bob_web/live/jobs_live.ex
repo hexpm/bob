@@ -31,14 +31,22 @@ defmodule BobWeb.JobsLive do
         past_more: false
       )
 
-    socket =
-      if connected?(socket) do
-        socket |> assign(modules: load_modules()) |> load() |> schedule_tick()
-      else
-        socket
-      end
+    socket = if connected?(socket), do: assign(socket, modules: load_modules()), else: socket
 
     {:ok, socket}
+  end
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    socket =
+      assign(socket,
+        selected: parse_modules(params),
+        queued_offset: parse_offset(params["queued"]),
+        past_offset: parse_offset(params["past"])
+      )
+
+    socket = if connected?(socket), do: socket |> load() |> schedule_tick(), else: socket
+    {:noreply, socket}
   end
 
   @impl true
@@ -67,32 +75,52 @@ defmodule BobWeb.JobsLive do
   @impl true
   def handle_event("queued_page", %{"dir" => dir}, socket) do
     offset = max(socket.assigns.queued_offset + step(dir, @queued_page), 0)
-    {:noreply, socket |> assign(queued_offset: offset) |> load()}
+
+    {:noreply,
+     push_patch(socket,
+       to: ~p"/?#{jobs_query(socket.assigns.selected, offset, socket.assigns.past_offset)}"
+     )}
   end
 
   def handle_event("past_page", %{"dir" => dir}, socket) do
     offset = max(socket.assigns.past_offset + step(dir, @past_page), 0)
-    {:noreply, socket |> assign(past_offset: offset) |> load()}
+
+    {:noreply,
+     push_patch(socket,
+       to: ~p"/?#{jobs_query(socket.assigns.selected, socket.assigns.queued_offset, offset)}"
+     )}
   end
 
   def handle_event("toggle_module", %{"module" => name}, socket) do
-    selected = socket.assigns.selected
-
     selected =
-      if MapSet.member?(selected, name) do
-        MapSet.delete(selected, name)
+      if MapSet.member?(socket.assigns.selected, name) do
+        MapSet.delete(socket.assigns.selected, name)
       else
-        MapSet.put(selected, name)
+        MapSet.put(socket.assigns.selected, name)
       end
 
-    {:noreply,
-     socket
-     |> assign(selected: selected, queued_offset: 0, past_offset: 0)
-     |> load()}
+    {:noreply, push_patch(socket, to: ~p"/?#{jobs_query(selected, 0, 0)}")}
   end
 
   defp step("next", page), do: page
   defp step("prev", page), do: -page
+
+  defp parse_modules(params) do
+    params |> Map.get("module", []) |> List.wrap() |> MapSet.new()
+  end
+
+  defp parse_offset(value) do
+    case Integer.parse(to_string(value || "")) do
+      {offset, ""} when offset > 0 -> offset
+      _ -> 0
+    end
+  end
+
+  defp jobs_query(selected, queued_offset, past_offset) do
+    query = if MapSet.size(selected) > 0, do: [module: MapSet.to_list(selected)], else: []
+    query = if queued_offset > 0, do: query ++ [queued: queued_offset], else: query
+    if past_offset > 0, do: query ++ [past: past_offset], else: query
+  end
 
   defp load(socket) do
     selected = socket.assigns.selected

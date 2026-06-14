@@ -96,6 +96,26 @@ defmodule BobWeb.JobsLiveTest do
     assert html =~ ":docker_done"
   end
 
+  test "selecting a module patches the URL so the filter survives a re-mount", %{conn: conn} do
+    Bob.Queue.add(Bob.Job.OTPChecker, [:otp_queued])
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    view |> element("button[phx-value-module='Bob.Job.OTPChecker']") |> render_click()
+    assert_patch(view, ~p"/?#{[module: ["Bob.Job.OTPChecker"]]}")
+  end
+
+  test "applies the module filter from URL params on load", %{conn: conn} do
+    Bob.Queue.add(Bob.Job.OTPChecker, [:otp_queued])
+    Bob.Queue.add(Bob.Job.DockerChecker, [:docker_queued])
+
+    {:ok, _view, html} = live(conn, ~p"/?#{[module: ["Bob.Job.OTPChecker"]]}")
+
+    assert html =~ ":otp_queued"
+    refute html =~ ":docker_queued"
+    assert html =~ "chip--active"
+  end
+
   test "renders tuple module keys without inspect syntax", %{conn: conn} do
     Bob.Queue.add({Bob.Job.BuildDockerElixir, "amd64"}, [:tuple_label])
 

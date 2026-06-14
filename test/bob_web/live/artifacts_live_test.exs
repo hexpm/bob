@@ -50,4 +50,18 @@ defmodule BobWeb.ArtifactsLiveTest do
     assert html =~ "OTP-26.2"
     refute html =~ "OTP-27.0"
   end
+
+  test "applies filters from URL params on load", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/artifacts?query=27.0")
+
+    assert html =~ "OTP-27.0"
+    refute html =~ "OTP-26.2"
+  end
+
+  test "searching patches the URL so filters survive a refresh", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/artifacts")
+
+    render_change(view, "search", %{"query" => "27.0", "kind" => "", "arch" => "", "os" => ""})
+    assert_patch(view, ~p"/artifacts?query=27.0")
+  end
 end
