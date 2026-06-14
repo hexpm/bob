@@ -113,4 +113,50 @@ defmodule Bob.Queue.MaintenanceTest do
 
     assert [%Job{state: "queued"}] = Repo.all(Job)
   end
+
+  test "caps completed job history at the maximum, keeping the most recent" do
+    Application.put_env(:bob, :history_max_jobs, 2)
+    on_exit(fn -> Application.delete_env(:bob, :history_max_jobs) end)
+
+    now = DateTime.utc_now()
+
+    for i <- 1..4 do
+      insert_job(state: "done", inserted_at: now, finished_at: DateTime.add(now, i, :second))
+    end
+
+    Maintenance.run()
+
+    kept =
+      Repo.all(from(j in Job, order_by: [asc: j.finished_at], select: j.finished_at))
+
+    assert kept == [DateTime.add(now, 3, :second), DateTime.add(now, 4, :second)]
+  end
+
+  test "does not count queued or running jobs toward the history cap" do
+    Application.put_env(:bob, :history_max_jobs, 2)
+    on_exit(fn -> Application.delete_env(:bob, :history_max_jobs) end)
+
+    now = DateTime.utc_now()
+    insert_job(state: "queued", args: [:q], args_digest: Term.digest([:q]), inserted_at: now)
+
+    insert_job(
+      state: "running",
+      args: [:r],
+      args_digest: Term.digest([:r]),
+      inserted_at: now,
+      started_at: now
+    )
+
+    for i <- 1..3 do
+      insert_job(state: "done", inserted_at: now, finished_at: DateTime.add(now, i, :second))
+    end
+
+    Maintenance.run()
+
+    assert Repo.all(Job) |> Enum.frequencies_by(& &1.state) == %{
+             "queued" => 1,
+             "running" => 1,
+             "done" => 2
+           }
+  end
 end
