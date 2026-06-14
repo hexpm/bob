@@ -28,11 +28,15 @@ defmodule BobWeb.JobsLive do
         queue_total: 0,
         queued: [],
         past: [],
-        past_total: 0
+        past_more: false
       )
 
-    socket = if connected?(socket), do: load(socket), else: socket
-    socket = if connected?(socket), do: schedule_tick(socket), else: socket
+    socket =
+      if connected?(socket) do
+        socket |> assign(modules: load_modules()) |> load() |> schedule_tick()
+      else
+        socket
+      end
 
     {:ok, socket}
   end
@@ -91,13 +95,10 @@ defmodule BobWeb.JobsLive do
   defp step("prev", page), do: -page
 
   defp load(socket) do
-    modules =
-      Bob.Queue.job_modules()
-      |> Enum.sort_by(&{housekeeping?(&1), module_name(&1)})
-
     selected = socket.assigns.selected
-    filter = Enum.filter(modules, &MapSet.member?(selected, module_name(&1)))
+    filter = Enum.filter(socket.assigns.modules, &MapSet.member?(selected, module_name(&1)))
     queued_counts = Map.new(Bob.Queue.queue_sizes())
+    running = Bob.Queue.running(filter)
 
     queue_total =
       queued_counts
@@ -105,17 +106,32 @@ defmodule BobWeb.JobsLive do
       |> Enum.map(fn {_mod, count} -> count end)
       |> Enum.sum()
 
+    past = Bob.Queue.recent(@past_page + 1, socket.assigns.past_offset, filter)
+
     assign(socket,
-      running: Bob.Queue.running(filter),
+      running: running,
       now: DateTime.utc_now(),
-      modules: modules,
+      modules: merge_modules(socket.assigns.modules, queued_counts, running),
       queued_counts: queued_counts,
       queue_total: queue_total,
       queued: Bob.Queue.queued_listing(@queued_page, socket.assigns.queued_offset, filter),
-      past: Bob.Queue.recent(@past_page, socket.assigns.past_offset, filter),
-      past_total: Bob.Queue.finished_count(filter),
+      past: Enum.take(past, @past_page),
+      past_more: length(past) > @past_page,
       loading: false
     )
+  end
+
+  defp load_modules() do
+    Bob.Queue.job_modules()
+    |> Enum.sort_by(&{housekeeping?(&1), module_name(&1)})
+  end
+
+  defp merge_modules(modules, queued_counts, running) do
+    seen = Map.keys(queued_counts) ++ Enum.map(running, & &1.module_key)
+
+    (modules ++ seen)
+    |> Enum.uniq()
+    |> Enum.sort_by(&{housekeeping?(&1), module_name(&1)})
   end
 
   defp schedule_tick(%{assigns: %{running: [], tick_scheduled: false}} = socket), do: socket
@@ -163,6 +179,8 @@ defmodule BobWeb.JobsLive do
 
   defp module_name(module_key), do: inspect(module_key)
 
+  defp chip_id(module_key), do: String.replace(module_name(module_key), ~r/[^A-Za-z0-9]+/, "-")
+
   defp module_label({module, key}), do: "#{inspect(module)} #{key}"
   defp module_label(module), do: inspect(module)
 
@@ -199,9 +217,10 @@ defmodule BobWeb.JobsLive do
         </div>
       </div>
 
-      <div :if={@modules != []} class="chip-row chip-row--filter">
+      <div :if={@modules != []} id="job-filters" class="chip-row chip-row--filter">
         <button
           :for={mod <- @modules}
+          id={"chip-" <> chip_id(mod)}
           type="button"
           class={["chip", MapSet.member?(@selected, module_name(mod)) && "chip--active"]}
           phx-click="toggle_module"
@@ -271,7 +290,7 @@ defmodule BobWeb.JobsLive do
         />
       </.section>
 
-      <.section title="Past" count={@past_total} icon="clock">
+      <.section title="Past" icon="clock">
         <div :if={@loading} class="empty-mini">Loading finished jobs...</div>
 
         <.table :if={!@loading and @past != []} rows={@past}>
@@ -299,7 +318,7 @@ defmodule BobWeb.JobsLive do
           count={length(@past)}
           page={@past_page}
           unit="jobs"
-          total={@past_total}
+          more={@past_more}
         />
       </.section>
     </div>

@@ -93,6 +93,7 @@ defmodule BobWeb.CoreComponents do
   attr(:page, :integer, required: true)
   attr(:unit, :string, default: nil)
   attr(:total, :integer, default: nil)
+  attr(:more, :boolean, default: nil)
 
   def pager(assigns) do
     assigns =
@@ -133,6 +134,8 @@ defmodule BobWeb.CoreComponents do
   def format_unit(nil, _count), do: nil
   def format_unit(unit, 1), do: singular_unit(unit)
   def format_unit(unit, _count), do: unit
+
+  defp next_disabled?(%{more: more}) when is_boolean(more), do: not more
 
   defp next_disabled?(%{count: count, page: page}) when count < page, do: true
 
