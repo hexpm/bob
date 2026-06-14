@@ -232,7 +232,18 @@ defmodule Bob.Queue do
   end
 
   defp filter_modules(query, []), do: query
-  defp filter_modules(query, modules), do: where(query, [j], j.module_key in ^modules)
+
+  defp filter_modules(query, modules) do
+    # A module key can be a `{module, key}` tuple, and a list of those reads as a
+    # keyword list, which Ecto's `in` rejects. Match each key with `==` so the
+    # Term type dumps it as a single value instead.
+    conditions =
+      Enum.reduce(modules, dynamic(false), fn module, acc ->
+        dynamic([j], ^acc or j.module_key == ^module)
+      end)
+
+    where(query, ^conditions)
+  end
 
   defp finish(id, state) do
     now = DateTime.utc_now()
