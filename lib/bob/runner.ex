@@ -7,6 +7,13 @@ defmodule Bob.Runner do
   @local_timeout 1_000
   @remote_timeout 60_000
 
+  # A build that hangs (e.g. a wedged `docker build`) blocks its task forever and
+  # keeps counting its weight against the shared budget, so the agent stops
+  # pulling new builds. Reap a task that outlives the master's stale-job timeout
+  # (mirrors Bob.Queue.Maintenance @job_timeout_seconds) so the slot is freed and
+  # the job is reported failed.
+  @job_timeout 3 * 60 * 60 * 1000
+
   def start_link([]) do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
   end
@@ -46,7 +53,8 @@ defmodule Bob.Runner do
   end
 
   def handle_info({ref, result}, state) when is_reference(ref) do
-    {key, args, job_id, _pid} = Map.fetch!(state.tasks, ref)
+    {key, args, job_id, _pid, timer} = Map.fetch!(state.tasks, ref)
+    Process.cancel_timer(timer)
 
     case result do
       :ok ->
@@ -74,9 +82,28 @@ defmodule Bob.Runner do
       {nil, _tasks} ->
         {:noreply, state}
 
-      {{key, args, job_id, _pid}, tasks} ->
+      {{key, args, job_id, _pid, timer}, tasks} ->
+        Process.cancel_timer(timer)
         if job_id, do: Bob.RemoteQueue.failure(job_id)
         Logger.error("FAILED #{inspect(key)} #{inspect(args)} (#{inspect(reason)})")
+        state = start_any_jobs(%{state | tasks: tasks})
+        {:noreply, state}
+    end
+  end
+
+  # A task still running past @job_timeout is wedged (e.g. a hung `docker build`).
+  # Kill it so it stops leaking its weight, fail the job, and pull fresh work.
+  # The kill triggers an abnormal :DOWN, but the row is already gone so that
+  # clause no-ops.
+  def handle_info({:job_timeout, ref}, state) do
+    case Map.pop(state.tasks, ref) do
+      {nil, _tasks} ->
+        {:noreply, state}
+
+      {{key, args, job_id, pid, _timer}, tasks} ->
+        Task.Supervisor.terminate_child(Bob.Tasks, pid)
+        if job_id, do: Bob.RemoteQueue.failure(job_id)
+        Logger.error("TIMED OUT #{inspect(key)} #{inspect(args)}")
         state = start_any_jobs(%{state | tasks: tasks})
         {:noreply, state}
     end
@@ -136,7 +163,7 @@ defmodule Bob.Runner do
   end
 
   def terminate(_reason, state) do
-    Enum.each(state.tasks, fn {_ref, {key, args, job_id, pid}} ->
+    Enum.each(state.tasks, fn {_ref, {key, args, job_id, pid, _timer}} ->
       # Kill the task before requeueing so a straggler completion report can't
       # finish a row that another node may have re-claimed by then.
       Task.Supervisor.terminate_child(Bob.Tasks, pid)
@@ -149,7 +176,7 @@ defmodule Bob.Runner do
   end
 
   defp current_weight(state) do
-    Enum.reduce(state.tasks, %{}, fn {_ref, {module, _args, _id, _pid}}, weights ->
+    Enum.reduce(state.tasks, %{}, fn {_ref, {module, _args, _id, _pid, _timer}}, weights ->
       concurrency_key = apply_task(module, :concurrency, [])
       weight = apply_task(module, :weight, [])
       Map.update(weights, concurrency_key, weight, &(&1 + weight))
@@ -159,7 +186,8 @@ defmodule Bob.Runner do
   defp start_job(id, key, args, state) do
     Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
     task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(key, args) end)
-    put_in(state.tasks[task.ref], {key, args, id, task.pid})
+    timer = Process.send_after(self(), {:job_timeout, task.ref}, @job_timeout)
+    put_in(state.tasks[task.ref], {key, args, id, task.pid, timer})
   end
 
   defp new_state do
