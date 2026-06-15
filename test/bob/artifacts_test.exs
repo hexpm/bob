@@ -146,6 +146,57 @@ defmodule Bob.ArtifactsTest do
       assert "builds/otp/amd64/ubuntu-24.04/builds.txt" =
                Artifacts.generate_builds_txt("amd64", "ubuntu-24.04")
     end
+
+    test "does not upload builds.txt.signed when no sign key is configured" do
+      Bob.FakeHttpClient.reset()
+
+      Bob.FakeHttpClient.stub(
+        :put,
+        "https://s3.amazonaws.com/s3.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt",
+        200,
+        ""
+      )
+
+      # No BOB_BUILDS_SIGN_KEY in app env -> sign_content returns nil.
+      Application.delete_env(:bob, :builds_sign_key)
+      Artifacts.upsert(attrs())
+
+      assert "builds/otp/amd64/ubuntu-24.04/builds.txt" =
+               Artifacts.generate_builds_txt("amd64", "ubuntu-24.04")
+
+      # If a PUT for the .signed path had been attempted against the
+      # FakeHttpClient without a stub, ExAws would have raised on the 404
+      # response (put_file uses request!/0).  Reaching here means no PUT was
+      # attempted.
+    end
+
+    test "uploads builds.txt.signed alongside builds.txt when a sign key is configured" do
+      Bob.FakeHttpClient.reset()
+
+      Bob.FakeHttpClient.stub(
+        :put,
+        "https://s3.amazonaws.com/s3.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt",
+        200,
+        ""
+      )
+
+      Bob.FakeHttpClient.stub(
+        :put,
+        "https://s3.amazonaws.com/s3.hex.pm/builds/otp/amd64/ubuntu-24.04/builds.txt.signed",
+        200,
+        ""
+      )
+
+      pem_path = generate_test_pem()
+      Application.put_env(:bob, :builds_sign_key, pem_path)
+
+      Artifacts.upsert(attrs())
+
+      assert "builds/otp/amd64/ubuntu-24.04/builds.txt" =
+               Artifacts.generate_builds_txt("amd64", "ubuntu-24.04")
+    after
+      Application.delete_env(:bob, :builds_sign_key)
+    end
   end
 
   describe "built_otp_refs/2" do
@@ -892,5 +943,16 @@ defmodule Bob.ArtifactsTest do
       sha256: sha256,
       built_at: ~U[2026-01-02 03:04:05.000000Z]
     }
+  end
+
+  # Lazily generates a shared RSA key for tests that exercise signing.
+  defp generate_test_pem() do
+    pem_path = Path.join(System.tmp_dir!(), "bob_artifacts_test_key.pem")
+
+    unless File.exists?(pem_path) do
+      {_out, 0} = System.cmd("openssl", ["genrsa", "-out", pem_path, "2048"])
+    end
+
+    pem_path
   end
 end

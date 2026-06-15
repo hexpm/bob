@@ -7,6 +7,7 @@ if config_env() == :prod do
   end
 
   config :bob,
+    builds_sign_key: System.get_env("BOB_BUILDS_SIGN_KEY"),
     github_user: System.fetch_env!("BOB_GITHUB_USER"),
     github_token: System.fetch_env!("BOB_GITHUB_TOKEN"),
     dockerhub_username: System.get_env("BOB_DOCKERHUB_USERNAME"),

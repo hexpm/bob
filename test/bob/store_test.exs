@@ -86,4 +86,61 @@ defmodule Bob.StoreTest do
                )
     end
   end
+
+  describe "sign_content/2" do
+    test "returns nil when no key path is configured" do
+      assert Store.sign_content(nil, "some content") == nil
+    end
+
+    test "returns a base64 signature for a valid PEM key" do
+      pem_path = generate_test_key()
+
+      signature = Store.sign_content(pem_path, "OTP-27.0 abc123 2026-01-01T00:00:00Z hash\n")
+
+      assert is_binary(signature)
+      assert {:ok, _} = Base.decode64(signature)
+      assert byte_size(Base.decode64!(signature)) > 0
+    end
+
+    test "the signature verifies against the content using the matching public key" do
+      pem_path = generate_test_key()
+      pub_path = pem_path <> ".pub"
+
+      # Export the public key once
+      {pub_pem, 0} = System.cmd("openssl", ["rsa", "-pubout", "-in", pem_path])
+      File.write!(pub_path, pub_pem)
+
+      content = "OTP-27.0 abc123 2026-01-01T00:00:00Z hash\n"
+      b64_sig = Store.sign_content(pem_path, content)
+      sig_bytes = Base.decode64!(b64_sig)
+
+      # Write sig bytes to a temp file for verification
+      sig_path = pem_path <> ".sig"
+      File.write!(sig_path, sig_bytes)
+
+      content_path = pem_path <> ".content"
+      File.write!(content_path, content)
+
+      {_output, exit_code} =
+        System.cmd(
+          "openssl",
+          ["dgst", "-sha512", "-verify", pub_path, "-signature", sig_path, content_path]
+        )
+
+      assert exit_code == 0
+    end
+  end
+
+  # Generates a 2048-bit RSA key into a temp file and returns its path.
+  # The key is created once per process lifetime; the file persists across tests
+  # within the test run (harmless temp file, cleaned up by the OS).
+  defp generate_test_key() do
+    pem_path = Path.join(System.tmp_dir!(), "bob_test_key.pem")
+
+    unless File.exists?(pem_path) do
+      {_out, 0} = System.cmd("openssl", ["genrsa", "-out", pem_path, "2048"])
+    end
+
+    pem_path
+  end
 end

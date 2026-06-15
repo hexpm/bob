@@ -549,14 +549,33 @@ defmodule Bob.Artifacts do
         Repo.query!("SELECT pg_advisory_xact_lock($1, $2)", [@builds_txt_lock, lock_key(arch, os)])
 
         path = "builds/otp/#{arch}/#{os}/builds.txt"
+        content = builds_txt(arch, os)
 
-        Bob.Store.put_file(path, builds_txt(arch, os),
+        Bob.Store.put_file(path, content,
           cache_control: "public,max-age=3600",
           meta: [
             {"surrogate-key", surrogate_keys(arch, os)},
             {"surrogate-control", "public,max-age=604800"}
           ]
         )
+
+        sign_key = Application.get_env(:bob, :builds_sign_key)
+
+        case Bob.Store.sign_content(sign_key, content) do
+          nil ->
+            :ok
+
+          signature ->
+            signed_path = path <> ".signed"
+
+            Bob.Store.put_file(signed_path, signature,
+              cache_control: "public,max-age=3600",
+              meta: [
+                {"surrogate-key", surrogate_keys(arch, os)},
+                {"surrogate-control", "public,max-age=604800"}
+              ]
+            )
+        end
 
         path
       end)
@@ -573,11 +592,11 @@ defmodule Bob.Artifacts do
   end
 
   defp surrogate_keys(arch, os) do
-    "builds builds/otp builds/otp/#{arch} builds/otp/#{arch}/#{os} builds/otp/#{arch}/#{os}/txt"
+    "builds builds/otp builds/otp/#{arch} builds/otp/#{arch}/#{os} builds/otp/#{arch}/#{os}/txt builds/otp/#{arch}/#{os}/txt-signed"
   end
 
   defp purge_keys(arch, os, name) do
-    "builds/otp/#{arch}/#{os}/txt builds/otp/#{arch}/#{os}/#{name}"
+    "builds/otp/#{arch}/#{os}/txt builds/otp/#{arch}/#{os}/txt-signed builds/otp/#{arch}/#{os}/#{name}"
   end
 
   defp format_date(built_at) do
