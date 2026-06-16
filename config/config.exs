@@ -32,6 +32,12 @@ config :bob,
       queue: true
     ],
     [
+      module: Bob.Job.DockerCleanup,
+      period: :day,
+      time: {2, 0, 0},
+      queue: true
+    ],
+    [
       module: Bob.Job.ReconcileBaseImages,
       period: {1, :hour},
       queue: true
@@ -51,7 +57,10 @@ config :bob,
   parallel_jobs: 1,
   local_jobs: [],
   remote_jobs: [],
-  hexpm_impl: Bob.Hexpm.Impl
+  hexpm_impl: Bob.Hexpm.Impl,
+  # Docker cleanup deletes real tags, so it ships in :dry_run (logs counts only).
+  # Flip to :live once the dry-run numbers look right.
+  docker_cleanup_mode: :dry_run
 
 # Metrics are served by a standalone Bandit listener (see Bob.Application)
 # on :metrics_port instead of PromEx's built-in cowboy server

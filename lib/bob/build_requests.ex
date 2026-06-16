@@ -16,12 +16,49 @@ defmodule Bob.BuildRequests do
     with :ok <- validate_combo(request) do
       case Bob.Job.DockerChecker.request_jobs(request) do
         [] ->
+          reserve(request, attrs)
           {:ok, :already_built}
 
         jobs ->
           submit_jobs(request, attrs, jobs)
       end
     end
+  end
+
+  # An already-built image still records a request, so a manual request doubles as
+  # a permanent reservation that exempts the image from cleanup. No build runs, so
+  # it costs nothing against the hourly limit; an existing reservation for the same
+  # target is left in place rather than duplicated.
+  defp reserve(request, attrs) do
+    unless reserved?(request) do
+      {:ok, created} = create(Map.put(attrs, :builds_count, 0))
+      created = complete(created)
+
+      Logger.info(
+        "BUILD RESERVATION by #{created.username}: #{created.kind} #{request_target(created)}"
+      )
+    end
+
+    :ok
+  end
+
+  defp reserved?(request) do
+    query =
+      from(request_row in BuildRequest,
+        where:
+          request_row.state in ["pending", "completed"] and request_row.kind == ^request.kind and
+            request_row.erlang == ^request.erlang and request_row.os == ^request.os and
+            request_row.os_version == ^request.os_version
+      )
+
+    query =
+      if request.kind == "elixir" do
+        from(request_row in query, where: request_row.elixir == ^request.elixir)
+      else
+        query
+      end
+
+    Repo.exists?(query)
   end
 
   defp submit_jobs(request, attrs, jobs) do
@@ -162,8 +199,10 @@ defmodule Bob.BuildRequests do
   end
 
   @doc """
-  Deletes finished requests older than `older_than_seconds`. Pending requests
-  are left alone; the checker reconciliation expires or completes them first.
+  Deletes expired requests older than `older_than_seconds`. Completed requests
+  are permanent reservations and pending requests are still in flight, so only
+  expired dead-ends (an os_version that rotated out, or a request past its TTL)
+  are reclaimed.
   """
   def prune(older_than_seconds) do
     cutoff = DateTime.add(DateTime.utc_now(), -older_than_seconds, :second)
@@ -171,7 +210,7 @@ defmodule Bob.BuildRequests do
     {count, _} =
       Repo.delete_all(
         from(request in BuildRequest,
-          where: request.state in ["completed", "expired"] and request.inserted_at < ^cutoff
+          where: request.state == "expired" and request.inserted_at < ^cutoff
         )
       )
 

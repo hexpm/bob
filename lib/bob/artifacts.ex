@@ -6,7 +6,7 @@ defmodule Bob.Artifacts do
 
   @builds_txt_lock 4_771_002
 
-  # Each staging row binds six parameters; Postgres caps a statement at 65535,
+  # Each staging row binds eight parameters; Postgres caps a statement at 65535,
   # so a page is inserted in chunks well under that ceiling.
   @staging_chunk 5000
 
@@ -17,6 +17,31 @@ defmodule Bob.Artifacts do
   # wraps.
   @long_query_timeout 5 * 60 * 1000
 
+  @docker_cleanup_per_arch_repos ~w(
+    hexpm/erlang-amd64 hexpm/erlang-arm64 hexpm/elixir-amd64 hexpm/elixir-arm64
+  )
+  @docker_cleanup_manifest_repos ~w(hexpm/erlang hexpm/elixir)
+
+  # A tag is reserved (never auto-deleted) while a non-expired build request pins
+  # it. A request maps deterministically to a single tag name, so the match is a
+  # plain equality on the indexed `tag` column — a hash anti-join against the
+  # small build_requests table — rather than extracting JSONB per scanned row.
+  # The erlang and elixir tag-name formats are disjoint (elixir carries
+  # `-erlang-`), so the name alone identifies the kind. `d` is the docker_tags
+  # row the predicate is applied to.
+  @reserved_predicate """
+  EXISTS (
+    SELECT 1
+    FROM build_requests br
+    WHERE br.state IN ('pending', 'completed')
+      AND d.tag =
+        CASE br.kind
+          WHEN 'erlang' THEN br.erlang || '-' || br.os || '-' || br.os_version
+          ELSE br.elixir || '-erlang-' || br.erlang || '-' || br.os || '-' || br.os_version
+        END
+  )
+  """
+
   def add(attrs) do
     upsert(attrs)
     generate_builds_txt(attrs.arch, attrs.os)
@@ -24,15 +49,16 @@ defmodule Bob.Artifacts do
     :ok
   end
 
-  def add_docker_tag(repo, tag, archs, built_at \\ DateTime.utc_now()) do
+  def add_docker_tag(repo, tag, archs, built_at \\ DateTime.utc_now(), last_pulled \\ nil) do
     now = NaiveDateTime.utc_now()
     built_at = dump_utc_datetime(built_at)
+    last_pulled = last_pulled && dump_utc_datetime(last_pulled)
     search = DockerTagSearch.metadata(repo, tag)
 
     Repo.query!(
       """
-      INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $6)
+      INSERT INTO docker_tags (repo, tag, archs, search, built_at, last_pulled, inserted_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
       ON CONFLICT (repo, tag)
       DO UPDATE SET
         archs = (
@@ -41,16 +67,17 @@ defmodule Bob.Artifacts do
         ),
         search = EXCLUDED.search,
         built_at = EXCLUDED.built_at,
+        last_pulled = COALESCE(EXCLUDED.last_pulled, docker_tags.last_pulled),
         updated_at = EXCLUDED.updated_at
       """,
-      [repo, tag, archs, search, built_at, now]
+      [repo, tag, archs, search, built_at, last_pulled, now]
     )
 
     :ok
   end
 
   @doc """
-  Inserts a page of `{tag, archs, built_at}` tuples into the staging table under `token`.
+  Inserts a page of `{tag, archs, built_at, last_pulled}` tuples into the staging table under `token`.
 
   Reconcile streams Docker Hub a page at a time into staging so the full tag
   list (up to ~1M for hexpm/elixir) is never held in memory and no connection is
@@ -64,7 +91,7 @@ defmodule Bob.Artifacts do
     now = NaiveDateTime.utc_now()
 
     tag_archs_built_at
-    |> Enum.map(fn {tag, archs, built_at} ->
+    |> Enum.map(fn {tag, archs, built_at, last_pulled} ->
       %{
         token: token,
         repo: repo,
@@ -72,6 +99,7 @@ defmodule Bob.Artifacts do
         archs: archs,
         search: DockerTagSearch.metadata(repo, tag),
         built_at: built_at,
+        last_pulled: last_pulled,
         inserted_at: now
       }
     end)
@@ -97,8 +125,8 @@ defmodule Bob.Artifacts do
       fn ->
         Repo.query!(
           """
-          INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
-          SELECT DISTINCT ON (repo, tag) repo, tag, archs, search, built_at, $3, $3
+          INSERT INTO docker_tags (repo, tag, archs, search, built_at, last_pulled, inserted_at, updated_at)
+          SELECT DISTINCT ON (repo, tag) repo, tag, archs, search, built_at, last_pulled, $3, $3
           FROM docker_tags_staging
           WHERE token = $1 AND repo = $2
           ORDER BY repo, tag, built_at DESC
@@ -107,10 +135,12 @@ defmodule Bob.Artifacts do
             archs = EXCLUDED.archs,
             search = EXCLUDED.search,
             built_at = EXCLUDED.built_at,
+            last_pulled = EXCLUDED.last_pulled,
             updated_at = EXCLUDED.updated_at
           WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
              OR docker_tags.search IS DISTINCT FROM EXCLUDED.search
              OR docker_tags.built_at IS DISTINCT FROM EXCLUDED.built_at
+             OR docker_tags.last_pulled IS DISTINCT FROM EXCLUDED.last_pulled
           """,
           [token, repo, now],
           timeout: @long_query_timeout
@@ -502,6 +532,107 @@ defmodule Bob.Artifacts do
       )
 
     Enum.map(rows, fn [tag, archs] -> {tag, archs} end)
+  end
+
+  @doc """
+  Counts, per repo, the tags the cleanup would delete: per-arch tags built before
+  `cutoff` and manifest tags not pulled since `cutoff` (falling back to `built_at`
+  when a tag has no recorded pull). Reserved tags are excluded. Used by the
+  cleanup's dry run to report what live deletion would remove.
+  """
+  def count_stale_per_arch_tags(cutoff) do
+    count_stale(@docker_cleanup_per_arch_repos, "d.built_at < $2", cutoff)
+  end
+
+  def count_stale_manifest_tags(cutoff) do
+    count_stale(
+      @docker_cleanup_manifest_repos,
+      "COALESCE(d.last_pulled, d.built_at) < $2",
+      cutoff
+    )
+  end
+
+  defp count_stale(repos, age_predicate, cutoff) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        SELECT d.repo, count(*)
+        FROM docker_tags d
+        WHERE d.repo = ANY($1) AND #{age_predicate} AND NOT #{@reserved_predicate}
+        GROUP BY d.repo
+        """,
+        [repos, dump_utc_datetime(cutoff)],
+        timeout: @long_query_timeout
+      )
+
+    Map.new(rows, fn [repo, count] -> {repo, count} end)
+  end
+
+  @doc """
+  A batch of `{repo, tag}` the cleanup may delete, same predicates as
+  `count_stale_*`. `limit` bounds the batch so a single run deletes a manageable
+  slice and converges over successive runs.
+  """
+  def stale_per_arch_tags(cutoff, limit) do
+    stale(@docker_cleanup_per_arch_repos, "d.built_at < $2", cutoff, limit)
+  end
+
+  def stale_manifest_tags(cutoff, limit) do
+    stale(
+      @docker_cleanup_manifest_repos,
+      "COALESCE(d.last_pulled, d.built_at) < $2",
+      cutoff,
+      limit
+    )
+  end
+
+  defp stale(repos, age_predicate, cutoff, limit) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        SELECT d.repo, d.tag
+        FROM docker_tags d
+        WHERE d.repo = ANY($1) AND #{age_predicate} AND NOT #{@reserved_predicate}
+        LIMIT $3
+        """,
+        [repos, dump_utc_datetime(cutoff), limit],
+        timeout: @long_query_timeout
+      )
+
+    Enum.map(rows, fn [repo, tag] -> {repo, tag} end)
+  end
+
+  @doc """
+  The ids of the given `DockerTag` rows that a build request reserves, as a
+  MapSet. Lets the tags page flag reserved tags without re-deriving the match.
+  """
+  def reserved_docker_tag_ids([]), do: MapSet.new()
+
+  def reserved_docker_tag_ids(tags) do
+    ids = Enum.map(tags, & &1.id)
+
+    %{rows: rows} =
+      Repo.query!(
+        "SELECT d.id FROM docker_tags d WHERE d.id = ANY($1::bigint[]) AND #{@reserved_predicate}",
+        [ids]
+      )
+
+    MapSet.new(rows, fn [id] -> id end)
+  end
+
+  @doc "Drops `docker_tags` rows for the given `{repo, tag}` pairs, after Docker Hub deletion."
+  def delete_docker_tags([]), do: :ok
+
+  def delete_docker_tags(repo_tags) do
+    repo_tags
+    |> Enum.group_by(fn {repo, _tag} -> repo end, fn {_repo, tag} -> tag end)
+    |> Enum.each(fn {repo, tags} ->
+      Repo.query!("DELETE FROM docker_tags WHERE repo = $1 AND tag = ANY($2)", [repo, tags],
+        timeout: @long_query_timeout
+      )
+    end)
+
+    :ok
   end
 
   def base_image_tags(repo) do

@@ -52,6 +52,24 @@ defmodule BobWeb.DockerTagsLiveTest do
     refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
   end
 
+  test "flags tags reserved by a build request", %{conn: conn} do
+    Bob.BuildRequests.create(%{
+      username: "eric",
+      kind: "elixir",
+      elixir: "1.18.0",
+      erlang: "27.0",
+      os: "ubuntu",
+      os_version: "noble-20250101",
+      builds_count: 0
+    })
+
+    {:ok, _view, html} = live(conn, ~p"/docker")
+
+    assert reserved?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
+    refute reserved?(html, "1.18.1-erlang-27.0-ubuntu-noble-20250101")
+    refute reserved?(html, "27.0-ubuntu-noble-20250101")
+  end
+
   test "applies filters from URL params on load", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/docker?tag=1.18")
 
@@ -161,7 +179,11 @@ defmodule BobWeb.DockerTagsLiveTest do
   end
 
   defp docker_tag?(html, tag) do
+    html =~ ~r/<code class="dk-tag-code"[^>]*>#{Regex.escape(tag)}<\/code>/
+  end
+
+  defp reserved?(html, tag) do
     html =~
-      ~r/<td class="col-dk-tag"><code[^>]*>#{Regex.escape(tag)}<\/code><\/td>/
+      ~r/<code class="dk-tag-code"[^>]*>#{Regex.escape(tag)}<\/code>\s*<span[^>]*dk-reserved/
   end
 end

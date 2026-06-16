@@ -1,5 +1,11 @@
 defmodule Bob.DockerHub do
+  alias Bob.DockerHub.RateLimiter
+
   @dockerhub_url "https://hub.docker.com/"
+
+  # Caps re-attempts after a 429 so a permanently throttled IP can't loop forever;
+  # each attempt first feeds the limiter, which blocks until the window resets.
+  @max_rate_limit_retries 20
 
   def auth(username, password) do
     url = @dockerhub_url <> "v2/users/login/"
@@ -18,10 +24,10 @@ defmodule Bob.DockerHub do
 
   @doc """
   Pages every tag of `repo` from Docker Hub, invoking `on_page` with each page's
-  `{tag, archs, built_at}` list as it arrives. Returns `:ok` once the full set
-  is fetched or `:error` if any page failed, so the caller can avoid applying a
-  partial set. Pages stream through `on_page` rather than accumulating, so the
-  response set is never held in memory in full.
+  `{tag, archs, built_at, last_pulled}` list as it arrives. Returns `:ok` once
+  the full set is fetched or `:error` if any page failed, so the caller can avoid
+  applying a partial set. Pages stream through `on_page` rather than accumulating,
+  so the response set is never held in memory in full.
   """
   def stream_repo_tags(repo, on_page) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100"
@@ -52,19 +58,39 @@ defmodule Bob.DockerHub do
     end
   end
 
-  def delete_tag(repo, tag) do
+  @doc """
+  Deletes a tag on Docker Hub, paced by the shared rate limiter. A missing tag
+  (404) counts as success so the cleanup is idempotent across retries. Returns
+  `{:error, _}` for any other outcome so the caller can skip the tag and retry it
+  on a later run rather than crash the batch.
+  """
+  def delete_tag(repo, tag), do: delete_tag(repo, tag, 0)
+
+  defp delete_tag(repo, tag, attempts) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
     headers = headers()
     opts = [recv_timeout: 20_000]
 
+    RateLimiter.acquire()
+
     result =
-      Bob.HTTP.retry("DockerHub #{url}", fn ->
-        Bob.HTTP.request(:delete, url, headers, "", opts)
-      end)
+      Bob.HTTP.retry(
+        "DockerHub #{url}",
+        fn -> Bob.HTTP.request(:delete, url, headers, "", opts) end,
+        retry_rate_limit?: false
+      )
 
     case result do
-      {:ok, 204, _headers, _body} -> :ok
-      {:ok, 404, _headers, _body} -> :ok
+      {:ok, status, response_headers, _body} when status in [204, 404] ->
+        RateLimiter.observe(response_headers)
+        :ok
+
+      {:ok, 429, response_headers, _body} when attempts < @max_rate_limit_retries ->
+        RateLimiter.throttle(response_headers)
+        delete_tag(repo, tag, attempts + 1)
+
+      other ->
+        {:error, other}
     end
   end
 
@@ -90,7 +116,17 @@ defmodule Bob.DockerHub do
     else
       # DockerHub returns dupes sometimes?
       archs = images |> Enum.map(&:binary.copy(&1["architecture"])) |> Enum.uniq()
-      {:binary.copy(result["name"]), archs, built_at}
+      {:binary.copy(result["name"]), archs, built_at, last_pulled(result)}
+    end
+  end
+
+  # `tag_last_pulled` is the last time Docker Hub served this tag's manifest. It
+  # is null for a tag that has never been pulled, and historically a zero
+  # sentinel; both map to nil so callers can treat "never pulled" uniformly.
+  defp last_pulled(result) do
+    case result["tag_last_pulled"] do
+      "0001-01-01" <> _ -> nil
+      value -> parse_timestamp(value)
     end
   end
 

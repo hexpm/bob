@@ -134,7 +134,11 @@ defmodule BobWeb.RequestLive do
         |> replace_flash(:info, "Build queued, follow the progress on the jobs dashboard.")
 
       {:ok, :already_built} ->
-        replace_flash(socket, :info, "This image is already built, find it under Docker tags.")
+        replace_flash(
+          socket,
+          :info,
+          "This image is already built and is now reserved from cleanup, find it under Docker tags."
+        )
 
       {:error, :rate_limited} ->
         replace_flash(
@@ -270,6 +274,12 @@ defmodule BobWeb.RequestLive do
           Bob automatically builds Docker images for the latest patch release of every
           Erlang and Elixir version. Need an older patch version? Request it here and it
           is built for both architectures, including the multi-arch manifest.
+        </p>
+        <p class="req-intro">
+          Requesting an image also reserves it from cleanup, permanently — and if the image
+          already exists it is reserved without rebuilding. Tags that are not reserved are
+          removed over time: multi-arch images that have not been pulled in 180 days, and the
+          per-architecture build images after 30 days.
         </p>
 
         <form phx-change="validate" phx-submit="request" class="filter-bar filter-bar--wrap">

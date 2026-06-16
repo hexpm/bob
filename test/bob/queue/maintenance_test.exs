@@ -132,16 +132,16 @@ defmodule Bob.Queue.MaintenanceTest do
     |> Repo.update!()
   end
 
-  test "prunes finished build requests past the retention window" do
-    insert_build_request("completed", ago(91 * @day))
+  test "prunes expired build requests past the retention window" do
+    insert_build_request("expired", ago(91 * @day))
 
     Maintenance.run()
 
     assert Repo.all(BuildRequest) == []
   end
 
-  test "keeps recent and pending build requests" do
-    insert_build_request("completed", DateTime.utc_now())
+  test "keeps completed reservations and pending build requests regardless of age" do
+    insert_build_request("completed", ago(91 * @day))
     insert_build_request("pending", ago(91 * @day))
 
     Maintenance.run()
