@@ -273,9 +273,15 @@ defmodule BobWeb.RequestLive do
         </p>
 
         <form phx-change="validate" phx-submit="request" class="filter-bar filter-bar--wrap">
-          <.form_select name="kind" label="image" value={@kind} options={~w(erlang elixir)} />
-          <.form_select name="os" label="os" value={@os} options={@oses} prompt="Select OS" />
-          <.form_select
+          <.filter_select
+            name="kind"
+            label="image"
+            value={@kind}
+            options={~w(erlang elixir)}
+            prompt="Select image"
+          />
+          <.filter_select name="os" label="os" value={@os} options={@oses} prompt="Select OS" />
+          <.filter_select
             name="os_version"
             label="os version"
             value={@os_version}
@@ -283,7 +289,7 @@ defmodule BobWeb.RequestLive do
             disabled={@os == ""}
             prompt="Select OS version"
           />
-          <.form_select
+          <.filter_select
             name="erlang"
             label="erlang"
             value={@erlang}
@@ -291,7 +297,7 @@ defmodule BobWeb.RequestLive do
             disabled={@erlang_versions == nil or @os_version == ""}
             prompt="Select Erlang"
           />
-          <.form_select
+          <.filter_select
             :if={@kind == "elixir"}
             name="elixir"
             label="elixir"
@@ -359,30 +365,6 @@ defmodule BobWeb.RequestLive do
         />
       </.section>
     </div>
-    """
-  end
-
-  attr(:name, :string, required: true)
-  attr(:label, :string, required: true)
-  attr(:value, :string, default: "")
-  attr(:options, :list, required: true)
-  attr(:disabled, :boolean, default: false)
-  attr(:prompt, :string, default: nil)
-
-  defp form_select(assigns) do
-    ~H"""
-    <label class={["fsel", @disabled && "fsel--off"]}>
-      <span class="fsel__label"><%= @label %>:</span>
-      <select name={@name} disabled={@disabled}>
-        <option :if={@prompt} value="" disabled selected={@value == ""} hidden>
-          <%= @prompt %>
-        </option>
-        <option :for={option <- @options} value={option} selected={option == @value}>
-          <%= option %>
-        </option>
-      </select>
-      <.icon name="chevD" size={13} />
-    </label>
     """
   end
 end

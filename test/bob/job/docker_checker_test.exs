@@ -10,6 +10,7 @@ defmodule Bob.Job.DockerCheckerTest do
 
   setup do
     Bob.FakeGitHub.reset()
+    Bob.Cache.clear()
     :ok
   end
 

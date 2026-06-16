@@ -62,8 +62,10 @@ defmodule BobWeb.UserAuth do
     |> assign(:current_user, nil)
   end
 
+  # A leading "//" or "/\" is a protocol-relative URL that browsers send
+  # off-site, so only plain in-app paths are allowed through.
   def safe_return_path("/" <> rest = path) do
-    if String.starts_with?(rest, "/") do
+    if String.starts_with?(rest, "/") or String.starts_with?(rest, "\\") do
       "/"
     else
       path
@@ -72,12 +74,15 @@ defmodule BobWeb.UserAuth do
 
   def safe_return_path(_other), do: "/"
 
+  # Only the refresh token is persisted: it lets us refresh near expiry and
+  # revoke on logout, and a failed refresh is how we notice the user revoked
+  # access on hex.pm. The access token is never reused after login — we only
+  # need the username — so storing it would be cookie surface for no purpose.
   defp store_tokens(conn, tokens) do
     expires_at = System.system_time(:second) + tokens["expires_in"]
     refresh_token = tokens["refresh_token"] || get_session(conn, "refresh_token")
 
     conn
-    |> put_session("access_token", tokens["access_token"])
     |> put_session("refresh_token", refresh_token)
     |> put_session("token_expires_at", expires_at)
   end
@@ -107,7 +112,7 @@ defmodule BobWeb.UserAuth do
 
   defp clear_auth_session(conn) do
     Enum.reduce(
-      ["current_user", "access_token", "refresh_token", "token_expires_at"],
+      ["current_user", "refresh_token", "token_expires_at"],
       conn,
       &delete_session(&2, &1)
     )

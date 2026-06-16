@@ -244,14 +244,24 @@ defmodule Bob.Job.DockerChecker do
   end
 
   defp erlang_refs() do
-    "erlang/otp"
-    |> github().fetch_repo_refs()
+    {:repo_refs, "erlang/otp"}
+    |> cached_github(fn -> github().fetch_repo_refs("erlang/otp") end)
     |> Enum.map(fn {ref_name, _ref} -> ref_name end)
     |> Enum.filter(&String.starts_with?(&1, "OTP-"))
     |> Enum.sort(&(cmp_erlang_tags(&1, &2) != :lt))
   end
 
   defp github(), do: Application.get_env(:bob, :github, Bob.GitHub)
+
+  # A run() calls erlang() then elixir(), and both reach for the same refs and
+  # release lists, so cache the raw GitHub responses briefly to collapse the
+  # duplicate calls within a cycle. The TTL is far below the 15-minute schedule,
+  # so each cycle still fetches fresh.
+  @github_cache_ttl 60
+
+  defp cached_github(key, fun) do
+    Bob.Cache.fetch({__MODULE__, key}, @github_cache_ttl, fun)
+  end
 
   # Auto-builds only fire when one of the image's components — its base image,
   # OTP, or Elixir — was released within this window. Old combinations that
@@ -270,8 +280,8 @@ defmodule Bob.Job.DockerChecker do
   defp recent_erlang_versions() do
     cutoff = freshness_cutoff()
 
-    "erlang/otp"
-    |> github().fetch_recent_releases()
+    {:recent_releases, "erlang/otp"}
+    |> cached_github(fn -> github().fetch_recent_releases("erlang/otp") end)
     |> Enum.flat_map(fn
       %{"tag_name" => "OTP-" <> version, "published_at" => published_at} ->
         if release_recent?(published_at, cutoff), do: [version], else: []
@@ -285,8 +295,8 @@ defmodule Bob.Job.DockerChecker do
   defp recent_elixir_versions() do
     cutoff = freshness_cutoff()
 
-    "elixir-lang/elixir"
-    |> github().fetch_recent_releases()
+    {:recent_releases, "elixir-lang/elixir"}
+    |> cached_github(fn -> github().fetch_recent_releases("elixir-lang/elixir") end)
     |> Enum.flat_map(fn
       %{"tag_name" => "v" <> version, "published_at" => published_at} ->
         if release_recent?(published_at, cutoff), do: [version], else: []
@@ -431,8 +441,8 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def elixir_builds() do
-    "elixir-lang/elixir"
-    |> github().fetch_repo_releases()
+    {:repo_releases, "elixir-lang/elixir"}
+    |> cached_github(fn -> github().fetch_repo_releases("elixir-lang/elixir") end)
     |> Stream.flat_map(&release_elixir_builds/1)
     |> Stream.filter(&build_elixir_ref?/1)
     |> Enum.sort(&cmp_elixir_tags/2)

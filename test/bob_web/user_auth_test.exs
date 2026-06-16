@@ -49,15 +49,14 @@ defmodule BobWeb.UserAuthTest do
       conn =
         conn
         |> put_session("current_user", @user)
-        |> put_session("access_token", "eyJ.old-access")
         |> put_session("refresh_token", "eyJ.old-refresh")
         |> put_session("token_expires_at", System.system_time(:second) + 60)
         |> UserAuth.fetch_current_user([])
 
       assert conn.assigns.current_user == @user
-      assert get_session(conn, "access_token") == "eyJ.new-access"
       assert get_session(conn, "refresh_token") == "eyJ.new-refresh"
       assert get_session(conn, "token_expires_at") > System.system_time(:second) + 1700
+      refute get_session(conn, "access_token")
     end
 
     test "logs the user out when the refresh fails", %{conn: conn} do
@@ -66,7 +65,6 @@ defmodule BobWeb.UserAuthTest do
       conn =
         conn
         |> put_session("current_user", @user)
-        |> put_session("access_token", "eyJ.old-access")
         |> put_session("refresh_token", "eyJ.old-refresh")
         |> put_session("token_expires_at", System.system_time(:second) - 1)
 
@@ -75,7 +73,6 @@ defmodule BobWeb.UserAuthTest do
       assert log =~ "token refresh failed"
       assert conn.assigns.current_user == nil
       refute get_session(conn, "current_user")
-      refute get_session(conn, "access_token")
       refute get_session(conn, "refresh_token")
     end
 
@@ -162,6 +159,7 @@ defmodule BobWeb.UserAuthTest do
 
     test "rejects protocol-relative and external urls" do
       assert UserAuth.safe_return_path("//evil.com") == "/"
+      assert UserAuth.safe_return_path("/\\evil.com") == "/"
       assert UserAuth.safe_return_path("https://evil.com") == "/"
       assert UserAuth.safe_return_path(nil) == "/"
     end

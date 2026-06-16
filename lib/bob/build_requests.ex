@@ -27,18 +27,40 @@ defmodule Bob.BuildRequests do
   defp submit_jobs(request, attrs, jobs) do
     builds_count = builds_count(request.kind, jobs)
 
-    if over_limit?(request.username, builds_count) do
-      {:error, :rate_limited}
-    else
-      {:ok, request} = create(Map.put(attrs, :builds_count, builds_count))
-      Bob.Queue.add_many(jobs)
+    # Serialize a user's concurrent submits (e.g. two tabs) with a per-user
+    # advisory lock so the limit check and insert can't interleave and both
+    # slip past the cap.
+    result =
+      Repo.transaction(fn ->
+        lock_user(request.username)
 
-      Logger.info(
-        "BUILD REQUEST by #{request.username}: #{request.kind} #{request_target(request)}"
-      )
+        if over_limit?(request.username, builds_count) do
+          Repo.rollback(:rate_limited)
+        else
+          {:ok, created} = create(Map.put(attrs, :builds_count, builds_count))
+          created
+        end
+      end)
 
-      {:ok, request}
+    case result do
+      {:ok, created} ->
+        # Enqueue outside the lock; if it fails the request stays pending and
+        # the checker's reconciliation enqueues the jobs on its next cycle.
+        Bob.Queue.add_many(jobs)
+
+        Logger.info(
+          "BUILD REQUEST by #{created.username}: #{created.kind} #{request_target(created)}"
+        )
+
+        {:ok, created}
+
+      {:error, :rate_limited} ->
+        {:error, :rate_limited}
     end
+  end
+
+  defp lock_user(username) do
+    Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", [username])
   end
 
   defp validate_combo(%{kind: "erlang"} = request) do

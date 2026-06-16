@@ -508,7 +508,11 @@ defmodule Bob.Artifacts do
         select: {b.repo, b.tag}
       )
     )
-    |> MapSet.new(fn {"library/" <> os, tag} -> {os, tag} end)
+    |> Enum.flat_map(fn
+      {"library/" <> os, tag} -> [{os, tag}]
+      _other -> []
+    end)
+    |> MapSet.new()
   end
 
   def upsert(attrs) do

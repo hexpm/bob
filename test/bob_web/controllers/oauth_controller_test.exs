@@ -64,9 +64,10 @@ defmodule BobWeb.OAuthControllerTest do
 
       assert redirected_to(conn, 302) == "/request"
       assert get_session(conn, "current_user") == %{"username" => "eric"}
-      assert get_session(conn, "access_token") == "eyJ.access"
       assert get_session(conn, "refresh_token") == "eyJ.refresh"
       assert get_session(conn, "token_expires_at")
+      # The access token is used once to fetch the username, never stored.
+      refute get_session(conn, "access_token")
       refute get_session(conn, "oauth_state")
       refute get_session(conn, "oauth_code_verifier")
       refute get_session(conn, "oauth_return_to")
@@ -147,7 +148,6 @@ defmodule BobWeb.OAuthControllerTest do
   defp session_fixture() do
     %{
       "current_user" => %{"username" => "eric"},
-      "access_token" => "eyJ.access",
       "refresh_token" => "eyJ.refresh",
       "token_expires_at" => System.system_time(:second) + 1800
     }

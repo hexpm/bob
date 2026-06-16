@@ -676,6 +676,16 @@ defmodule Bob.ArtifactsTest do
       assert Artifacts.recent_base_image_versions(cutoff) ==
                MapSet.new([{"ubuntu", "noble-20250601"}])
     end
+
+    test "skips repos without a library/ prefix instead of crashing" do
+      Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250601"})
+      Repo.insert!(%BaseImageTag{repo: "hexpm/custom", tag: "weird"})
+
+      cutoff = DateTime.add(DateTime.utc_now(), -30, :day)
+
+      assert Artifacts.recent_base_image_versions(cutoff) ==
+               MapSet.new([{"ubuntu", "noble-20250601"}])
+    end
   end
 
   describe "search" do
