@@ -126,14 +126,6 @@ pre,
   letter-spacing: 0;
 }
 
-.bob-brand__tag {
-  color: var(--color-grey-400);
-  font-size: 12px;
-  font-weight: 500;
-  padding-left: 11px;
-  border-left: 1px solid var(--color-grey-700);
-}
-
 .bob-nav__tabs {
   display: flex;
   align-items: center;
@@ -1091,7 +1083,6 @@ pre,
 }
 
 @media (max-width: 820px) {
-  .bob-brand__tag,
   .nav-ext {
     display: none;
   }
