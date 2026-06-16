@@ -278,6 +278,68 @@ defmodule Bob.Job.DockerCheckerTest do
     end
   end
 
+  describe "build freshness" do
+    test "erlang/0 skips combos whose components were all released long ago" do
+      insert_base_image("library/ubuntu", "noble-20240101", 60)
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0.1", "sha"}])
+      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0.1", days_ago_iso(60))])
+
+      DockerChecker.erlang()
+
+      assert Repo.all(Job) == []
+    end
+
+    test "erlang/0 builds when the OTP version was released recently" do
+      insert_base_image("library/ubuntu", "noble-20240101", 60)
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0.1", "sha"}])
+      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0.1", days_ago_iso(2))])
+
+      DockerChecker.erlang()
+
+      assert Enum.count(Repo.all(Job)) == 2
+    end
+
+    test "erlang/0 builds when the base image is recent even for an old OTP" do
+      insert_base_image("library/ubuntu", "noble-20250601", 2)
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0.1", "sha"}])
+      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0.1", days_ago_iso(400))])
+
+      DockerChecker.erlang()
+
+      assert Enum.count(Repo.all(Job)) == 2
+    end
+
+    test "elixir/0 builds when the Elixir version was released recently" do
+      insert_base_image("library/ubuntu", "noble-20240101", 60)
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha"}])
+      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0", days_ago_iso(400))])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20240101", ["amd64"])
+
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
+        release("v1.18.0", ["27"], days_ago_iso(2))
+      ])
+
+      DockerChecker.elixir()
+
+      assert [%Job{module_key: {Bob.Job.BuildDockerElixir, "amd64"}}] = Repo.all(Job)
+    end
+
+    test "elixir/0 skips when every component is old" do
+      insert_base_image("library/ubuntu", "noble-20240101", 60)
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha"}])
+      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0", days_ago_iso(400))])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20240101", ["amd64"])
+
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
+        release("v1.18.0", ["27"], days_ago_iso(400))
+      ])
+
+      DockerChecker.elixir()
+
+      assert Repo.all(Job) == []
+    end
+  end
+
   describe "requests/0" do
     setup do
       Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250101"})
@@ -420,14 +482,31 @@ defmodule Bob.Job.DockerCheckerTest do
     end
   end
 
-  defp release(tag_name, otp_majors) do
+  defp release(tag_name, otp_majors, published_at \\ now_iso()) do
     assets =
       Enum.map(otp_majors, fn
         "exe-" <> otp -> %{"name" => "elixir-otp-#{otp}.exe"}
         otp -> %{"name" => "elixir-otp-#{otp}.zip"}
       end)
 
-    %{"tag_name" => tag_name, "assets" => assets}
+    %{"tag_name" => tag_name, "assets" => assets, "published_at" => published_at}
+  end
+
+  defp otp_release(tag_name, published_at) do
+    %{"tag_name" => tag_name, "published_at" => published_at}
+  end
+
+  defp now_iso(), do: DateTime.utc_now() |> DateTime.to_iso8601()
+
+  defp days_ago_iso(days) do
+    DateTime.utc_now() |> DateTime.add(-days, :day) |> DateTime.to_iso8601()
+  end
+
+  defp insert_base_image(repo, tag, days_old) do
+    %BaseImageTag{repo: repo, tag: tag}
+    |> Repo.insert!()
+    |> Ecto.Changeset.change(inserted_at: DateTime.add(DateTime.utc_now(), -days_old, :day))
+    |> Repo.update!()
   end
 
   describe "manifest/0" do

@@ -11,6 +11,10 @@ defmodule Bob.FakeGitHub do
     :persistent_term.get({__MODULE__, {:releases, repo}}, [])
   end
 
+  def fetch_recent_releases(repo) do
+    fetch_repo_releases(repo)
+  end
+
   def stub_refs(repo, refs) do
     :persistent_term.put({__MODULE__, repo}, refs)
   end

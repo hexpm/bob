@@ -19,6 +19,17 @@ defmodule Bob.GitHub do
     |> github_request()
   end
 
+  # Releases come back newest-first, so the first page is enough to find
+  # anything published recently without paging through years of history.
+  def fetch_recent_releases(repo) do
+    {body, _headers} =
+      repo
+      |> releases_url()
+      |> github_get()
+
+    body
+  end
+
   defp response_to_refs(response) do
     Enum.map(response, fn item ->
       {:binary.copy(item["name"]), :binary.copy(item["commit"]["sha"])}
@@ -26,6 +37,16 @@ defmodule Bob.GitHub do
   end
 
   defp github_request(url) do
+    {body, headers} = github_get(url)
+
+    if url = next_link(headers) do
+      body ++ github_request(url)
+    else
+      body
+    end
+  end
+
+  defp github_get(url) do
     user = Application.get_env(:bob, :github_user)
     token = Application.get_env(:bob, :github_token)
 
@@ -34,13 +55,7 @@ defmodule Bob.GitHub do
     {:ok, 200, headers, body} =
       Bob.HTTP.retry("GitHub #{url}", fn -> Bob.HTTP.request(:get, url, [], "", opts) end)
 
-    body = JSON.decode!(body)
-
-    if url = next_link(headers) do
-      body ++ github_request(url)
-    else
-      body
-    end
+    {JSON.decode!(body), headers}
   end
 
   defp next_link(headers) do

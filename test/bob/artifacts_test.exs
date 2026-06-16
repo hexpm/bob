@@ -641,6 +641,41 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.base_image_tags("library/alpine") == ["3.23.5"]
     end
+
+    test "keeps inserted_at for surviving tags and stamps only new ones" do
+      old = DateTime.add(DateTime.utc_now(), -90, :day)
+
+      %BaseImageTag{repo: "library/alpine", tag: "3.23.5"}
+      |> Repo.insert!()
+      |> Ecto.Changeset.change(inserted_at: old)
+      |> Repo.update!()
+
+      Artifacts.replace_base_image_tags("library/alpine", ["3.23.5", "3.24.0"])
+
+      by_tag =
+        from(b in BaseImageTag, where: b.repo == "library/alpine")
+        |> Repo.all()
+        |> Map.new(&{&1.tag, &1.inserted_at})
+
+      assert DateTime.compare(by_tag["3.23.5"], old) == :eq
+      assert DateTime.diff(DateTime.utc_now(), by_tag["3.24.0"]) < 60
+    end
+  end
+
+  describe "recent_base_image_versions/1" do
+    test "returns {os, tag} for base images first seen since the cutoff" do
+      Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250601"})
+
+      %BaseImageTag{repo: "library/debian", tag: "bookworm-20240101"}
+      |> Repo.insert!()
+      |> Ecto.Changeset.change(inserted_at: DateTime.add(DateTime.utc_now(), -90, :day))
+      |> Repo.update!()
+
+      cutoff = DateTime.add(DateTime.utc_now(), -30, :day)
+
+      assert Artifacts.recent_base_image_versions(cutoff) ==
+               MapSet.new([{"ubuntu", "noble-20250601"}])
+    end
   end
 
   describe "search" do

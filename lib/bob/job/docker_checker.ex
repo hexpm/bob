@@ -70,7 +70,13 @@ defmodule Bob.Job.DockerChecker do
   def concurrency(), do: :shared
 
   def erlang() do
+    recent_os = recent_base_image_versions()
+    recent_otp = recent_erlang_versions()
+
     expected_erlang_tags()
+    |> Enum.filter(fn {erlang, os, os_version, _arch} ->
+      MapSet.member?(recent_os, {os, os_version}) or MapSet.member?(recent_otp, erlang)
+    end)
     |> Enum.group_by(fn {_erlang, _os, _os_version, arch} -> arch end)
     |> Enum.flat_map(fn {arch, expected} ->
       present =
@@ -247,6 +253,59 @@ defmodule Bob.Job.DockerChecker do
 
   defp github(), do: Application.get_env(:bob, :github, Bob.GitHub)
 
+  # Auto-builds only fire when one of the image's components — its base image,
+  # OTP, or Elixir — was released within this window. Old combinations that
+  # Docker Hub prunes for lack of pulls then stay pruned instead of being
+  # rebuilt every cycle; users can still request them explicitly.
+  @build_freshness_days 30
+
+  defp freshness_cutoff() do
+    DateTime.add(DateTime.utc_now(), -@build_freshness_days, :day)
+  end
+
+  defp recent_base_image_versions() do
+    Bob.Artifacts.recent_base_image_versions(freshness_cutoff())
+  end
+
+  defp recent_erlang_versions() do
+    cutoff = freshness_cutoff()
+
+    "erlang/otp"
+    |> github().fetch_recent_releases()
+    |> Enum.flat_map(fn
+      %{"tag_name" => "OTP-" <> version, "published_at" => published_at} ->
+        if release_recent?(published_at, cutoff), do: [version], else: []
+
+      _other ->
+        []
+    end)
+    |> MapSet.new()
+  end
+
+  defp recent_elixir_versions() do
+    cutoff = freshness_cutoff()
+
+    "elixir-lang/elixir"
+    |> github().fetch_recent_releases()
+    |> Enum.flat_map(fn
+      %{"tag_name" => "v" <> version, "published_at" => published_at} ->
+        if release_recent?(published_at, cutoff), do: [version], else: []
+
+      _other ->
+        []
+    end)
+    |> MapSet.new()
+  end
+
+  defp release_recent?(published_at, cutoff) when is_binary(published_at) do
+    case DateTime.from_iso8601(published_at) do
+      {:ok, datetime, _offset} -> DateTime.compare(datetime, cutoff) != :lt
+      _error -> false
+    end
+  end
+
+  defp release_recent?(_published_at, _cutoff), do: false
+
   # Keeps only the newest ref per OTP major.minor line. Stable releases rank
   # above prereleases within a line, so RCs drop out once a stable lands.
   # Selection happens before the per-OS filters: a line whose newest ref an OS
@@ -307,7 +366,15 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def elixir() do
+    recent_os = recent_base_image_versions()
+    recent_otp = recent_erlang_versions()
+    recent_elixir = recent_elixir_versions()
+
     expected_elixir_tags()
+    |> Enum.filter(fn {elixir, erlang, os, os_version, _arch} ->
+      MapSet.member?(recent_os, {os, os_version}) or MapSet.member?(recent_otp, erlang) or
+        MapSet.member?(recent_elixir, elixir)
+    end)
     |> Enum.group_by(fn {_elixir, _erlang, _os, _os_version, arch} -> arch end)
     |> Enum.flat_map(fn {arch, expected} ->
       present =
