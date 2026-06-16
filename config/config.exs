@@ -50,7 +50,8 @@ config :bob,
   master?: true,
   parallel_jobs: 1,
   local_jobs: [],
-  remote_jobs: []
+  remote_jobs: [],
+  hexpm_impl: Bob.Hexpm.Impl
 
 config :mime, :types, %{
   "application/vnd.bob+erlang" => ["erlang"]

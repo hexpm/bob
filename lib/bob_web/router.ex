@@ -1,6 +1,8 @@
 defmodule BobWeb.Router do
   use BobWeb, :router
 
+  import BobWeb.UserAuth
+
   pipeline :browser do
     plug(:accepts, ["html"])
     plug(:fetch_session)
@@ -8,6 +10,7 @@ defmodule BobWeb.Router do
     plug(:put_root_layout, html: {BobWeb.Layouts, :root})
     plug(:protect_from_forgery)
     plug(:put_secure_browser_headers)
+    plug(:fetch_current_user)
   end
 
   scope "/api", BobWeb do
@@ -23,8 +26,22 @@ defmodule BobWeb.Router do
   scope "/", BobWeb do
     pipe_through(:browser)
 
-    live("/", JobsLive)
-    live("/artifacts", ArtifactsLive)
-    live("/docker", DockerTagsLive)
+    get("/oauth/login", OAuthController, :login)
+    get("/oauth/callback", OAuthController, :callback)
+    post("/oauth/logout", OAuthController, :logout)
+
+    live_session :default, on_mount: [{BobWeb.UserAuth, :mount_current_user}] do
+      live("/", JobsLive)
+      live("/artifacts", ArtifactsLive)
+      live("/docker", DockerTagsLive)
+    end
+  end
+
+  scope "/", BobWeb do
+    pipe_through([:browser, :require_authenticated_user])
+
+    live_session :authenticated, on_mount: [{BobWeb.UserAuth, :ensure_authenticated}] do
+      live("/request", RequestLive)
+    end
   end
 end

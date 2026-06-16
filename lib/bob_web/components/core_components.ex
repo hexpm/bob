@@ -228,13 +228,17 @@ defmodule BobWeb.CoreComponents do
   attr(:value, :string, default: "")
   attr(:options, :list, required: true)
   attr(:disabled, :boolean, default: false)
+  # nil renders a selectable "any" option (filters); a string renders a
+  # non-selectable placeholder (forms that demand an explicit choice).
+  attr(:prompt, :string, default: nil)
 
   def filter_select(assigns) do
     ~H"""
     <label class={["fsel", @disabled && "fsel--off"]}>
       <span class="fsel__label"><%= @label %>:</span>
       <select name={@name} disabled={@disabled}>
-        <option value="">any</option>
+        <option :if={@prompt} value="" disabled selected={@value == ""} hidden><%= @prompt %></option>
+        <option :if={!@prompt} value="">any</option>
         <option :for={option <- @options} value={option} selected={option == @value}><%= option %></option>
       </select>
       <.icon name="chevD" size={13} />

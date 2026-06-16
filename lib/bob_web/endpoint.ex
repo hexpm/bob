@@ -6,6 +6,8 @@ defmodule BobWeb.Endpoint do
     store: :cookie,
     key: "_bob_key",
     signing_salt: "9kLm2Qx7",
+    encryption_salt: "X4vR7nTq",
+    max_age: 60 * 60 * 24 * 30,
     same_site: "Lax"
   ]
 
@@ -36,8 +38,8 @@ defmodule BobWeb.Endpoint do
   plug(BobWeb.Plugs.Secret, api_only: true)
 
   plug(Plug.Parsers,
-    parsers: [:json, Bob.Plug.Parser],
-    pass: ["application/json", "application/vnd.bob+erlang"],
+    parsers: [:urlencoded, :json, Bob.Plug.Parser],
+    pass: ["application/x-www-form-urlencoded", "application/json", "application/vnd.bob+erlang"],
     json_decoder: JSON
   )
 

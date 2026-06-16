@@ -16,7 +16,10 @@ if config_env() == :prod do
     master?: System.fetch_env!("BOB_WHO") == "master",
     parallel_jobs: String.to_integer(System.fetch_env!("BOB_PARALLEL_JOBS")),
     local_jobs: jobs_fun.("BOB_LOCAL_JOBS"),
-    remote_jobs: jobs_fun.("BOB_REMOTE_JOBS")
+    remote_jobs: jobs_fun.("BOB_REMOTE_JOBS"),
+    hexpm_url: System.get_env("BOB_HEXPM_URL", "https://hex.pm"),
+    oauth_client_id: System.fetch_env!("BOB_OAUTH_CLIENT_ID"),
+    oauth_client_secret: System.fetch_env!("BOB_OAUTH_CLIENT_SECRET")
 
   config :ex_aws,
     access_key_id: System.fetch_env!("BOB_S3_ACCESS_KEY"),

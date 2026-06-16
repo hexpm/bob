@@ -72,13 +72,13 @@ pre,
 }
 
 .flash {
-  margin: 10px auto 0;
-  max-width: 1240px;
+  margin: 0 0 18px;
   border-radius: 8px;
   background: var(--color-grey-800);
   color: #fff;
-  padding: 8px 12px;
+  padding: 11px 14px;
   font-size: 13px;
+  line-height: 1.35;
 }
 
 .bob {
@@ -124,14 +124,6 @@ pre,
   font-size: 21px;
   font-weight: 800;
   letter-spacing: 0;
-}
-
-.bob-brand__tag {
-  color: var(--color-grey-400);
-  font-size: 12px;
-  font-weight: 500;
-  padding-left: 11px;
-  border-left: 1px solid var(--color-grey-700);
 }
 
 .bob-nav__tabs {
@@ -285,6 +277,18 @@ pre,
 
 .nav-ext svg {
   color: var(--color-grey-400);
+}
+
+.nav-user {
+  color: var(--color-grey-300);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.req-intro {
+  padding: 14px 20px 0;
+  font-size: 13.5px;
+  color: var(--color-grey-600);
 }
 
 .bob-main {
@@ -1079,7 +1083,6 @@ pre,
 }
 
 @media (max-width: 820px) {
-  .bob-brand__tag,
   .nav-ext {
     display: none;
   }

@@ -3,6 +3,7 @@ defmodule Bob.Job.DockerChecker do
 
   @erlang_tag_regex ~r"^(.+)-(alpine|ubuntu|debian)-(.+)$"
   @elixir_tag_regex ~r"^(.+)-erlang-(.+)-(alpine|ubuntu|debian)-(.+)$"
+  @elixir_release_asset_regex ~r"^elixir-otp-(\d+)\.zip$"
 
   @archs ["amd64", "arm64"]
   @erlang_arch_repos Enum.map(@archs, &"hexpm/erlang-#{&1}")
@@ -55,11 +56,13 @@ defmodule Bob.Job.DockerChecker do
   def run() do
     erlang()
     elixir()
+    requests()
     manifest()
   end
 
   def run(:erlang), do: erlang()
   def run(:elixir), do: elixir()
+  def run(:requests), do: requests()
   def run(:manifest), do: manifest()
 
   def priority(), do: 1
@@ -67,7 +70,13 @@ defmodule Bob.Job.DockerChecker do
   def concurrency(), do: :shared
 
   def erlang() do
+    recent_os = recent_base_image_versions()
+    recent_otp = recent_erlang_versions()
+
     expected_erlang_tags()
+    |> Enum.filter(fn {erlang, os, os_version, _arch} ->
+      MapSet.member?(recent_os, {os, os_version}) or MapSet.member?(recent_otp, erlang)
+    end)
     |> Enum.group_by(fn {_erlang, _os, _os_version, arch} -> arch end)
     |> Enum.flat_map(fn {arch, expected} ->
       present =
@@ -87,7 +96,7 @@ defmodule Bob.Job.DockerChecker do
   defp erlang_tag_name({erlang, os, os_version, _arch}), do: "#{erlang}-#{os}-#{os_version}"
 
   def expected_erlang_tags() do
-    refs = erlang_refs()
+    refs = latest_erlang_refs(erlang_refs())
 
     Stream.flat_map(builds(), fn {os, os_versions} ->
       Stream.flat_map(refs, fn ref ->
@@ -111,6 +120,20 @@ defmodule Bob.Job.DockerChecker do
         end
       end)
     end)
+  end
+
+  def archs(), do: @archs
+
+  def erlang_versions() do
+    Enum.map(erlang_refs(), fn "OTP-" <> version -> version end)
+  end
+
+  # Whether the build rules allow this erlang/os/os_version combination on all archs.
+  def valid_erlang_build?(erlang, os, os_version) do
+    ref = "OTP-" <> erlang
+
+    build_erlang_ref?(os, ref) and build_erlang_ref?(os, os_version, ref) and
+      Enum.all?(@archs, &build_erlang_ref?(&1, os, os_version, ref))
   end
 
   defp build_erlang_ref?(_os, "OTP-18.0-rc2"), do: false
@@ -221,11 +244,94 @@ defmodule Bob.Job.DockerChecker do
   end
 
   defp erlang_refs() do
-    "erlang/otp"
-    |> Bob.GitHub.fetch_repo_refs()
+    {:repo_refs, "erlang/otp"}
+    |> cached_github(fn -> github().fetch_repo_refs("erlang/otp") end)
     |> Enum.map(fn {ref_name, _ref} -> ref_name end)
     |> Enum.filter(&String.starts_with?(&1, "OTP-"))
     |> Enum.sort(&(cmp_erlang_tags(&1, &2) != :lt))
+  end
+
+  defp github(), do: Application.get_env(:bob, :github, Bob.GitHub)
+
+  # A run() calls erlang() then elixir(), and both reach for the same refs and
+  # release lists, so cache the raw GitHub responses briefly to collapse the
+  # duplicate calls within a cycle. The TTL is far below the 15-minute schedule,
+  # so each cycle still fetches fresh.
+  @github_cache_ttl 60
+
+  defp cached_github(key, fun) do
+    Bob.Cache.fetch({__MODULE__, key}, @github_cache_ttl, fun)
+  end
+
+  # Auto-builds only fire when one of the image's components — its base image,
+  # OTP, or Elixir — was released within this window. Old combinations that
+  # Docker Hub prunes for lack of pulls then stay pruned instead of being
+  # rebuilt every cycle; users can still request them explicitly.
+  @build_freshness_days 30
+
+  defp freshness_cutoff() do
+    DateTime.add(DateTime.utc_now(), -@build_freshness_days, :day)
+  end
+
+  defp recent_base_image_versions() do
+    Bob.Artifacts.recent_base_image_versions(freshness_cutoff())
+  end
+
+  defp recent_erlang_versions() do
+    cutoff = freshness_cutoff()
+
+    {:recent_releases, "erlang/otp"}
+    |> cached_github(fn -> github().fetch_recent_releases("erlang/otp") end)
+    |> Enum.flat_map(fn
+      %{"tag_name" => "OTP-" <> version, "published_at" => published_at} ->
+        if release_recent?(published_at, cutoff), do: [version], else: []
+
+      _other ->
+        []
+    end)
+    |> MapSet.new()
+  end
+
+  defp recent_elixir_versions() do
+    cutoff = freshness_cutoff()
+
+    {:recent_releases, "elixir-lang/elixir"}
+    |> cached_github(fn -> github().fetch_recent_releases("elixir-lang/elixir") end)
+    |> Enum.flat_map(fn
+      %{"tag_name" => "v" <> version, "published_at" => published_at} ->
+        if release_recent?(published_at, cutoff), do: [version], else: []
+
+      _other ->
+        []
+    end)
+    |> MapSet.new()
+  end
+
+  defp release_recent?(published_at, cutoff) when is_binary(published_at) do
+    case DateTime.from_iso8601(published_at) do
+      {:ok, datetime, _offset} -> DateTime.compare(datetime, cutoff) != :lt
+      _error -> false
+    end
+  end
+
+  defp release_recent?(_published_at, _cutoff), do: false
+
+  # Keeps only the newest ref per OTP major.minor line. Stable releases rank
+  # above prereleases within a line, so RCs drop out once a stable lands.
+  # Selection happens before the per-OS filters: a line whose newest ref an OS
+  # rule rejects gets no older fallback.
+  def latest_erlang_refs(refs) do
+    refs
+    |> Enum.sort(&(cmp_erlang_tags(&1, &2) != :lt))
+    |> Enum.uniq_by(fn "OTP-" <> version ->
+      version |> to_matchable() |> elem(0) |> Enum.take(2)
+    end)
+  end
+
+  defp latest_erlang_versions() do
+    erlang_refs()
+    |> latest_erlang_refs()
+    |> MapSet.new(fn "OTP-" <> version -> version end)
   end
 
   defp cmp_erlang_tags("OTP-" <> left, "OTP-" <> right) do
@@ -270,7 +376,15 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def elixir() do
+    recent_os = recent_base_image_versions()
+    recent_otp = recent_erlang_versions()
+    recent_elixir = recent_elixir_versions()
+
     expected_elixir_tags()
+    |> Enum.filter(fn {elixir, erlang, os, os_version, _arch} ->
+      MapSet.member?(recent_os, {os, os_version}) or MapSet.member?(recent_otp, erlang) or
+        MapSet.member?(recent_elixir, elixir)
+    end)
     |> Enum.group_by(fn {_elixir, _erlang, _os, _os_version, arch} -> arch end)
     |> Enum.flat_map(fn {arch, expected} ->
       present =
@@ -293,10 +407,12 @@ defmodule Bob.Job.DockerChecker do
 
   def expected_elixir_tags() do
     builds = builds()
-    refs = elixir_builds()
+    refs = latest_elixir_builds(elixir_builds())
+    latest_erlang = latest_erlang_versions()
 
     Stream.flat_map(current_erlang_tags(builds), fn {erlang, os, os_version, erlang_arch} ->
-      if not skip_elixir_for_erlang?(erlang) and os_version in builds[os] do
+      if MapSet.member?(latest_erlang, erlang) and not skip_elixir_for_erlang?(erlang) and
+           os_version in builds[os] do
         Stream.flat_map(refs, fn {"v" <> elixir, otp_major} ->
           if compatible_elixir_and_erlang?(otp_major, erlang) do
             [{elixir, erlang, os, os_version, erlang_arch}]
@@ -325,21 +441,30 @@ defmodule Bob.Job.DockerChecker do
   end
 
   def elixir_builds() do
-    "builds/elixir"
-    |> Bob.Store.fetch_built_refs()
-    |> Stream.map(fn {build_name, _ref} -> build_name end)
-    |> Stream.map(&split_elixir_build/1)
+    {:repo_releases, "elixir-lang/elixir"}
+    |> cached_github(fn -> github().fetch_repo_releases("elixir-lang/elixir") end)
+    |> Stream.flat_map(&release_elixir_builds/1)
     |> Stream.filter(&build_elixir_ref?/1)
     |> Enum.sort(&cmp_elixir_tags/2)
-    |> Enum.reject(fn {_elixir, otp} -> otp == nil end)
     |> Enum.reject(fn {"v" <> elixir, _otp} -> skip_elixir?(elixir) end)
   end
 
-  defp split_elixir_build(build_name) do
-    case String.split(build_name, "-otp-") do
-      [elixir, major_otp] -> {elixir, major_otp}
-      [elixir] -> {elixir, nil}
-    end
+  # Whether the build rules allow this elixir build on this exact erlang/os/os_version.
+  def valid_elixir_build?(elixir, otp_major, erlang, os, os_version) do
+    build_elixir_ref?({"v" <> elixir, otp_major}) and not skip_elixir?(elixir) and
+      not skip_elixir_for_erlang?(erlang) and compatible_elixir_and_erlang?(otp_major, erlang) and
+      valid_erlang_build?(erlang, os, os_version)
+  end
+
+  # Keeps only the newest build per {elixir major.minor, otp major} pair.
+  # Stable releases rank above prereleases within a pair.
+  def latest_elixir_builds(builds) do
+    builds
+    |> Enum.sort(&cmp_elixir_tags/2)
+    |> Enum.uniq_by(fn {"v" <> elixir, otp} ->
+      version = Version.parse!(normalize_version(elixir))
+      {version.major, version.minor, otp}
+    end)
   end
 
   defp cmp_elixir_tags({"v" <> elixir_left, otp_left}, {"v" <> elixir_right, otp_right}) do
@@ -373,6 +498,15 @@ defmodule Bob.Job.DockerChecker do
     end
   end
 
+  defp release_elixir_builds(%{"tag_name" => tag_name, "assets" => assets}) do
+    Enum.flat_map(assets, fn %{"name" => name} ->
+      case Regex.run(@elixir_release_asset_regex, name, capture: :all_but_first) do
+        [otp_major] -> [{tag_name, otp_major}]
+        _other -> []
+      end
+    end)
+  end
+
   defp compatible_elixir_and_erlang?(otp_major, erlang) do
     String.starts_with?(erlang, otp_major <> ".")
   end
@@ -386,6 +520,101 @@ defmodule Bob.Job.DockerChecker do
 
   defp skip_elixir?(elixir) do
     Version.compare(normalize_version(elixir), "1.10.0-0") == :lt
+  end
+
+  # Requests that still have no tags after this long are unbuildable; expiring
+  # them stops the reconciliation from re-enqueueing doomed jobs forever.
+  @request_ttl_days 14
+
+  # User-requested builds are one-time: pinned to the os_version current at
+  # request time and reconciled here until every target tag exists. Requests
+  # whose os_version rotated out of builds() expire instead.
+  def requests() do
+    builds = builds()
+
+    Enum.each(Bob.BuildRequests.pending(), fn request ->
+      cond do
+        request.os_version not in Map.get(builds, request.os, []) ->
+          Bob.BuildRequests.expire(request)
+
+        DateTime.diff(DateTime.utc_now(), request.inserted_at, :day) >= @request_ttl_days ->
+          Bob.BuildRequests.expire(request)
+
+        true ->
+          case request_jobs(request) do
+            [] -> Bob.BuildRequests.complete(request)
+            jobs -> Bob.Queue.add_many(jobs)
+          end
+      end
+    end)
+  end
+
+  def request_jobs(%{kind: "erlang"} = request) do
+    %{erlang: erlang, os: os, os_version: os_version} = request
+    tag = "#{erlang}-#{os}-#{os_version}"
+
+    arch_jobs =
+      Enum.flat_map(@archs, fn arch ->
+        if tag_present?("hexpm/erlang-#{arch}", tag) do
+          []
+        else
+          [{{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}]
+        end
+      end)
+
+    arch_jobs ++ manifest_jobs(arch_jobs, "erlang", tag, {erlang, os, os_version})
+  end
+
+  # The elixir image is built FROM the erlang image, and failed jobs are not
+  # retried by the queue, so the elixir job is only enqueued once its base tag
+  # exists; until then the erlang build is enqueued and the next reconciliation
+  # cycle picks the request up again.
+  def request_jobs(%{kind: "elixir"} = request) do
+    %{elixir: elixir, erlang: erlang, os: os, os_version: os_version} = request
+    erlang_tag = "#{erlang}-#{os}-#{os_version}"
+    elixir_tag = "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
+
+    arch_jobs =
+      Enum.flat_map(@archs, fn arch ->
+        cond do
+          tag_present?("hexpm/elixir-#{arch}", elixir_tag) ->
+            []
+
+          tag_present?("hexpm/erlang-#{arch}", erlang_tag) ->
+            [{{Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version]}]
+
+          true ->
+            [{{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}]
+        end
+      end)
+
+    arch_jobs ++ manifest_jobs(arch_jobs, "elixir", elixir_tag, {elixir, erlang, os, os_version})
+  end
+
+  # A request is only done once its manifest spans every architecture, so while
+  # the per-arch tags are still building we wait, and once they exist we enqueue
+  # the manifest ourselves rather than relying solely on manifest/0.
+  defp manifest_jobs(pending_arch_jobs, _kind, _tag, _key) when pending_arch_jobs != [], do: []
+
+  defp manifest_jobs([], kind, tag, key) do
+    if manifest_complete?(kind, tag) do
+      []
+    else
+      [{Bob.Job.DockerManifest, [kind, key]}]
+    end
+  end
+
+  defp manifest_complete?(kind, tag) do
+    case Bob.Artifacts.docker_tag_archs("hexpm/#{kind}", tag) do
+      nil -> false
+      archs -> Enum.all?(@archs, &(&1 in archs))
+    end
+  end
+
+  defp tag_present?(repo, tag) do
+    repo
+    |> Bob.Artifacts.docker_tags_present([tag])
+    |> MapSet.member?(tag)
   end
 
   def manifest() do

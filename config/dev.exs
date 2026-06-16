@@ -2,7 +2,10 @@ import Config
 
 config :bob,
   master_schedule: [],
-  agent_schedule: []
+  agent_schedule: [],
+  hexpm_url: "http://localhost:4000",
+  oauth_client_id: "b0b00000-0000-4000-8000-000000000b0b",
+  oauth_client_secret: "dev_secret_for_testing"
 
 config :bob, Bob.Repo,
   username: "postgres",

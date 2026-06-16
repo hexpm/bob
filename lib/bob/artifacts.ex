@@ -408,6 +408,19 @@ defmodule Bob.Artifacts do
   end
 
   @doc """
+  The architectures a single tag covers, or `nil` if the tag is absent. Used to
+  tell whether a manifest tag already spans every architecture.
+  """
+  def docker_tag_archs(repo, tag) do
+    Repo.one(
+      from(d in DockerTag,
+        where: d.repo == ^repo and d.tag == ^tag,
+        select: d.archs
+      )
+    )
+  end
+
+  @doc """
   `{repo, tag}` for every tag of `repos` whose search metadata carries one of
   `os_versions`. Scopes the checker's erlang reads to current base images —
   a fraction of the full history.
@@ -471,16 +484,35 @@ defmodule Bob.Artifacts do
 
   def replace_base_image_tags(repo, tags) do
     now = DateTime.utc_now()
+    tags = Enum.uniq(tags)
+    rows = Enum.map(tags, &%{repo: repo, tag: &1, inserted_at: now, updated_at: now})
 
-    rows =
-      tags |> Enum.uniq() |> Enum.map(&%{repo: repo, tag: &1, inserted_at: now, updated_at: now})
-
+    # Prune vanished tags but keep existing rows untouched, so inserted_at marks
+    # when a base image first appeared rather than the last reconcile.
     Repo.transaction(fn ->
-      Repo.delete_all(from(b in BaseImageTag, where: b.repo == ^repo))
-      Repo.insert_all(BaseImageTag, rows)
+      Repo.delete_all(from(b in BaseImageTag, where: b.repo == ^repo and b.tag not in ^tags))
+      Repo.insert_all(BaseImageTag, rows, on_conflict: :nothing, conflict_target: [:repo, :tag])
     end)
 
     :ok
+  end
+
+  @doc """
+  `{os, tag}` for every base image first seen on or after `cutoff`. A recent
+  base image is one of the components that makes a build worth triggering.
+  """
+  def recent_base_image_versions(cutoff) do
+    Repo.all(
+      from(b in BaseImageTag,
+        where: b.inserted_at >= ^cutoff,
+        select: {b.repo, b.tag}
+      )
+    )
+    |> Enum.flat_map(fn
+      {"library/" <> os, tag} -> [{os, tag}]
+      _other -> []
+    end)
+    |> MapSet.new()
   end
 
   def upsert(attrs) do
