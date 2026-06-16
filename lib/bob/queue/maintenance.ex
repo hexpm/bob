@@ -2,8 +2,9 @@ defmodule Bob.Queue.Maintenance do
   @moduledoc """
   Periodic queue maintenance, guarded by a Postgres advisory lock so exactly
   one master instance does the work: requeues stale running jobs (failing them
-  once their requeues are exhausted), prunes expired backoff rows, prunes old
-  job history, and prunes old build requests.
+  once their requeues are exhausted), prunes expired backoff rows, prunes job
+  history that is older than the retention window or beyond the row cap, and
+  prunes old build requests.
   """
 
   use GenServer
@@ -21,6 +22,7 @@ defmodule Bob.Queue.Maintenance do
   @max_timeout_requeues 2
   @backoff_expiry_seconds 7 * 24 * 60 * 60
   @history_retention_seconds 90 * 24 * 60 * 60
+  @history_max_jobs 10_000
   @build_request_retention_seconds 90 * 24 * 60 * 60
   @advisory_lock_key 4_771_001
 
@@ -101,6 +103,22 @@ defmodule Bob.Queue.Maintenance do
     Repo.delete_all(
       from(j in Job, where: j.state in ["done", "failed"] and j.finished_at < ^cutoff)
     )
+
+    max = history_max_jobs()
+
+    excess =
+      from(j in Job,
+        where: j.state in ["done", "failed"],
+        order_by: [desc: j.finished_at, desc: j.id],
+        offset: ^max,
+        select: j.id
+      )
+
+    Repo.delete_all(from(j in Job, where: j.id in subquery(excess)))
+  end
+
+  defp history_max_jobs() do
+    Application.get_env(:bob, :history_max_jobs, @history_max_jobs)
   end
 
   defp prune_build_requests() do

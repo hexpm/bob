@@ -440,6 +440,7 @@ pre,
 
 .filter-bar__meta {
   margin-left: auto;
+  align-self: center;
   color: var(--color-grey-400);
   font-size: 13px;
   white-space: nowrap;
@@ -599,6 +600,7 @@ pre,
 }
 
 .f-or {
+  align-self: center;
   color: var(--color-grey-400);
   padding: 0 1px;
   font-size: 12px;

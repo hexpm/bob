@@ -52,6 +52,30 @@ defmodule BobWeb.DockerTagsLiveTest do
     refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
   end
 
+  test "applies filters from URL params on load", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/docker?tag=1.18")
+
+    assert docker_tag?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
+    refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
+    assert control_html(html, "tag") =~ ~s(value="1.18")
+  end
+
+  test "searching patches the URL so filters survive a refresh", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/docker")
+
+    render_change(view, "search", %{
+      "repo" => "",
+      "tag" => "1.18",
+      "arch" => "",
+      "elixir_version" => "",
+      "erlang_version" => "",
+      "os" => "",
+      "os_version" => ""
+    })
+
+    assert_patch(view, ~p"/docker?tag=1.18")
+  end
+
   test "filters by structured inputs", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/docker")
 

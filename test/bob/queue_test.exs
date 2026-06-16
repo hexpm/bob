@@ -364,6 +364,24 @@ defmodule Bob.QueueTest do
       assert length(Queue.running([])) == 2
     end
 
+    test "filters by a list of only tuple module keys" do
+      key = {TestJob, :variant}
+      Queue.add(key, [:a])
+      Queue.add(Bob.Job.OTPChecker, [:b])
+
+      assert [j] = Queue.queued_listing(100, 0, [key])
+      assert j.module_key == key
+
+      {:ok, {id, _}} = Queue.start(key)
+      assert [r] = Queue.running([key])
+      assert r.module_key == key
+
+      Queue.success(id)
+      assert [p] = Queue.recent(50, 0, [key])
+      assert p.module_key == key
+      assert Queue.finished_count([key]) == 1
+    end
+
     test "recent/3 and finished_count/1 filter by module" do
       Queue.add(TestJob, [:a])
       {:ok, {id, _}} = Queue.start(TestJob)

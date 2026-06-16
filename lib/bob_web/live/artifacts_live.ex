@@ -6,13 +6,7 @@ defmodule BobWeb.ArtifactsLive do
   @impl true
   def mount(_params, _session, socket) do
     socket =
-      socket
-      |> assign(
-        query: "",
-        kind: "",
-        arch: "",
-        os: "",
-        offset: 0,
+      assign(socket,
         page: @page,
         kinds: [],
         arches: [],
@@ -22,34 +16,60 @@ defmodule BobWeb.ArtifactsLive do
         results: []
       )
 
-    socket = if connected?(socket), do: socket |> load_options() |> load(), else: socket
-
+    socket = if connected?(socket), do: load_options(socket), else: socket
     {:ok, socket}
   end
 
   @impl true
-  def handle_event("search", params, socket) do
-    socket =
-      socket
-      |> assign(
-        query: params["query"] || "",
-        kind: params["kind"] || "",
-        arch: params["arch"] || "",
-        os: params["os"] || "",
-        offset: 0
-      )
-      |> load()
-
+  def handle_params(params, _uri, socket) do
+    socket = assign(socket, filter_assigns(params))
+    socket = if connected?(socket), do: load(socket), else: socket
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("search", params, socket) do
+    filters = Keyword.delete(filter_assigns(params), :offset)
+    {:noreply, push_patch(socket, to: ~p"/artifacts?#{query(filters, 0)}", replace: true)}
   end
 
   def handle_event("page", %{"dir" => dir}, socket) do
     offset = max(socket.assigns.offset + step(dir), 0)
-    {:noreply, socket |> assign(offset: offset) |> load()}
+
+    filters = [
+      query: socket.assigns.query,
+      kind: socket.assigns.kind,
+      arch: socket.assigns.arch,
+      os: socket.assigns.os
+    ]
+
+    {:noreply, push_patch(socket, to: ~p"/artifacts?#{query(filters, offset)}")}
   end
 
   defp step("next"), do: @page
   defp step("prev"), do: -@page
+
+  defp filter_assigns(params) do
+    [
+      query: params["query"] || "",
+      kind: params["kind"] || "",
+      arch: params["arch"] || "",
+      os: params["os"] || "",
+      offset: parse_offset(params)
+    ]
+  end
+
+  defp query(filters, offset) do
+    filters = Enum.reject(filters, fn {_key, value} -> value in [nil, ""] end)
+    if offset > 0, do: filters ++ [offset: offset], else: filters
+  end
+
+  defp parse_offset(params) do
+    case Integer.parse(params["offset"] || "") do
+      {offset, ""} when offset > 0 -> offset
+      _ -> 0
+    end
+  end
 
   defp load_options(socket) do
     assign(socket,

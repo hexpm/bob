@@ -2,22 +2,14 @@ defmodule BobWeb.DockerTagsLive do
   use BobWeb, :live_view
 
   @page 100
+  @filter_keys ~w(repo tag arch elixir_version erlang_version os os_version)a
 
   @impl true
   def mount(_params, _session, socket) do
     options = Bob.Artifacts.docker_tag_filter_options()
 
     socket =
-      socket
-      |> assign(
-        repo: "",
-        tag: "",
-        arch: "",
-        elixir_version: "",
-        erlang_version: "",
-        os: "",
-        os_version: "",
-        offset: 0,
+      assign(socket,
         page: @page,
         repos: options.repos,
         arches: options.arches,
@@ -27,42 +19,60 @@ defmodule BobWeb.DockerTagsLive do
         results: []
       )
 
-    socket = if connected?(socket), do: load(socket), else: socket
-
     {:ok, socket}
   end
 
   @impl true
-  def handle_event("search", params, socket) do
-    tag = params["tag"] || ""
-
-    socket =
-      socket
-      |> assign(
-        repo: params["repo"] || "",
-        tag: tag,
-        arch: params["arch"] || "",
-        elixir_version: structured_param(params, "elixir_version", tag),
-        erlang_version: structured_param(params, "erlang_version", tag),
-        os: structured_param(params, "os", tag),
-        os_version: structured_param(params, "os_version", tag),
-        offset: 0
-      )
-      |> load()
-
+  def handle_params(params, _uri, socket) do
+    socket = assign(socket, filter_assigns(params))
+    socket = if connected?(socket), do: load(socket), else: socket
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("search", params, socket) do
+    filters = Keyword.delete(filter_assigns(params), :offset)
+    {:noreply, push_patch(socket, to: ~p"/docker?#{query(filters, 0)}", replace: true)}
   end
 
   def handle_event("page", %{"dir" => dir}, socket) do
     offset = max(socket.assigns.offset + step(dir), 0)
-    {:noreply, socket |> assign(offset: offset) |> load()}
+    filters = Enum.map(@filter_keys, &{&1, socket.assigns[&1]})
+    {:noreply, push_patch(socket, to: ~p"/docker?#{query(filters, offset)}")}
   end
 
   defp step("next"), do: @page
   defp step("prev"), do: -@page
 
+  defp filter_assigns(params) do
+    tag = params["tag"] || ""
+
+    [
+      repo: params["repo"] || "",
+      tag: tag,
+      arch: params["arch"] || "",
+      elixir_version: structured_param(params, "elixir_version", tag),
+      erlang_version: structured_param(params, "erlang_version", tag),
+      os: structured_param(params, "os", tag),
+      os_version: structured_param(params, "os_version", tag),
+      offset: parse_offset(params)
+    ]
+  end
+
   defp structured_param(_params, _key, tag) when tag != "", do: ""
   defp structured_param(params, key, _tag), do: params[key] || ""
+
+  defp parse_offset(params) do
+    case Integer.parse(params["offset"] || "") do
+      {offset, ""} when offset > 0 -> offset
+      _ -> 0
+    end
+  end
+
+  defp query(filters, offset) do
+    filters = Enum.reject(filters, fn {_key, value} -> value in [nil, ""] end)
+    if offset > 0, do: filters ++ [offset: offset], else: filters
+  end
 
   defp load(socket) do
     %{

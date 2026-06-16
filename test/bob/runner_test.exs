@@ -81,7 +81,12 @@ defmodule Bob.RunnerTest do
       Bob.Queue.add(QuietJob, [:terminate_test])
       {:ok, {id, [:terminate_test]}} = Bob.Queue.start(QuietJob)
 
-      state = %{tasks: %{task.ref => {QuietJob, [:terminate_test], {:local, id}, task.pid}}}
+      timer = Process.send_after(self(), :noop, 100_000)
+
+      state = %{
+        tasks: %{task.ref => {QuietJob, [:terminate_test], {:local, id}, task.pid, timer}}
+      }
+
       Bob.Runner.terminate(:shutdown, state)
 
       refute Process.alive?(task.pid)
@@ -93,11 +98,28 @@ defmodule Bob.RunnerTest do
       {:ok, {id, [:down_test]}} = Bob.Queue.start(QuietJob)
 
       ref = make_ref()
-      state = %{tasks: %{ref => {QuietJob, [:down_test], {:local, id}, self()}}}
+      timer = Process.send_after(self(), :noop, 100_000)
+      state = %{tasks: %{ref => {QuietJob, [:down_test], {:local, id}, self(), timer}}}
 
       {:noreply, new_state} =
         Bob.Runner.handle_info({:DOWN, ref, :process, self(), :killed}, state)
 
+      assert new_state.tasks == %{}
+      assert Bob.Repo.get!(Bob.Queue.Job, id).state == "failed"
+    end
+
+    test "a task that outlives its timeout is killed and the job failed" do
+      task = Task.Supervisor.async_nolink(Bob.Tasks, fn -> Process.sleep(:infinity) end)
+
+      Bob.Queue.add(QuietJob, [:timeout_test])
+      {:ok, {id, [:timeout_test]}} = Bob.Queue.start(QuietJob)
+
+      timer = Process.send_after(self(), :noop, 100_000)
+      state = %{tasks: %{task.ref => {QuietJob, [:timeout_test], {:local, id}, task.pid, timer}}}
+
+      {:noreply, new_state} = Bob.Runner.handle_info({:job_timeout, task.ref}, state)
+
+      refute Process.alive?(task.pid)
       assert new_state.tasks == %{}
       assert Bob.Repo.get!(Bob.Queue.Job, id).state == "failed"
     end
