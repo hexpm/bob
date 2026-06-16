@@ -476,13 +476,16 @@ defmodule Bob.Job.DockerChecker do
     %{erlang: erlang, os: os, os_version: os_version} = request
     tag = "#{erlang}-#{os}-#{os_version}"
 
-    Enum.flat_map(@archs, fn arch ->
-      if tag_present?("hexpm/erlang-#{arch}", tag) do
-        []
-      else
-        [{{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}]
-      end
-    end)
+    arch_jobs =
+      Enum.flat_map(@archs, fn arch ->
+        if tag_present?("hexpm/erlang-#{arch}", tag) do
+          []
+        else
+          [{{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}]
+        end
+      end)
+
+    arch_jobs ++ manifest_jobs(arch_jobs, "erlang", tag, {erlang, os, os_version})
   end
 
   # The elixir image is built FROM the erlang image, and failed jobs are not
@@ -494,18 +497,41 @@ defmodule Bob.Job.DockerChecker do
     erlang_tag = "#{erlang}-#{os}-#{os_version}"
     elixir_tag = "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
 
-    Enum.flat_map(@archs, fn arch ->
-      cond do
-        tag_present?("hexpm/elixir-#{arch}", elixir_tag) ->
-          []
+    arch_jobs =
+      Enum.flat_map(@archs, fn arch ->
+        cond do
+          tag_present?("hexpm/elixir-#{arch}", elixir_tag) ->
+            []
 
-        tag_present?("hexpm/erlang-#{arch}", erlang_tag) ->
-          [{{Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version]}]
+          tag_present?("hexpm/erlang-#{arch}", erlang_tag) ->
+            [{{Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version]}]
 
-        true ->
-          [{{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}]
-      end
-    end)
+          true ->
+            [{{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}]
+        end
+      end)
+
+    arch_jobs ++ manifest_jobs(arch_jobs, "elixir", elixir_tag, {elixir, erlang, os, os_version})
+  end
+
+  # A request is only done once its manifest spans every architecture, so while
+  # the per-arch tags are still building we wait, and once they exist we enqueue
+  # the manifest ourselves rather than relying solely on manifest/0.
+  defp manifest_jobs(pending_arch_jobs, _kind, _tag, _key) when pending_arch_jobs != [], do: []
+
+  defp manifest_jobs([], kind, tag, key) do
+    if manifest_complete?(kind, tag) do
+      []
+    else
+      [{Bob.Job.DockerManifest, [kind, key]}]
+    end
+  end
+
+  defp manifest_complete?(kind, tag) do
+    case Bob.Artifacts.docker_tag_archs("hexpm/#{kind}", tag) do
+      nil -> false
+      archs -> Enum.all?(@archs, &(&1 in archs))
+    end
   end
 
   defp tag_present?(repo, tag) do

@@ -293,15 +293,40 @@ defmodule Bob.Job.DockerCheckerTest do
       assert Repo.reload!(request).state == "pending"
     end
 
-    test "completes an erlang request once both archs are built" do
+    test "enqueues the manifest once the erlang archs are built" do
       request = insert_request(kind: "erlang", erlang: "27.0")
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
       Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
 
       DockerChecker.requests()
 
+      assert [%Job{module_key: Bob.Job.DockerManifest, args: args}] = Repo.all(Job)
+      assert args == ["erlang", {"27.0", "ubuntu", "noble-20250101"}]
+      assert Repo.reload!(request).state == "pending"
+    end
+
+    test "completes an erlang request once the manifest spans both archs" do
+      request = insert_request(kind: "erlang", erlang: "27.0")
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
+
+      DockerChecker.requests()
+
       assert Repo.all(Job) == []
       assert Repo.reload!(request).state == "completed"
+    end
+
+    test "keeps an erlang request pending while the manifest covers one arch" do
+      request = insert_request(kind: "erlang", erlang: "27.0")
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
+
+      DockerChecker.requests()
+
+      assert [%Job{module_key: Bob.Job.DockerManifest}] = Repo.all(Job)
+      assert Repo.reload!(request).state == "pending"
     end
 
     test "stages an elixir request through the erlang base build" do
@@ -322,25 +347,32 @@ defmodule Bob.Job.DockerCheckerTest do
       assert Repo.reload!(request).state == "pending"
     end
 
-    test "completes an elixir request once both archs are built" do
+    test "completes an elixir request once the manifest spans both archs" do
       request = insert_request(kind: "elixir", elixir: "1.18.0", erlang: "27.0")
+      tag = "1.18.0-erlang-27.0-ubuntu-noble-20250101"
 
-      Artifacts.add_docker_tag(
-        "hexpm/elixir-amd64",
-        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
-        ["amd64"]
-      )
-
-      Artifacts.add_docker_tag(
-        "hexpm/elixir-arm64",
-        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
-        ["arm64"]
-      )
+      Artifacts.add_docker_tag("hexpm/elixir-amd64", tag, ["amd64"])
+      Artifacts.add_docker_tag("hexpm/elixir-arm64", tag, ["arm64"])
+      Artifacts.add_docker_tag("hexpm/elixir", tag, ["amd64", "arm64"])
 
       DockerChecker.requests()
 
       assert Repo.all(Job) == []
       assert Repo.reload!(request).state == "completed"
+    end
+
+    test "enqueues the manifest once the elixir archs are built" do
+      request = insert_request(kind: "elixir", elixir: "1.18.0", erlang: "27.0")
+      tag = "1.18.0-erlang-27.0-ubuntu-noble-20250101"
+
+      Artifacts.add_docker_tag("hexpm/elixir-amd64", tag, ["amd64"])
+      Artifacts.add_docker_tag("hexpm/elixir-arm64", tag, ["arm64"])
+
+      DockerChecker.requests()
+
+      assert [%Job{module_key: Bob.Job.DockerManifest, args: args}] = Repo.all(Job)
+      assert args == ["elixir", {"1.18.0", "27.0", "ubuntu", "noble-20250101"}]
+      assert Repo.reload!(request).state == "pending"
     end
 
     test "expires requests whose os_version is no longer current" do

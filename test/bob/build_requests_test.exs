@@ -50,10 +50,21 @@ defmodule Bob.BuildRequestsTest do
     test "reports already built tags without recording a request" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
       Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
 
       assert BuildRequests.submit(@erlang_attrs) == {:ok, :already_built}
       assert Repo.all(Job) == []
       assert Repo.all(BuildRequest) == []
+    end
+
+    test "enqueues only the manifest when the arch images already exist" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+
+      assert {:ok, %BuildRequest{}} = submit(@erlang_attrs)
+
+      assert [%Job{module_key: Bob.Job.DockerManifest, args: args}] = Repo.all(Job)
+      assert args == ["erlang", {"27.0", "ubuntu", "noble-20250101"}]
     end
 
     test "rejects combinations the build rules reject" do

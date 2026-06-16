@@ -66,14 +66,18 @@ defmodule Bob.BuildRequests do
     end
   end
 
-  # An erlang job under an elixir request implies a follow-up elixir build on
-  # the same arch, so it counts as two builds against the hourly limit.
-  defp builds_count("erlang", jobs), do: length(jobs)
+  # Only image builds count against the hourly limit; manifest assembly is
+  # cheap. An erlang job under an elixir request implies a follow-up elixir
+  # build on the same arch, so it counts as two.
+  defp builds_count("erlang", jobs) do
+    Enum.count(jobs, &match?({{Bob.Job.BuildDockerErlang, _arch}, _args}, &1))
+  end
 
   defp builds_count("elixir", jobs) do
     Enum.reduce(jobs, 0, fn
       {{Bob.Job.BuildDockerErlang, _arch}, _args}, acc -> acc + 2
       {{Bob.Job.BuildDockerElixir, _arch}, _args}, acc -> acc + 1
+      _other, acc -> acc
     end)
   end
 

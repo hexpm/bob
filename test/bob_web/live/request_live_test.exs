@@ -176,6 +176,7 @@ defmodule BobWeb.RequestLiveTest do
   test "reports already built tags", %{conn: conn} do
     Bob.Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
     Bob.Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+    Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
 
     {:ok, view, _html} = live(log_in(conn), ~p"/request")
     render_async(view)
@@ -199,6 +200,7 @@ defmodule BobWeb.RequestLiveTest do
   test "replaces old flash messages", %{conn: conn} do
     Bob.Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
     Bob.Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+    Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
 
     {:ok, view, _html} = live(log_in(conn), ~p"/request")
     render_async(view)

@@ -408,6 +408,19 @@ defmodule Bob.Artifacts do
   end
 
   @doc """
+  The architectures a single tag covers, or `nil` if the tag is absent. Used to
+  tell whether a manifest tag already spans every architecture.
+  """
+  def docker_tag_archs(repo, tag) do
+    Repo.one(
+      from(d in DockerTag,
+        where: d.repo == ^repo and d.tag == ^tag,
+        select: d.archs
+      )
+    )
+  end
+
+  @doc """
   `{repo, tag}` for every tag of `repos` whose search metadata carries one of
   `os_versions`. Scopes the checker's erlang reads to current base images —
   a fraction of the full history.
