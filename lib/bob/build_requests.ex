@@ -121,14 +121,35 @@ defmodule Bob.BuildRequests do
     )
   end
 
-  def recent_for_user(username, limit \\ 10) do
+  def recent(limit, offset) do
     Repo.all(
       from(request in BuildRequest,
-        where: request.username == ^username,
         order_by: [desc: request.inserted_at],
-        limit: ^limit
+        limit: ^limit,
+        offset: ^offset
       )
     )
+  end
+
+  def count() do
+    Repo.aggregate(BuildRequest, :count)
+  end
+
+  @doc """
+  Deletes finished requests older than `older_than_seconds`. Pending requests
+  are left alone; the checker reconciliation expires or completes them first.
+  """
+  def prune(older_than_seconds) do
+    cutoff = DateTime.add(DateTime.utc_now(), -older_than_seconds, :second)
+
+    {count, _} =
+      Repo.delete_all(
+        from(request in BuildRequest,
+          where: request.state in ["completed", "expired"] and request.inserted_at < ^cutoff
+        )
+      )
+
+    count
   end
 
   defp pending_query() do

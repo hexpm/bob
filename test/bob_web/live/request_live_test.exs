@@ -278,8 +278,8 @@ defmodule BobWeb.RequestLiveTest do
     assert Repo.all(BuildRequest) == []
   end
 
-  test "lists the user's recent requests", %{conn: conn} do
-    {:ok, _request} =
+  test "lists recent requests across all users", %{conn: conn} do
+    {:ok, _mine} =
       Bob.BuildRequests.create(%{
         username: "eric",
         kind: "erlang",
@@ -289,11 +289,27 @@ defmodule BobWeb.RequestLiveTest do
         builds_count: 2
       })
 
+    {:ok, others} =
+      Bob.BuildRequests.create(%{
+        username: "jose",
+        kind: "erlang",
+        erlang: "28.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 2
+      })
+
+    others
+    |> Ecto.Changeset.change(state: "completed")
+    |> Repo.update!()
+
     {:ok, _view, html} = live(log_in(conn), ~p"/request")
 
-    assert html =~ "Your recent requests"
+    assert html =~ "Recent requests"
+    # Another user's request, in a finished state, still shows up.
+    assert html =~ "jose"
+    assert html =~ "28.0-ubuntu-noble-20250101"
     assert html =~ "26.0-ubuntu-noble-20250101"
-    assert html =~ "pending"
   end
 
   test "lists global pending requests", %{conn: conn} do
@@ -318,26 +334,10 @@ defmodule BobWeb.RequestLiveTest do
         builds_count: 4
       })
 
-    {:ok, completed_request} =
-      Bob.BuildRequests.create(%{
-        username: "dashbit",
-        kind: "erlang",
-        erlang: "28.0",
-        os: "ubuntu",
-        os_version: "noble-20250101",
-        builds_count: 2
-      })
-
-    completed_request
-    |> Ecto.Changeset.change(state: "completed")
-    |> Repo.update!()
-
     {:ok, _view, html} = live(log_in(conn), ~p"/request")
 
     assert html =~ "Pending requests"
     assert html =~ "jose"
     assert html =~ "1.18.0-erlang-27.0-ubuntu-noble-20250101"
-    refute html =~ "dashbit"
-    refute html =~ "28.0-ubuntu-noble-20250101"
   end
 end

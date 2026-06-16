@@ -2,6 +2,8 @@ defmodule Bob.Queue.MaintenanceTest do
   use Bob.DataCase
 
   alias Bob.Queue.{Maintenance, Job, Failure, Term}
+  alias Bob.BuildRequests
+  alias Bob.BuildRequests.BuildRequest
 
   @hour 60 * 60
   @day 24 * @hour
@@ -112,5 +114,38 @@ defmodule Bob.Queue.MaintenanceTest do
     Maintenance.run()
 
     assert [%Job{state: "queued"}] = Repo.all(Job)
+  end
+
+  defp insert_build_request(state, inserted_at) do
+    {:ok, request} =
+      BuildRequests.create(%{
+        username: "eric",
+        kind: "erlang",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 2
+      })
+
+    request
+    |> Ecto.Changeset.change(state: state, inserted_at: inserted_at)
+    |> Repo.update!()
+  end
+
+  test "prunes finished build requests past the retention window" do
+    insert_build_request("completed", ago(91 * @day))
+
+    Maintenance.run()
+
+    assert Repo.all(BuildRequest) == []
+  end
+
+  test "keeps recent and pending build requests" do
+    insert_build_request("completed", DateTime.utc_now())
+    insert_build_request("pending", ago(91 * @day))
+
+    Maintenance.run()
+
+    assert Enum.map(Repo.all(BuildRequest), & &1.state) |> Enum.sort() == ["completed", "pending"]
   end
 end

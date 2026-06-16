@@ -7,6 +7,7 @@ defmodule BobWeb.RequestLive do
 
   @options_ttl 10 * 60
   @pending_limit 25
+  @recent_page 50
 
   @impl true
   def mount(_params, _session, socket) do
@@ -30,9 +31,13 @@ defmodule BobWeb.RequestLive do
         os_version: "",
         erlang: "",
         elixir: "",
-        pending_requests: pending_requests(),
-        my_requests: my_requests(socket)
+        recent_page: @recent_page,
+        recent_offset: 0,
+        recent_total: nil,
+        recent_requests: [],
+        pending_requests: pending_requests()
       )
+      |> load_recent()
 
     socket =
       if connected?(socket) do
@@ -76,6 +81,14 @@ defmodule BobWeb.RequestLive do
         {:noreply, submit(socket)}
     end
   end
+
+  def handle_event("page", %{"dir" => dir}, socket) do
+    offset = max(socket.assigns.recent_offset + step(dir), 0)
+    {:noreply, socket |> assign(recent_offset: offset) |> load_recent()}
+  end
+
+  defp step("next"), do: @recent_page
+  defp step("prev"), do: -@recent_page
 
   # Selected values are only kept when they appear in the option lists, which
   # are derived from real refs and builds and already encode the build rules.
@@ -143,15 +156,29 @@ defmodule BobWeb.RequestLive do
   end
 
   defp reload_request_lists(socket) do
-    assign(socket, pending_requests: pending_requests(), my_requests: my_requests(socket))
+    socket
+    |> assign(pending_requests: pending_requests(), recent_offset: 0)
+    |> load_recent()
   end
 
   defp pending_requests() do
     BuildRequests.pending(@pending_limit)
   end
 
-  defp my_requests(socket) do
-    BuildRequests.recent_for_user(socket.assigns.current_user["username"])
+  defp load_recent(socket) do
+    offset = socket.assigns.recent_offset
+    recent = BuildRequests.recent(@recent_page, offset)
+
+    total =
+      if offset == 0 and recent == [] do
+        0
+      else
+        # The page and count are separate queries, so keep the pager coherent
+        # if requests are added or pruned between them.
+        max(BuildRequests.count(), offset + length(recent))
+      end
+
+    assign(socket, recent_requests: recent, recent_total: total)
   end
 
   defp load_options() do
@@ -302,8 +329,11 @@ defmodule BobWeb.RequestLive do
         <div :if={@pending_requests == []} class="empty-mini">No pending requests.</div>
       </.section>
 
-      <.section :if={@my_requests != []} title="Your recent requests" icon="clock">
-        <.table rows={@my_requests} class="jt--req">
+      <.section title="Recent requests" count={@recent_total} icon="clock">
+        <.table :if={@recent_requests != []} rows={@recent_requests} class="jt--req">
+          <:col :let={request} label="user">
+            <span class="mono-cell mono-cell--name"><%= request.username %></span>
+          </:col>
           <:col :let={request} label="image">
             <%= request.kind %>
           </:col>
@@ -317,6 +347,16 @@ defmodule BobWeb.RequestLive do
             <span class="c-time"><%= fmt(request.inserted_at) %></span>
           </:col>
         </.table>
+        <div :if={@recent_requests == []} class="empty-mini">No requests yet.</div>
+
+        <.pager
+          event="page"
+          offset={@recent_offset}
+          count={length(@recent_requests)}
+          page={@recent_page}
+          unit="requests"
+          total={@recent_total}
+        />
       </.section>
     </div>
     """

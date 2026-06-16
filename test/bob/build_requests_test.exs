@@ -187,6 +187,68 @@ defmodule Bob.BuildRequestsTest do
     end
   end
 
+  describe "recent/2 and count/0" do
+    test "returns all requests newest-first, regardless of user or state" do
+      {:ok, oldest} = BuildRequests.create(Map.put(@erlang_attrs, :builds_count, 2))
+
+      {:ok, newest} =
+        BuildRequests.create(%{@elixir_attrs | username: "jose"} |> Map.put(:builds_count, 4))
+
+      oldest
+      |> Ecto.Changeset.change(
+        state: "completed",
+        inserted_at: DateTime.add(DateTime.utc_now(), -1, :hour)
+      )
+      |> Repo.update!()
+
+      assert [%BuildRequest{id: first}, %BuildRequest{id: second}] =
+               BuildRequests.recent(50, 0)
+
+      assert [first, second] == [newest.id, oldest.id]
+      assert BuildRequests.count() == 2
+    end
+
+    test "paginates with limit and offset" do
+      for n <- 1..3 do
+        {:ok, request} = BuildRequests.create(Map.put(@erlang_attrs, :builds_count, 2))
+
+        request
+        |> Ecto.Changeset.change(inserted_at: DateTime.add(DateTime.utc_now(), -n, :minute))
+        |> Repo.update!()
+      end
+
+      assert [%BuildRequest{}, %BuildRequest{}] = BuildRequests.recent(2, 0)
+      assert [%BuildRequest{}] = BuildRequests.recent(2, 2)
+      assert BuildRequests.recent(2, 3) == []
+    end
+  end
+
+  describe "prune/1" do
+    test "deletes finished requests older than the cutoff and keeps the rest" do
+      _old_completed = insert_aged(%{state: "completed"}, -100)
+      _old_expired = insert_aged(%{state: "expired"}, -100)
+      old_pending = insert_aged(%{state: "pending"}, -100)
+      recent_completed = insert_aged(%{state: "completed"}, -1)
+
+      assert BuildRequests.prune(90 * 24 * 60 * 60) == 2
+
+      ids = Repo.all(BuildRequest) |> Enum.map(& &1.id) |> Enum.sort()
+      assert ids == Enum.sort([old_pending.id, recent_completed.id])
+    end
+  end
+
+  defp insert_aged(attrs, days) do
+    {:ok, request} =
+      BuildRequests.create(Map.merge(@erlang_attrs, Map.put(attrs, :builds_count, 2)))
+
+    request
+    |> Ecto.Changeset.change(
+      state: attrs.state,
+      inserted_at: DateTime.add(DateTime.utc_now(), days, :day)
+    )
+    |> Repo.update!()
+  end
+
   defp submit(attrs) do
     BuildRequests.submit(attrs)
   end
