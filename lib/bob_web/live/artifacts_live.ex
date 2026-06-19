@@ -1,7 +1,10 @@
 defmodule BobWeb.ArtifactsLive do
   use BobWeb, :live_view
 
-  @page 100
+  alias Bob.Artifacts.ArtifactSearch
+
+  @page ArtifactSearch.page_size()
+  @filter_keys ArtifactSearch.filter_keys()
 
   @impl true
   def mount(_params, _session, socket) do
@@ -35,14 +38,7 @@ defmodule BobWeb.ArtifactsLive do
 
   def handle_event("page", %{"dir" => dir}, socket) do
     offset = max(socket.assigns.offset + step(dir), 0)
-
-    filters = [
-      query: socket.assigns.query,
-      kind: socket.assigns.kind,
-      arch: socket.assigns.arch,
-      os: socket.assigns.os
-    ]
-
+    filters = Enum.map(@filter_keys, &{&1, socket.assigns[&1]})
     {:noreply, push_patch(socket, to: ~p"/artifacts?#{query(filters, offset)}")}
   end
 
@@ -50,25 +46,14 @@ defmodule BobWeb.ArtifactsLive do
   defp step("prev"), do: -@page
 
   defp filter_assigns(params) do
-    [
-      query: params["query"] || "",
-      kind: params["kind"] || "",
-      arch: params["arch"] || "",
-      os: params["os"] || "",
-      offset: parse_offset(params)
-    ]
+    filters = ArtifactSearch.parse_filters(params)
+
+    Enum.map(@filter_keys, &{&1, filters[&1]}) ++ [offset: ArtifactSearch.parse_offset(params)]
   end
 
   defp query(filters, offset) do
     filters = Enum.reject(filters, fn {_key, value} -> value in [nil, ""] end)
     if offset > 0, do: filters ++ [offset: offset], else: filters
-  end
-
-  defp parse_offset(params) do
-    case Integer.parse(params["offset"] || "") do
-      {offset, ""} when offset > 0 -> offset
-      _ -> 0
-    end
   end
 
   defp load_options(socket) do
@@ -84,14 +69,9 @@ defmodule BobWeb.ArtifactsLive do
 
     filters = %{query: q, kind: kind, arch: arch, os: os}
 
-    results =
-      Bob.Artifacts.search_artifacts(filters, @page, offset)
+    %{results: results, total: total} = Bob.Artifacts.artifact_page(filters, @page, offset)
 
-    assign(socket,
-      results: results,
-      total: Bob.Artifacts.count_artifacts(filters),
-      loading: false
-    )
+    assign(socket, results: results, total: total, loading: false)
   end
 
   defp fmt(nil), do: "—"

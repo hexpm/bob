@@ -4,6 +4,10 @@ defmodule BobWeb.Router do
   import BobWeb.UserAuth
 
   pipeline :browser do
+    # Answers the search LiveViews as JSON for Accept: application/json before
+    # :accepts would reject the request as not HTML; a no-op for every other
+    # request, which falls through to the LiveView.
+    plug(BobWeb.Plugs.SearchJson)
     plug(:accepts, ["html"])
     plug(:fetch_session)
     plug(:fetch_live_flash)
