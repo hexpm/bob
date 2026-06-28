@@ -196,11 +196,11 @@ defmodule Bob.Job.DockerCheckerTest do
 
   describe "builds/0" do
     test "finds the latest base-image tag matching each regex" do
-      for tag <- ["3.23.4", "3.23.5", "3.22.1"] do
+      for tag <- ["3.24.0", "3.23.4", "3.23.5", "3.22.1"] do
         Repo.insert!(%BaseImageTag{repo: "library/alpine", tag: tag})
       end
 
-      assert DockerChecker.builds()["alpine"] == ["3.23.5", "3.22.1"]
+      assert DockerChecker.builds()["alpine"] == ["3.24.0", "3.23.5", "3.22.1"]
     end
 
     test "yields no versions when base_image_tags is empty" do
