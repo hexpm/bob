@@ -2,12 +2,9 @@ defmodule BobWeb.Router do
   use BobWeb, :router
 
   import BobWeb.UserAuth
+  import BobWeb.ApiAuth
 
   pipeline :browser do
-    # Answers the search LiveViews as JSON for Accept: application/json before
-    # :accepts would reject the request as not HTML; a no-op for every other
-    # request, which falls through to the LiveView.
-    plug(BobWeb.Plugs.SearchJson)
     plug(:accepts, ["html"])
     plug(:fetch_session)
     plug(:fetch_live_flash)
@@ -17,7 +14,17 @@ defmodule BobWeb.Router do
     plug(:fetch_current_user)
   end
 
+  pipeline :api do
+    plug(:require_api_auth)
+  end
+
+  pipeline :public_api do
+    plug(:accepts, ["json"])
+  end
+
   scope "/api", BobWeb do
+    pipe_through(:api)
+
     post("/queue/start", QueueController, :start)
     post("/queue/success", QueueController, :success)
     post("/queue/failure", QueueController, :failure)
@@ -25,6 +32,14 @@ defmodule BobWeb.Router do
     post("/queue/add", QueueController, :add)
     post("/artifacts/add", ArtifactController, :add)
     post("/docker/add", ArtifactController, :add_docker)
+  end
+
+  # Public API routes
+  scope "/api", BobWeb do
+    pipe_through(:public_api)
+
+    get("/artifacts", PublicApiController, :artifacts)
+    get("/docker", PublicApiController, :docker_tags)
   end
 
   scope "/", BobWeb do

@@ -1,21 +1,7 @@
-defmodule BobWeb.Plugs.Secret do
+defmodule BobWeb.ApiAuth do
   import Plug.Conn
 
-  def init(opts), do: opts
-
-  def call(%{path_info: ["api" | _]} = conn, _opts) do
-    authenticate(conn)
-  end
-
-  def call(conn, opts) when is_list(opts) do
-    if Keyword.get(opts, :api_only, false) do
-      conn
-    else
-      authenticate(conn)
-    end
-  end
-
-  defp authenticate(conn) do
+  def require_api_auth(conn, _opts) do
     secret = Application.get_env(:bob, :agent_secret)
 
     if authorized?(get_req_header(conn, "authorization"), secret) do
