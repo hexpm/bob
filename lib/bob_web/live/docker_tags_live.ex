@@ -6,6 +6,10 @@ defmodule BobWeb.DockerTagsLive do
   @page DockerTagSearch.page_size()
   @filter_keys DockerTagSearch.filter_keys()
 
+  # Flag a tag as removing once it is within this many days of (or past) its
+  # cleanup removal date.
+  @warn_days 14
+
   @impl true
   def mount(_params, _session, socket) do
     options = Bob.Artifacts.docker_tag_filter_options()
@@ -90,6 +94,24 @@ defmodule BobWeb.DockerTagsLive do
   defp fmt(nil), do: "—"
   defp fmt(datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S")
 
+  # The retention badge a tag earns: reserved (kept), {:removing, days_left} when
+  # within @warn_days of (or past) its removal date, or :none.
+  defp retention_status(true, _d), do: :reserved
+
+  defp retention_status(false, d) do
+    case Bob.DockerCleanup.removal_at(d.repo, d.built_at, d.last_pulled) do
+      nil ->
+        :none
+
+      at ->
+        days = DateTime.diff(at, DateTime.utc_now(), :day)
+        if days <= @warn_days, do: {:removing, days}, else: :none
+    end
+  end
+
+  defp removing_label(days) when days <= 0, do: "removing"
+  defp removing_label(days), do: "removing ~#{days}d"
+
   defp count_label(nil), do: "Loading tags"
   defp count_label(0), do: "0 tags"
   defp count_label(count), do: "#{format_count(count)} #{format_unit("tags", count)}"
@@ -152,12 +174,20 @@ defmodule BobWeb.DockerTagsLive do
           <:col :let={d} label="tag" class="col-dk-tag">
             <div class="dk-tag-cell">
               <code class="dk-tag-code" title={d.tag}><%= d.tag %></code>
+              <% status = retention_status(MapSet.member?(@reserved, d.id), d) %>
               <span
-                :if={MapSet.member?(@reserved, d.id)}
+                :if={status == :reserved}
                 class="dk-reserved"
                 title="Reserved by a build request — exempt from cleanup"
               >
                 reserved
+              </span>
+              <span
+                :if={match?({:removing, _days}, status)}
+                class="dk-removing"
+                title="Scheduled for removal soon. Request the image to keep it."
+              >
+                <%= removing_label(elem(status, 1)) %>
               </span>
             </div>
           </:col>
@@ -168,6 +198,9 @@ defmodule BobWeb.DockerTagsLive do
           </:col>
           <:col :let={d} label="built" class="col-time">
             <span class="c-time"><%= fmt(d.built_at) %></span>
+          </:col>
+          <:col :let={d} label="last pulled" class="col-time">
+            <span class="c-time"><%= fmt(d.last_pulled) %></span>
           </:col>
         </.table>
         <div :if={!@loading and @results == []} class="empty-mini">No matching tags.</div>

@@ -52,6 +52,57 @@ defmodule BobWeb.DockerTagsLiveTest do
     refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
   end
 
+  test "shows last pulled and flags tags nearing removal", %{conn: conn} do
+    now = DateTime.utc_now()
+
+    # per-arch built long ago -> removing (age-based)
+    Bob.Artifacts.add_docker_tag(
+      "hexpm/elixir-amd64",
+      "1.10.0-erlang-23.0-ubuntu-noble-20200101",
+      ["amd64"],
+      DateTime.add(now, -90, :day)
+    )
+
+    # manifest pulled recently despite an old build -> kept
+    Bob.Artifacts.add_docker_tag(
+      "hexpm/erlang",
+      "26.0-ubuntu-noble-20250101",
+      ["amd64", "arm64"],
+      DateTime.add(now, -300, :day),
+      DateTime.add(now, -1, :day)
+    )
+
+    {:ok, _view, html} = live(conn, ~p"/docker")
+
+    assert html =~ "last pulled"
+    assert removing?(html, "1.10.0-erlang-23.0-ubuntu-noble-20200101")
+    refute removing?(html, "26.0-ubuntu-noble-20250101")
+  end
+
+  test "a reserved tag is not also flagged as removing", %{conn: conn} do
+    Bob.Artifacts.add_docker_tag(
+      "hexpm/elixir-amd64",
+      "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+      ["amd64"],
+      DateTime.add(DateTime.utc_now(), -90, :day)
+    )
+
+    Bob.BuildRequests.create(%{
+      username: "eric",
+      kind: "elixir",
+      elixir: "1.18.0",
+      erlang: "27.0",
+      os: "ubuntu",
+      os_version: "noble-20250101",
+      builds_count: 0
+    })
+
+    {:ok, _view, html} = live(conn, ~p"/docker")
+
+    assert reserved?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
+    refute removing?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
+  end
+
   test "flags tags reserved by a build request", %{conn: conn} do
     Bob.BuildRequests.create(%{
       username: "eric",
@@ -185,5 +236,10 @@ defmodule BobWeb.DockerTagsLiveTest do
   defp reserved?(html, tag) do
     html =~
       ~r/<code class="dk-tag-code"[^>]*>#{Regex.escape(tag)}<\/code>\s*<span[^>]*dk-reserved/
+  end
+
+  defp removing?(html, tag) do
+    html =~
+      ~r/<code class="dk-tag-code"[^>]*>#{Regex.escape(tag)}<\/code>\s*<span[^>]*dk-removing/
   end
 end

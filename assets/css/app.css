@@ -977,7 +977,7 @@ pre,
 }
 
 .jt--dk {
-  min-width: 1040px;
+  min-width: 1180px;
   table-layout: fixed;
 }
 
@@ -986,7 +986,7 @@ pre,
 }
 
 .col-dk-tag {
-  width: 510px;
+  width: 430px;
 }
 
 .col-dk-archs {
@@ -1015,18 +1015,28 @@ pre,
   min-width: 0;
 }
 
-.dk-reserved {
+.dk-reserved,
+.dk-removing {
   flex: none;
-  border: 1px solid var(--color-green-200);
   border-radius: 5px;
-  background: var(--color-green-50);
-  color: var(--color-green-700);
   padding: 1px 7px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.dk-reserved {
+  border: 1px solid var(--color-green-200);
+  background: var(--color-green-50);
+  color: var(--color-green-700);
+}
+
+.dk-removing {
+  border: 1px solid var(--color-yellow-200);
+  background: var(--color-yellow-50);
+  color: var(--color-yellow-700);
 }
 
 .pager {

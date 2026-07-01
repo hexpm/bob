@@ -28,6 +28,28 @@ defmodule Bob.DockerCleanup do
     end
   end
 
+  def per_arch_max_age_days(), do: @per_arch_max_age_days
+  def manifest_unpulled_days(), do: @manifest_unpulled_days
+
+  @doc """
+  When a tag becomes eligible for removal, or `nil` for a repo not under cleanup.
+  Per-arch tags expire a fixed number of days after they were built; manifest
+  tags that many days after they were last pulled (or built, if never pulled).
+  Mirrors the cleanup's own rule so the UI and the deleter never disagree.
+  """
+  def removal_at(repo, built_at, last_pulled) do
+    cond do
+      repo in Artifacts.docker_cleanup_per_arch_repos() ->
+        DateTime.add(built_at, @per_arch_max_age_days, :day)
+
+      repo in Artifacts.docker_cleanup_manifest_repos() ->
+        DateTime.add(last_pulled || built_at, @manifest_unpulled_days, :day)
+
+      true ->
+        nil
+    end
+  end
+
   defp configured_mode(), do: Application.get_env(:bob, :docker_cleanup_mode, :dry_run)
 
   defp dry_run() do

@@ -534,6 +534,9 @@ defmodule Bob.Artifacts do
     Enum.map(rows, fn [tag, archs] -> {tag, archs} end)
   end
 
+  def docker_cleanup_per_arch_repos(), do: @docker_cleanup_per_arch_repos
+  def docker_cleanup_manifest_repos(), do: @docker_cleanup_manifest_repos
+
   @doc """
   Counts, per repo, the tags the cleanup would delete: per-arch tags built before
   `cutoff` and manifest tags not pulled since `cutoff` (falling back to `built_at`

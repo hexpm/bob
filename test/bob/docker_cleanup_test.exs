@@ -8,6 +8,33 @@ defmodule Bob.DockerCleanupTest do
   defp ancient(), do: days_ago(250)
   defp recent(), do: days_ago(10)
 
+  describe "removal_at/3" do
+    test "per-arch tags expire 30 days after build, ignoring last_pulled" do
+      built = ~U[2026-01-01 00:00:00Z]
+
+      assert DockerCleanup.removal_at("hexpm/erlang-amd64", built, nil) ==
+               DateTime.add(built, 30, :day)
+
+      assert DockerCleanup.removal_at("hexpm/elixir-arm64", built, ~U[2026-06-01 00:00:00Z]) ==
+               DateTime.add(built, 30, :day)
+    end
+
+    test "manifest tags expire 180 days after last pull, falling back to build" do
+      built = ~U[2026-01-01 00:00:00Z]
+      pulled = ~U[2026-03-01 00:00:00Z]
+
+      assert DockerCleanup.removal_at("hexpm/erlang", built, pulled) ==
+               DateTime.add(pulled, 180, :day)
+
+      assert DockerCleanup.removal_at("hexpm/elixir", built, nil) ==
+               DateTime.add(built, 180, :day)
+    end
+
+    test "returns nil for a repo not under cleanup" do
+      assert DockerCleanup.removal_at("library/alpine", ~U[2026-01-01 00:00:00Z], nil) == nil
+    end
+  end
+
   describe "run/1 in dry-run mode" do
     test "returns the counts a live run would delete, deleting nothing" do
       Artifacts.add_docker_tag(
