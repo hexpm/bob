@@ -1,4 +1,4 @@
-defmodule BobWeb.ArtifactsJsonTest do
+defmodule BobWeb.PublicApiTest do
   use BobWeb.ConnCase
 
   describe "/artifacts" do
