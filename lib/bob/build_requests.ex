@@ -28,18 +28,33 @@ defmodule Bob.BuildRequests do
   # An already-built image still records a request, so a manual request doubles as
   # a permanent reservation that exempts the image from cleanup. No build runs, so
   # it costs nothing against the hourly limit; an existing reservation for the same
-  # target is left in place rather than duplicated.
+  # target is left in place rather than duplicated. The check-then-insert is
+  # serialized on the target — reservations dedupe across users, so a per-user
+  # lock would not keep two users' concurrent submits from both inserting.
   defp reserve(request, attrs) do
-    unless reserved?(request) do
-      {:ok, created} = create(Map.put(attrs, :builds_count, 0))
-      created = complete(created)
+    {:ok, :ok} =
+      Repo.transaction(fn ->
+        lock_target(request)
 
-      Logger.info(
-        "BUILD RESERVATION by #{created.username}: #{created.kind} #{request_target(created)}"
-      )
-    end
+        unless reserved?(request) do
+          {:ok, created} = create(Map.put(attrs, :builds_count, 0))
+          created = complete(created)
+
+          Logger.info(
+            "BUILD RESERVATION by #{created.username}: #{created.kind} #{request_target(created)}"
+          )
+        end
+
+        :ok
+      end)
 
     :ok
+  end
+
+  defp lock_target(request) do
+    Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      "#{request.kind}:#{request_target(request)}"
+    ])
   end
 
   defp reserved?(request) do
@@ -145,11 +160,16 @@ defmodule Bob.BuildRequests do
     builds_count_for_user_since(username, hour_ago) + builds_count > @hourly_build_limit
   end
 
-  defp request_target(%{kind: "erlang"} = request) do
+  @doc """
+  The Docker tag name a request maps to. The reservation predicate in
+  `Bob.Artifacts` rebuilds this same mapping in SQL, and a test asserts the two
+  encodings agree — update both together.
+  """
+  def request_target(%{kind: "erlang"} = request) do
     "#{request.erlang}-#{request.os}-#{request.os_version}"
   end
 
-  defp request_target(%{kind: "elixir"} = request) do
+  def request_target(%{kind: "elixir"} = request) do
     "#{request.elixir}-erlang-#{request.erlang}-#{request.os}-#{request.os_version}"
   end
 

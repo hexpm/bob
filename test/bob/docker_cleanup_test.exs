@@ -30,6 +30,14 @@ defmodule Bob.DockerCleanupTest do
                DateTime.add(built, 180, :day)
     end
 
+    test "manifest tags rebuilt after their last pull expire from the rebuild" do
+      built = ~U[2026-05-01 00:00:00Z]
+      pulled = ~U[2026-01-01 00:00:00Z]
+
+      assert DockerCleanup.removal_at("hexpm/erlang", built, pulled) ==
+               DateTime.add(built, 180, :day)
+    end
+
     test "returns nil for a repo not under cleanup" do
       assert DockerCleanup.removal_at("library/alpine", ~U[2026-01-01 00:00:00Z], nil) == nil
     end
@@ -48,7 +56,7 @@ defmodule Bob.DockerCleanupTest do
         "hexpm/erlang",
         "25.0-ubuntu-noble-20250101",
         ["amd64", "arm64"],
-        recent(),
+        ancient(),
         ancient()
       )
 
@@ -110,7 +118,7 @@ defmodule Bob.DockerCleanupTest do
         "hexpm/erlang",
         "25.0-ubuntu-noble-20250101",
         ["amd64", "arm64"],
-        recent(),
+        ancient(),
         ancient()
       )
 
@@ -128,6 +136,45 @@ defmodule Bob.DockerCleanupTest do
                ])
 
       assert Artifacts.docker_tags("hexpm/erlang") == []
+    end
+
+    test "skips a tag that was reserved after the candidates were selected" do
+      test = self()
+
+      # The rate-limited batch can run for hours after the candidate list is
+      # built. Reserving every candidate while the first is deleted simulates a
+      # user requesting an image mid-run: the remaining tag must survive.
+      deleter = fn repo, tag ->
+        send(test, {:deleted, repo, tag})
+
+        for erlang <- ["26.0", "27.0"] do
+          BuildRequests.create(%{
+            username: "eric",
+            kind: "erlang",
+            erlang: erlang,
+            os: "ubuntu",
+            os_version: "noble-20250101",
+            builds_count: 0
+          })
+        end
+
+        :ok
+      end
+
+      for erlang <- ["26.0", "27.0"] do
+        Artifacts.add_docker_tag(
+          "hexpm/erlang-amd64",
+          "#{erlang}-ubuntu-noble-20250101",
+          ["amd64"],
+          old()
+        )
+      end
+
+      assert {:live, 1} = DockerCleanup.run(mode: :live, deleter: deleter)
+
+      assert_received {:deleted, "hexpm/erlang-amd64", _tag}
+      refute_received {:deleted, _repo, _tag}
+      assert length(Artifacts.docker_tags("hexpm/erlang-amd64")) == 1
     end
 
     test "keeps the row when deletion errors" do
@@ -160,6 +207,29 @@ defmodule Bob.DockerCleanupTest do
 
       assert {:live, 2} = DockerCleanup.run(mode: :live, deleter: deleter, limit: 2)
       assert length(Artifacts.docker_tags("hexpm/erlang-amd64")) == 1
+    end
+
+    test "the batch limit bounds the whole run across both repo groups" do
+      deleter = fn _repo, _tag -> :ok end
+
+      for n <- 1..2 do
+        Artifacts.add_docker_tag(
+          "hexpm/erlang-amd64",
+          "2#{n}.0-ubuntu-noble-20250101",
+          ["amd64"],
+          old()
+        )
+
+        Artifacts.add_docker_tag(
+          "hexpm/erlang",
+          "2#{n}.1-ubuntu-noble-20250101",
+          ["amd64", "arm64"],
+          ancient(),
+          ancient()
+        )
+      end
+
+      assert {:live, 3} = DockerCleanup.run(mode: :live, deleter: deleter, limit: 3)
     end
   end
 end

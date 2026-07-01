@@ -322,6 +322,21 @@ defmodule Bob.ArtifactsTest do
       assert [%DockerTag{last_pulled: @docker_last_pulled}] = Repo.all(DockerTag)
     end
 
+    test "keeps a known last_pulled when the staged value is missing" do
+      replace("hexpm/erlang", [
+        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @docker_built_at, @docker_last_pulled)
+      ])
+
+      # Docker Hub transiently reports no pull time (null or the zero sentinel):
+      # the recorded pull time must survive the swap, or an old-but-pulled
+      # manifest tag would fall back to built_at and become a cleanup candidate.
+      replace("hexpm/erlang", [
+        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @docker_built_at)
+      ])
+
+      assert [%DockerTag{last_pulled: @docker_last_pulled}] = Repo.all(DockerTag)
+    end
+
     test "updates built_at for otherwise unchanged rows" do
       Artifacts.add_docker_tag(
         "hexpm/erlang-amd64",
@@ -970,17 +985,17 @@ defmodule Bob.ArtifactsTest do
                [{"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"}]
     end
 
-    test "manifest candidates are tags not pulled since the cutoff, falling back to built_at" do
+    test "manifest candidates are tags neither pulled nor built since the cutoff" do
       old = days_ago(250)
       recent = days_ago(10)
       cutoff = days_ago(180)
 
-      # old last_pulled -> stale
+      # old build, old last_pulled -> stale
       Artifacts.add_docker_tag(
         "hexpm/erlang",
         "27.0-ubuntu-noble-20250101",
         ["amd64"],
-        recent,
+        old,
         old
       )
 
@@ -991,6 +1006,16 @@ defmodule Bob.ArtifactsTest do
         ["amd64"],
         old,
         recent
+      )
+
+      # rebuilt recently despite an old last_pulled -> kept; deleting it would
+      # 404 pullers only for the checker to rebuild it from the per-arch tags
+      Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "25.0-ubuntu-noble-20250101",
+        ["amd64"],
+        recent,
+        old
       )
 
       # never pulled, old build -> stale via fallback
@@ -1066,6 +1091,31 @@ defmodule Bob.ArtifactsTest do
       BuildRequests.expire(request)
 
       assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{"hexpm/erlang-amd64" => 1}
+    end
+
+    test "the SQL reservation predicate matches the tag name request_target/1 derives" do
+      erlang_attrs = %{
+        username: "eric",
+        kind: "erlang",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 0
+      }
+
+      elixir_attrs = %{erlang_attrs | kind: "elixir"} |> Map.put(:elixir, "1.18.0")
+
+      # The reservation predicate rebuilds the request->tag mapping in SQL; if
+      # either encoding drifts, reservations silently stop matching and the
+      # cleanup deletes tags users pinned. Derive the tag through the Elixir
+      # mapping and assert the SQL side agrees.
+      for {repo, attrs} <- [{"hexpm/erlang", erlang_attrs}, {"hexpm/elixir", elixir_attrs}] do
+        {:ok, request} = BuildRequests.create(attrs)
+        tag = BuildRequests.request_target(request)
+
+        Artifacts.add_docker_tag(repo, tag, ["amd64"])
+        assert Artifacts.docker_tag_reserved?(repo, tag)
+      end
     end
 
     test "delete_docker_tags removes the given rows" do

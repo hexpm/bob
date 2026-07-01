@@ -15,9 +15,10 @@ defmodule Bob.DockerHub.RateLimiter do
   it, when our clock runs slightly ahead of Docker Hub's.
 
   A request sent before any response has anchored the window is the lone
-  calibration probe. The gate monitors it and reclaims its slot if it dies
-  without reporting a response — a non-2xx/429 status or a crash — so a probe
-  that never feeds back can't wedge every later caller behind it forever.
+  calibration probe. The gate reclaims its slot if it reports a response
+  without usable rate headers, or dies without reporting at all, so a probe
+  that never anchors the window can't wedge every later caller behind it
+  forever.
   """
 
   use GenServer
@@ -44,9 +45,15 @@ defmodule Bob.DockerHub.RateLimiter do
     GenServer.call(server, :acquire, :infinity)
   end
 
-  @doc "Feeds a response's headers back so the gate tracks the limit and window."
+  @doc """
+  Feeds a response's headers back so the gate tracks the limit and window.
+  Callers report every completed request, headers or not (`[]` for a transport
+  error): a report without usable rate headers releases the calibration
+  probe's slot when it comes from the probe itself, since that request
+  finished without anchoring the window.
+  """
   def observe(headers, server \\ __MODULE__) do
-    GenServer.cast(server, {:observe, parse_rate(headers)})
+    GenServer.cast(server, {:observe, parse_rate(headers), self()})
   end
 
   @doc """
@@ -82,6 +89,7 @@ defmodule Bob.DockerHub.RateLimiter do
        offset_ms: Keyword.get(opts, :offset_ms, @resume_offset_ms),
        timer: nil,
        probe_mon: nil,
+       probe_pid: nil,
        waiters: :queue.new()
      }}
   end
@@ -97,10 +105,17 @@ defmodule Bob.DockerHub.RateLimiter do
     end
   end
 
+  # The probe finished without usable rate headers, so nothing anchored the
+  # window: reclaim its slot the same way its death would, or the gate stays
+  # shut when the probe runs in a long-lived process.
   @impl true
-  def handle_cast({:observe, nil}, state), do: {:noreply, state}
+  def handle_cast({:observe, nil, pid}, %{probe_pid: pid} = state) do
+    {:noreply, schedule_resume(release(reclaim_probe(state)))}
+  end
 
-  def handle_cast({:observe, rate}, state) do
+  def handle_cast({:observe, nil, _pid}, state), do: {:noreply, state}
+
+  def handle_cast({:observe, rate, _pid}, state) do
     state = apply_rate(state, rate)
     state = if state.window != nil, do: clear_probe_mon(state), else: state
     {:noreply, schedule_resume(release(state))}
@@ -127,13 +142,11 @@ defmodule Bob.DockerHub.RateLimiter do
     {:noreply, schedule_resume(release(roll(%{state | timer: nil})))}
   end
 
-  # The calibration probe finished. If it never anchored the window, reclaim its
+  # The calibration probe died. If it never anchored the window, reclaim its
   # slot and wake the next caller, so a probe that failed to report a response
   # can't leave the gate shut with nothing left to roll or release it.
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{probe_mon: ref} = state) do
-    state = %{state | probe_mon: nil}
-    state = if state.window == nil, do: %{state | sent: max(state.sent - 1, 0)}, else: state
-    {:noreply, schedule_resume(release(state))}
+    {:noreply, schedule_resume(release(reclaim_probe(state)))}
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
@@ -152,10 +165,18 @@ defmodule Bob.DockerHub.RateLimiter do
     state = %{state | sent: state.sent + 1}
 
     if state.window == nil and state.probe_mon == nil do
-      %{state | probe_mon: Process.monitor(elem(from, 0))}
+      pid = elem(from, 0)
+      %{state | probe_mon: Process.monitor(pid), probe_pid: pid}
     else
       state
     end
+  end
+
+  # The probe finished without anchoring the window: give its slot back so the
+  # next caller becomes the new probe.
+  defp reclaim_probe(state) do
+    state = clear_probe_mon(state)
+    if state.window == nil, do: %{state | sent: max(state.sent - 1, 0)}, else: state
   end
 
   # Stop tracking the calibration probe once the window is anchored; its eventual
@@ -164,7 +185,7 @@ defmodule Bob.DockerHub.RateLimiter do
 
   defp clear_probe_mon(%{probe_mon: ref} = state) do
     Process.demonitor(ref, [:flush])
-    %{state | probe_mon: nil}
+    %{state | probe_mon: nil, probe_pid: nil}
   end
 
   # Folds a response's rate headers into the window: anchor it on the window's

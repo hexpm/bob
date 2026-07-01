@@ -59,6 +59,19 @@ defmodule Bob.BuildRequestsTest do
                Repo.all(BuildRequest)
     end
 
+    test "reserves without rebuilding when only the staging tags were cleaned" do
+      # Per-arch staging tags are removed 30 days after build while the
+      # manifest lives on. Requesting the surviving image reserves it for
+      # free — the whole point of the request — rather than forcing a full
+      # rebuild of staging tags nobody pulls.
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
+
+      assert BuildRequests.submit(@erlang_attrs) == {:ok, :already_built}
+      assert Repo.all(Job) == []
+
+      assert [%BuildRequest{state: "completed", builds_count: 0}] = Repo.all(BuildRequest)
+    end
+
     test "does not duplicate a reservation for the same already-built image" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
       Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])

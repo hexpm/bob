@@ -28,7 +28,9 @@ defmodule Bob.Artifacts do
   # small build_requests table — rather than extracting JSONB per scanned row.
   # The erlang and elixir tag-name formats are disjoint (elixir carries
   # `-erlang-`), so the name alone identifies the kind. `d` is the docker_tags
-  # row the predicate is applied to.
+  # row the predicate is applied to. The CASE mirrors
+  # `Bob.BuildRequests.request_target/1`; a test asserts the two encodings
+  # agree — update both together.
   @reserved_predicate """
   EXISTS (
     SELECT 1
@@ -113,7 +115,9 @@ defmodule Bob.Artifacts do
   Applies the tags staged under `token` for `repo` to `docker_tags`, in one
   transaction: upsert every staged tag, prune any `docker_tags` row whose tag is
   no longer staged, then drop the staging rows. `DISTINCT ON` collapses any
-  duplicate tags Docker Hub returned across pages.
+  duplicate tags Docker Hub returned across pages. A staged tag with no pull
+  time keeps the row's recorded `last_pulled` — Docker Hub omits it
+  transiently, and losing it would expose a pulled tag to cleanup.
 
   Only call this once the full fetch succeeded — a partial fetch would prune
   tags that were merely not yet fetched.
@@ -135,12 +139,13 @@ defmodule Bob.Artifacts do
             archs = EXCLUDED.archs,
             search = EXCLUDED.search,
             built_at = EXCLUDED.built_at,
-            last_pulled = EXCLUDED.last_pulled,
+            last_pulled = COALESCE(EXCLUDED.last_pulled, docker_tags.last_pulled),
             updated_at = EXCLUDED.updated_at
           WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
              OR docker_tags.search IS DISTINCT FROM EXCLUDED.search
              OR docker_tags.built_at IS DISTINCT FROM EXCLUDED.built_at
-             OR docker_tags.last_pulled IS DISTINCT FROM EXCLUDED.last_pulled
+             OR COALESCE(EXCLUDED.last_pulled, docker_tags.last_pulled)
+                IS DISTINCT FROM docker_tags.last_pulled
           """,
           [token, repo, now],
           timeout: @long_query_timeout
@@ -538,9 +543,11 @@ defmodule Bob.Artifacts do
   def docker_cleanup_manifest_repos(), do: @docker_cleanup_manifest_repos
 
   @doc """
-  Counts, per repo, the tags the cleanup would delete: per-arch tags built before
-  `cutoff` and manifest tags not pulled since `cutoff` (falling back to `built_at`
-  when a tag has no recorded pull). Reserved tags are excluded. Used by the
+  Counts, per repo, the tags the cleanup would delete: per-arch tags built
+  before `cutoff` and manifest tags neither pulled nor built since `cutoff`.
+  `GREATEST` keeps a tag whose last pull is ancient but that was re-pushed
+  recently — deleting it would 404 pullers only for the checker to rebuild the
+  manifest from its live per-arch tags. Reserved tags are excluded. Used by the
   cleanup's dry run to report what live deletion would remove.
   """
   def count_stale_per_arch_tags(cutoff) do
@@ -550,7 +557,7 @@ defmodule Bob.Artifacts do
   def count_stale_manifest_tags(cutoff) do
     count_stale(
       @docker_cleanup_manifest_repos,
-      "COALESCE(d.last_pulled, d.built_at) < $2",
+      "GREATEST(d.last_pulled, d.built_at) < $2",
       cutoff
     )
   end
@@ -583,7 +590,7 @@ defmodule Bob.Artifacts do
   def stale_manifest_tags(cutoff, limit) do
     stale(
       @docker_cleanup_manifest_repos,
-      "COALESCE(d.last_pulled, d.built_at) < $2",
+      "GREATEST(d.last_pulled, d.built_at) < $2",
       cutoff,
       limit
     )
@@ -603,6 +610,22 @@ defmodule Bob.Artifacts do
       )
 
     Enum.map(rows, fn [repo, tag] -> {repo, tag} end)
+  end
+
+  @doc "Whether a build request currently reserves `tag` in `repo`."
+  def docker_tag_reserved?(repo, tag) do
+    %{rows: [[reserved?]]} =
+      Repo.query!(
+        """
+        SELECT EXISTS(
+          SELECT 1 FROM docker_tags d
+          WHERE d.repo = $1 AND d.tag = $2 AND #{@reserved_predicate}
+        )
+        """,
+        [repo, tag]
+      )
+
+    reserved?
   end
 
   @doc """

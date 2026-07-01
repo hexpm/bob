@@ -64,33 +64,48 @@ defmodule Bob.DockerHub do
   `{:error, _}` for any other outcome so the caller can skip the tag and retry it
   on a later run rather than crash the batch.
   """
-  def delete_tag(repo, tag), do: delete_tag(repo, tag, 0)
-
-  defp delete_tag(repo, tag, attempts) do
+  def delete_tag(repo, tag) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
-    headers = headers()
-    opts = [recv_timeout: 20_000]
 
+    case paced_request(:delete, url) do
+      {:ok, status, _headers, _body} when status in [204, 404] -> :ok
+      other -> {:error, other}
+    end
+  end
+
+  @doc """
+  Sends `method` to `url` paced by the shared rate limiter: acquires a slot
+  (blocking until the window has budget), feeds the response back so the gate
+  tracks the limit, and waits out 429s up to the retry cap. Returns the final
+  non-429 result for the caller to match on. Every outcome reports to the
+  limiter — a response without usable rate headers, or a transport error,
+  releases the calibration probe's slot — so a failed request can't leave the
+  gate shut for every later caller.
+  """
+  def paced_request(method, url), do: paced_request(method, url, 0)
+
+  defp paced_request(method, url, attempts) do
     RateLimiter.acquire()
 
     result =
       Bob.HTTP.retry(
         "DockerHub #{url}",
-        fn -> Bob.HTTP.request(:delete, url, headers, "", opts) end,
+        fn -> Bob.HTTP.request(method, url, headers(), "", recv_timeout: 20_000) end,
         retry_rate_limit?: false
       )
 
     case result do
-      {:ok, status, response_headers, _body} when status in [204, 404] ->
-        RateLimiter.observe(response_headers)
-        :ok
-
       {:ok, 429, response_headers, _body} when attempts < @max_rate_limit_retries ->
         RateLimiter.throttle(response_headers)
-        delete_tag(repo, tag, attempts + 1)
+        paced_request(method, url, attempts + 1)
 
-      other ->
-        {:error, other}
+      {:ok, _status, response_headers, _body} ->
+        RateLimiter.observe(response_headers)
+        result
+
+      {:error, _reason} ->
+        RateLimiter.observe([])
+        result
     end
   end
 

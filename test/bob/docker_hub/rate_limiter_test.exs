@@ -133,6 +133,43 @@ defmodule Bob.DockerHub.RateLimiterTest do
       assert RateLimiter.acquire(limiter) == :ok
     end
 
+    test "reclaims the probe slot when the probe reports a response without rate headers" do
+      limiter = start_limiter(offset_ms: 0)
+
+      assert RateLimiter.acquire(limiter) == :ok
+
+      # The probe's request completed but carried no usable rate headers (a 401,
+      # a 5xx, or a transport error). Its slot is reclaimed even though the
+      # probe process lives on, so a long-lived caller can't wedge the gate.
+      RateLimiter.observe([], limiter)
+
+      refute blocks?(limiter)
+    end
+
+    test "ignores a headerless response from a caller that is not the probe" do
+      limiter = start_limiter(offset_ms: 0)
+      test_pid = self()
+
+      probe =
+        spawn_link(fn ->
+          RateLimiter.acquire(limiter)
+          send(test_pid, :granted)
+
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      assert_receive :granted
+
+      # A straggler that never held the probe slot reports a header-less
+      # response: the in-flight probe's slot must not be reclaimed on its behalf.
+      RateLimiter.observe([], limiter)
+      assert blocks?(limiter)
+
+      send(probe, :stop)
+    end
+
     test "keeps the probe's slot when it anchored the window before exiting" do
       limiter = start_limiter(offset_ms: 0)
       reset = System.os_time(:second) + 3600

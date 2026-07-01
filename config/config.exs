@@ -58,8 +58,8 @@ config :bob,
   local_jobs: [],
   remote_jobs: [],
   hexpm_impl: Bob.Hexpm.Impl,
-  # Docker cleanup deletes real tags, so it ships in :dry_run (logs counts only).
-  # Flip to :live once the dry-run numbers look right.
+  # :dry_run logs the counts a live run would delete without touching Docker
+  # Hub; :live deletes.
   docker_cleanup_mode: :dry_run
 
 # Metrics are served by a standalone Bandit listener (see Bob.Application)
