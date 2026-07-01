@@ -1,8 +1,10 @@
 defmodule BobWeb.DockerTagsLive do
   use BobWeb, :live_view
 
-  @page 100
-  @filter_keys ~w(repo tag arch elixir_version erlang_version os os_version)a
+  alias Bob.Artifacts.DockerTagSearch
+
+  @page DockerTagSearch.page_size()
+  @filter_keys DockerTagSearch.filter_keys()
 
   @impl true
   def mount(_params, _session, socket) do
@@ -45,28 +47,9 @@ defmodule BobWeb.DockerTagsLive do
   defp step("prev"), do: -@page
 
   defp filter_assigns(params) do
-    tag = params["tag"] || ""
+    filters = DockerTagSearch.parse_filters(params)
 
-    [
-      repo: params["repo"] || "",
-      tag: tag,
-      arch: params["arch"] || "",
-      elixir_version: structured_param(params, "elixir_version", tag),
-      erlang_version: structured_param(params, "erlang_version", tag),
-      os: structured_param(params, "os", tag),
-      os_version: structured_param(params, "os_version", tag),
-      offset: parse_offset(params)
-    ]
-  end
-
-  defp structured_param(_params, _key, tag) when tag != "", do: ""
-  defp structured_param(params, key, _tag), do: params[key] || ""
-
-  defp parse_offset(params) do
-    case Integer.parse(params["offset"] || "") do
-      {offset, ""} when offset > 0 -> offset
-      _ -> 0
-    end
+    Enum.map(@filter_keys, &{&1, filters[&1]}) ++ [offset: DockerTagSearch.parse_offset(params)]
   end
 
   defp query(filters, offset) do
@@ -96,19 +79,7 @@ defmodule BobWeb.DockerTagsLive do
       os_version: os_version
     }
 
-    results =
-      Bob.Artifacts.search_docker_tags(filters, @page, offset)
-
-    total =
-      if offset == 0 and results == [] do
-        0
-      else
-        filters
-        |> Bob.Artifacts.count_docker_tags()
-        # The page and count are separate queries, so keep the pager coherent if
-        # tags change between them.
-        |> max(offset + length(results))
-      end
+    %{results: results, total: total} = Bob.Artifacts.docker_tag_page(filters, @page, offset)
 
     assign(socket, results: results, total: total, loading: false)
   end

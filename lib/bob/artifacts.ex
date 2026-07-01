@@ -222,6 +222,13 @@ defmodule Bob.Artifacts do
     |> Repo.aggregate(:count, :id)
   end
 
+  def artifact_page(filters, limit, offset) do
+    %{
+      results: search_artifacts(filters, limit, offset),
+      total: count_artifacts(filters)
+    }
+  end
+
   def search_docker_tags(filters \\ %{}, limit \\ 100, offset \\ 0) do
     filters
     |> docker_tag_search_query()
@@ -235,6 +242,30 @@ defmodule Bob.Artifacts do
     filters
     |> docker_tag_search_query()
     |> Repo.aggregate(:count, :id)
+  end
+
+  @doc """
+  Returns a page of matching Docker tags together with the total match count.
+
+  The page and the count are separate queries, so the total is kept coherent
+  with the page if tags change between them, and the count is skipped entirely
+  when the first page comes back empty.
+  """
+  def docker_tag_page(filters, limit, offset) do
+    results = search_docker_tags(filters, limit, offset)
+
+    total =
+      if offset == 0 and results == [] do
+        0
+      else
+        filters
+        |> count_docker_tags()
+        # The page and count are separate queries, so keep the pager coherent if
+        # tags change between them.
+        |> max(offset + length(results))
+      end
+
+    %{results: results, total: total}
   end
 
   def distinct_kinds(), do: distinct_values(Artifact, :kind)
