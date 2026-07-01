@@ -35,6 +35,7 @@ defmodule BobWeb.Endpoint do
 
   plug(Plug.RequestId)
   plug(Logster.Plugs.Logger, excludes: [:params])
+  plug(BobWeb.Plugs.Secret, api_only: true)
 
   plug(Plug.Parsers,
     parsers: [:urlencoded, :json, Bob.Plug.Parser],

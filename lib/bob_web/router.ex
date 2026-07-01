@@ -2,7 +2,6 @@ defmodule BobWeb.Router do
   use BobWeb, :router
 
   import BobWeb.UserAuth
-  import BobWeb.ApiAuth
 
   pipeline :browser do
     plug(:accepts, ["html"])
@@ -14,17 +13,12 @@ defmodule BobWeb.Router do
     plug(:fetch_current_user)
   end
 
-  pipeline :api do
-    plug(:require_api_auth)
-  end
-
   pipeline :public_api do
     plug(:accepts, ["json"])
   end
 
+  # Authenticated in the endpoint by BobWeb.Plugs.Secret, before body parsing.
   scope "/api", BobWeb do
-    pipe_through(:api)
-
     post("/queue/start", QueueController, :start)
     post("/queue/success", QueueController, :success)
     post("/queue/failure", QueueController, :failure)
@@ -34,7 +28,7 @@ defmodule BobWeb.Router do
     post("/docker/add", ArtifactController, :add_docker)
   end
 
-  # Public API routes
+  # Public API routes, exempted from agent auth in BobWeb.Plugs.Secret.
   scope "/api", BobWeb do
     pipe_through(:public_api)
 
