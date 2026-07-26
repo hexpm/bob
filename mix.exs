@@ -44,6 +44,7 @@ defmodule Bob.Mixfile do
       {:phoenix_live_view, "~> 1.0"},
       {:phoenix_live_reload, "~> 1.5", only: :dev},
       {:bandit, "~> 1.5"},
+      {:prom_ex, "~> 1.11"},
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.2", runtime: Mix.env() == :dev},
       {:igniter, "~> 0.8.1", only: [:dev, :test], runtime: false},

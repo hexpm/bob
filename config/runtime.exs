@@ -33,6 +33,10 @@ if config_env() == :prod do
       bob_hostname: System.fetch_env!("BOB_HOSTNAME")
     }
 
+  if metrics_port = System.get_env("BOB_METRICS_PORT") do
+    config :bob, metrics_port: String.to_integer(metrics_port)
+  end
+
   bob_host = System.fetch_env!("BOB_HOST")
 
   config :bob, BobWeb.Endpoint,

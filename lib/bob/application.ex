@@ -14,6 +14,7 @@ defmodule Bob.Application do
     children =
       repo_children() ++
         [
+          Bob.PromEx,
           {Finch, name: Bob.Finch},
           {Task.Supervisor, [name: Bob.Tasks]},
           {Phoenix.PubSub, name: Bob.PubSub},
@@ -22,8 +23,11 @@ defmodule Bob.Application do
           Bob.DockerHub.Auth,
           runner_spec(),
           {Bob.Schedule, [schedule()]},
-          BobWeb.Endpoint
+          BobWeb.Endpoint,
+          metrics_server_spec()
         ]
+
+    children = Enum.reject(children, &is_nil/1)
 
     opts = [strategy: :one_for_one, name: Bob.Supervisor]
     Supervisor.start_link(children, opts)
@@ -34,6 +38,13 @@ defmodule Bob.Application do
       [Bob.Repo] ++ maintenance_children()
     else
       []
+    end
+  end
+
+  # Serves Prometheus metrics on a port separate from the main endpoint
+  defp metrics_server_spec() do
+    if port = Application.get_env(:bob, :metrics_port) do
+      {Bandit, plug: {PromEx.Plug, prom_ex_module: Bob.PromEx}, port: port}
     end
   end
 
