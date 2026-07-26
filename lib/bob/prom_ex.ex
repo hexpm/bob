@@ -26,7 +26,7 @@ defmodule Bob.PromEx do
   def dashboard_assigns do
     [
       datasource_id: "prometheus",
-      default_selected_interval: "30s"
+      default_selected_interval: "5m"
     ]
   end
 
