@@ -9,6 +9,8 @@ config :bob,
   oauth_client_id: "b0b00000-0000-4000-8000-000000000b0b",
   oauth_client_secret: "test_secret"
 
+config :bob, Bob.PromEx, disabled: true
+
 config :ex_aws,
   access_key_id: "test",
   secret_access_key: "test",

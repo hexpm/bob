@@ -53,6 +53,13 @@ config :bob,
   remote_jobs: [],
   hexpm_impl: Bob.Hexpm.Impl
 
+# Metrics are served by a standalone Bandit listener (see Bob.Application)
+# on :metrics_port instead of PromEx's built-in cowboy server
+config :bob, Bob.PromEx,
+  disabled: false,
+  metrics_server: :disabled,
+  grafana: :disabled
+
 config :mime, :types, %{
   "application/vnd.bob+erlang" => ["erlang"]
 }
