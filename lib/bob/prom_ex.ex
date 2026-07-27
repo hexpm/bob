@@ -9,7 +9,8 @@ defmodule Bob.PromEx do
       Plugins.Application,
       Plugins.Beam,
       {Plugins.Phoenix, router: BobWeb.Router, endpoint: BobWeb.Endpoint},
-      Bob.PromEx.Plugins.Bob
+      Bob.PromEx.Plugins.Bob,
+      Bob.PromEx.Plugins.OutboundHttp
     ] ++ master_plugins()
   end
 
