@@ -20,8 +20,22 @@ defmodule Bob.RunnerTest do
   setup do
     on_exit(fn ->
       case Process.whereis(Bob.Runner) do
-        nil -> :ok
-        pid -> Process.exit(pid, :kill)
+        nil ->
+          :ok
+
+        pid ->
+          # Process.exit only sends the signal, and the runner holds a registered
+          # name until it is really gone. Returning before then leaves the next
+          # test's start_link racing the name, which it loses as
+          # {:error, {:already_started, pid}}.
+          ref = Process.monitor(pid)
+          Process.exit(pid, :kill)
+
+          receive do
+            {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+          after
+            5_000 -> raise "the runner outlived the test that started it"
+          end
       end
     end)
 
