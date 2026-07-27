@@ -11,10 +11,19 @@ defmodule Bob.Application do
 
     File.mkdir_p!(Bob.tmp_dir())
 
+    opts = [strategy: :one_for_one, name: Bob.Supervisor]
+    Supervisor.start_link(children(), opts)
+  end
+
+  @doc false
+  # PromEx has to start before the repo. Its Ecto plugin picks up the pool size,
+  # timeout and repo name from the telemetry event the repo emits once, when it
+  # starts, and the Ecto dashboard reads its repo dropdown from those.
+  def children() do
     children =
-      repo_children() ++
+      [Bob.PromEx] ++
+        repo_children() ++
         [
-          Bob.PromEx,
           {Finch, name: Bob.Finch},
           {Task.Supervisor, [name: Bob.Tasks]},
           {Phoenix.PubSub, name: Bob.PubSub},
@@ -27,10 +36,7 @@ defmodule Bob.Application do
           metrics_server_spec()
         ]
 
-    children = Enum.reject(children, &is_nil/1)
-
-    opts = [strategy: :one_for_one, name: Bob.Supervisor]
-    Supervisor.start_link(children, opts)
+    Enum.reject(children, &is_nil/1)
   end
 
   defp repo_children() do
