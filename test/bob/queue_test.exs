@@ -116,6 +116,16 @@ defmodule Bob.QueueTest do
     assert size(Bob.Job.DockerChecker) == 1
   end
 
+  # A scheduled job that backs off stops re-running on its interval: one
+  # transient failure suppresses it for 30 minutes, doubling to a day. Catches a
+  # job added to the schedule without being exempted.
+  test "every queued job on the master schedule is exempt from backoff" do
+    for opts <- Application.fetch_env!(:bob, :master_schedule), opts[:queue] do
+      refute Queue.backoff?(opts[:module]),
+             "#{inspect(opts[:module])} is on the master schedule but would back off after a failure"
+    end
+  end
+
   test "success clears any existing backoff for the job" do
     # Set up a previously-failed job that is now running again, by inserting
     # the rows directly (a backed-off job will not re-enter the queue on its own).

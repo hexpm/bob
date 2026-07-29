@@ -14,7 +14,8 @@ defmodule Bob.Queue do
     Bob.Job.OTPChecker,
     Bob.Job.DockerChecker,
     Bob.Job.Reconcile,
-    Bob.Job.ReconcileBaseImages
+    Bob.Job.ReconcileBaseImages,
+    Bob.Job.DockerCleanup
   ]
 
   @dedup_conflict_target {:unsafe_fragment,
@@ -275,7 +276,11 @@ defmodule Bob.Queue do
     )
   end
 
-  defp backoff?(module_key) do
+  @doc """
+  Whether a failure of `module_key` should record backoff. False for the
+  periodic scheduler jobs, which re-run every interval regardless.
+  """
+  def backoff?(module_key) do
     module =
       case module_key do
         {module, _arg} -> module
