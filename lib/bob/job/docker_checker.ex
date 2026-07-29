@@ -267,7 +267,16 @@ defmodule Bob.Job.DockerChecker do
   # OTP, or Elixir — was released within this window. Old combinations that
   # Docker Hub prunes for lack of pulls then stay pruned instead of being
   # rebuilt every cycle; users can still request them explicitly.
+  #
+  # This window is measured against release dates while the per-arch cleanup's
+  # is measured against build dates, and a tag is always built after the release
+  # that triggered it. So as long as `Bob.DockerCleanup.per_arch_max_age_days/0`
+  # is at least this, cleanup can only reach tags that have already dropped out
+  # of the expected set — raise this without raising that and every night's
+  # cleanup hands the next morning's checker a pile of tags to rebuild.
   @build_freshness_days 30
+
+  def build_freshness_days(), do: @build_freshness_days
 
   defp freshness_cutoff() do
     DateTime.add(DateTime.utc_now(), -@build_freshness_days, :day)

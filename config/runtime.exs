@@ -6,6 +6,22 @@ if config_env() == :prod do
     result
   end
 
+  # Both default to the narrowest setting, so an unset variable can only ever
+  # mean "report, delete nothing" rather than a live run nobody asked for.
+  cleanup_mode = fn ->
+    case System.get_env("BOB_DOCKER_CLEANUP_MODE", "dry_run") do
+      "live" -> :live
+      _other -> :dry_run
+    end
+  end
+
+  cleanup_scope = fn ->
+    "BOB_DOCKER_CLEANUP_SCOPE"
+    |> System.get_env("per_arch")
+    |> String.split(",", trim: true)
+    |> Enum.map(&(&1 |> String.trim() |> String.to_atom()))
+  end
+
   config :bob,
     github_user: System.fetch_env!("BOB_GITHUB_USER"),
     github_token: System.fetch_env!("BOB_GITHUB_TOKEN"),
@@ -19,7 +35,9 @@ if config_env() == :prod do
     remote_jobs: jobs_fun.("BOB_REMOTE_JOBS"),
     hexpm_url: System.get_env("BOB_HEXPM_URL", "https://hex.pm"),
     oauth_client_id: System.fetch_env!("BOB_OAUTH_CLIENT_ID"),
-    oauth_client_secret: System.fetch_env!("BOB_OAUTH_CLIENT_SECRET")
+    oauth_client_secret: System.fetch_env!("BOB_OAUTH_CLIENT_SECRET"),
+    docker_cleanup_mode: cleanup_mode.(),
+    docker_cleanup_scope: cleanup_scope.()
 
   config :ex_aws,
     access_key_id: System.fetch_env!("BOB_S3_ACCESS_KEY"),

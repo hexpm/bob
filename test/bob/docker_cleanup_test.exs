@@ -122,7 +122,8 @@ defmodule Bob.DockerCleanupTest do
         ancient()
       )
 
-      assert {:live, 2} = DockerCleanup.run(mode: :live, deleter: deleter)
+      assert {:live, 2} =
+               DockerCleanup.run(mode: :live, deleter: deleter, scope: [:per_arch, :manifest])
 
       assert_received {:deleted, "hexpm/erlang-amd64", "26.0-ubuntu-noble-20250101"}
       assert_received {:deleted, "hexpm/erlang", "25.0-ubuntu-noble-20250101"}
@@ -229,7 +230,97 @@ defmodule Bob.DockerCleanupTest do
         )
       end
 
-      assert {:live, 3} = DockerCleanup.run(mode: :live, deleter: deleter, limit: 3)
+      assert {:live, 3} =
+               DockerCleanup.run(
+                 mode: :live,
+                 deleter: deleter,
+                 limit: 3,
+                 scope: [:per_arch, :manifest]
+               )
+    end
+  end
+
+  describe "run/1 scope" do
+    setup do
+      test = self()
+
+      deleter = fn repo, tag ->
+        send(test, {:deleted, repo, tag})
+        :ok
+      end
+
+      Artifacts.add_docker_tag(
+        "hexpm/erlang-amd64",
+        "26.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old()
+      )
+
+      Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "25.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"],
+        ancient(),
+        ancient()
+      )
+
+      %{deleter: deleter}
+    end
+
+    test "defaults to per-arch only, leaving the manifest repos alone", %{deleter: deleter} do
+      assert {:live, 1} = DockerCleanup.run(mode: :live, deleter: deleter)
+
+      assert_received {:deleted, "hexpm/erlang-amd64", _tag}
+      refute_received {:deleted, "hexpm/erlang", _tag}
+
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == []
+      assert [{"25.0-ubuntu-noble-20250101", _archs}] = Artifacts.docker_tags("hexpm/erlang")
+    end
+
+    # The limit budgets the run but must not confine it: once the per-arch
+    # backlog falls under the limit, a scope-less implementation would start
+    # spending the remainder on manifest repos without anyone changing config.
+    test "a limit larger than the per-arch backlog does not spill into manifests", %{
+      deleter: deleter
+    } do
+      assert {:live, 1} = DockerCleanup.run(mode: :live, deleter: deleter, limit: 100)
+
+      refute_received {:deleted, "hexpm/erlang", _tag}
+    end
+
+    test "manifest scope deletes only from the manifest repos", %{deleter: deleter} do
+      assert {:live, 1} = DockerCleanup.run(mode: :live, deleter: deleter, scope: [:manifest])
+
+      assert_received {:deleted, "hexpm/erlang", _tag}
+      refute_received {:deleted, "hexpm/erlang-amd64", _tag}
+    end
+
+    test "an empty scope deletes nothing", %{deleter: deleter} do
+      assert {:live, 0} = DockerCleanup.run(mode: :live, deleter: deleter, scope: [])
+
+      refute_received {:deleted, _repo, _tag}
+    end
+
+    test "unknown scopes are dropped rather than widening the run" do
+      Application.put_env(:bob, :docker_cleanup_scope, [:per_arch, :everything])
+      on_exit(fn -> Application.put_env(:bob, :docker_cleanup_scope, [:per_arch]) end)
+
+      assert DockerCleanup.configured_scope() == [:per_arch]
+    end
+  end
+
+  describe "retention windows" do
+    # The checker's expected set is filtered on release recency while cleanup
+    # filters on build dates, and a tag is always built after the release that
+    # triggered it. Once the cleanup window is shorter than the checker's, every
+    # run deletes tags the checker still expects and queues them for rebuild.
+    test "per-arch retention is at least the checker's build freshness window" do
+      assert DockerCleanup.per_arch_max_age_days() >=
+               Bob.Job.DockerChecker.build_freshness_days()
+    end
+
+    test "manifest retention outlives per-arch retention" do
+      assert DockerCleanup.manifest_unpulled_days() > DockerCleanup.per_arch_max_age_days()
     end
   end
 end
