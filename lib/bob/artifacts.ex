@@ -6,7 +6,7 @@ defmodule Bob.Artifacts do
 
   @builds_txt_lock 4_771_002
 
-  # Each staging row binds eight parameters; Postgres caps a statement at 65535,
+  # Each staging row binds seven parameters; Postgres caps a statement at 65535,
   # so a page is inserted in chunks well under that ceiling.
   @staging_chunk 5000
 
@@ -20,7 +20,6 @@ defmodule Bob.Artifacts do
   @docker_cleanup_per_arch_repos ~w(
     hexpm/erlang-amd64 hexpm/erlang-arm64 hexpm/elixir-amd64 hexpm/elixir-arm64
   )
-  @docker_cleanup_manifest_repos ~w(hexpm/erlang hexpm/elixir)
 
   # A tag is reserved (never auto-deleted) while a non-expired build request pins
   # it. A request maps deterministically to a single tag name, so the match is a
@@ -51,16 +50,15 @@ defmodule Bob.Artifacts do
     :ok
   end
 
-  def add_docker_tag(repo, tag, archs, built_at \\ DateTime.utc_now(), last_pulled \\ nil) do
+  def add_docker_tag(repo, tag, archs, built_at \\ DateTime.utc_now()) do
     now = NaiveDateTime.utc_now()
     built_at = dump_utc_datetime(built_at)
-    last_pulled = last_pulled && dump_utc_datetime(last_pulled)
     search = DockerTagSearch.metadata(repo, tag)
 
     Repo.query!(
       """
-      INSERT INTO docker_tags (repo, tag, archs, search, built_at, last_pulled, inserted_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+      INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $6)
       ON CONFLICT (repo, tag)
       DO UPDATE SET
         archs = (
@@ -69,17 +67,16 @@ defmodule Bob.Artifacts do
         ),
         search = EXCLUDED.search,
         built_at = EXCLUDED.built_at,
-        last_pulled = COALESCE(EXCLUDED.last_pulled, docker_tags.last_pulled),
         updated_at = EXCLUDED.updated_at
       """,
-      [repo, tag, archs, search, built_at, last_pulled, now]
+      [repo, tag, archs, search, built_at, now]
     )
 
     :ok
   end
 
   @doc """
-  Inserts a page of `{tag, archs, built_at, last_pulled}` tuples into the staging table under `token`.
+  Inserts a page of `{tag, archs, built_at}` tuples into the staging table under `token`.
 
   Reconcile streams Docker Hub a page at a time into staging so the full tag
   list (up to ~1M for hexpm/elixir) is never held in memory and no connection is
@@ -93,7 +90,7 @@ defmodule Bob.Artifacts do
     now = NaiveDateTime.utc_now()
 
     tag_archs_built_at
-    |> Enum.map(fn {tag, archs, built_at, last_pulled} ->
+    |> Enum.map(fn {tag, archs, built_at} ->
       %{
         token: token,
         repo: repo,
@@ -101,7 +98,6 @@ defmodule Bob.Artifacts do
         archs: archs,
         search: DockerTagSearch.metadata(repo, tag),
         built_at: built_at,
-        last_pulled: last_pulled,
         inserted_at: now
       }
     end)
@@ -115,9 +111,7 @@ defmodule Bob.Artifacts do
   Applies the tags staged under `token` for `repo` to `docker_tags`, in one
   transaction: upsert every staged tag, prune any `docker_tags` row whose tag is
   no longer staged, then drop the staging rows. `DISTINCT ON` collapses any
-  duplicate tags Docker Hub returned across pages. A staged tag with no pull
-  time keeps the row's recorded `last_pulled` — Docker Hub omits it
-  transiently, and losing it would expose a pulled tag to cleanup.
+  duplicate tags Docker Hub returned across pages.
 
   Only call this once the full fetch succeeded — a partial fetch would prune
   tags that were merely not yet fetched.
@@ -129,8 +123,8 @@ defmodule Bob.Artifacts do
       fn ->
         Repo.query!(
           """
-          INSERT INTO docker_tags (repo, tag, archs, search, built_at, last_pulled, inserted_at, updated_at)
-          SELECT DISTINCT ON (repo, tag) repo, tag, archs, search, built_at, last_pulled, $3, $3
+          INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
+          SELECT DISTINCT ON (repo, tag) repo, tag, archs, search, built_at, $3, $3
           FROM docker_tags_staging
           WHERE token = $1 AND repo = $2
           ORDER BY repo, tag, built_at DESC
@@ -139,13 +133,10 @@ defmodule Bob.Artifacts do
             archs = EXCLUDED.archs,
             search = EXCLUDED.search,
             built_at = EXCLUDED.built_at,
-            last_pulled = COALESCE(EXCLUDED.last_pulled, docker_tags.last_pulled),
             updated_at = EXCLUDED.updated_at
           WHERE docker_tags.archs IS DISTINCT FROM EXCLUDED.archs
              OR docker_tags.search IS DISTINCT FROM EXCLUDED.search
              OR docker_tags.built_at IS DISTINCT FROM EXCLUDED.built_at
-             OR COALESCE(EXCLUDED.last_pulled, docker_tags.last_pulled)
-                IS DISTINCT FROM docker_tags.last_pulled
           """,
           [token, repo, now],
           timeout: @long_query_timeout
@@ -540,26 +531,14 @@ defmodule Bob.Artifacts do
   end
 
   def docker_cleanup_per_arch_repos(), do: @docker_cleanup_per_arch_repos
-  def docker_cleanup_manifest_repos(), do: @docker_cleanup_manifest_repos
 
   @doc """
-  Counts, per repo, the tags the cleanup would delete: per-arch tags built
-  before `cutoff` and manifest tags neither pulled nor built since `cutoff`.
-  `GREATEST` keeps a tag whose last pull is ancient but that was re-pushed
-  recently — deleting it would 404 pullers only for the checker to rebuild the
-  manifest from its live per-arch tags. Reserved tags are excluded. Used by the
-  cleanup's dry run to report what live deletion would remove.
+  Counts, per repo, the per-arch tags the cleanup would delete: those built
+  before `cutoff`, excluding reserved tags. Used by the cleanup's dry run to
+  report what live deletion would remove.
   """
   def count_stale_per_arch_tags(cutoff) do
     count_stale(@docker_cleanup_per_arch_repos, "d.built_at < $2", cutoff)
-  end
-
-  def count_stale_manifest_tags(cutoff) do
-    count_stale(
-      @docker_cleanup_manifest_repos,
-      "GREATEST(d.last_pulled, d.built_at) < $2",
-      cutoff
-    )
   end
 
   defp count_stale(repos, age_predicate, cutoff) do
@@ -585,15 +564,6 @@ defmodule Bob.Artifacts do
   """
   def stale_per_arch_tags(cutoff, limit) do
     stale(@docker_cleanup_per_arch_repos, "d.built_at < $2", cutoff, limit)
-  end
-
-  def stale_manifest_tags(cutoff, limit) do
-    stale(
-      @docker_cleanup_manifest_repos,
-      "GREATEST(d.last_pulled, d.built_at) < $2",
-      cutoff,
-      limit
-    )
   end
 
   defp stale(repos, age_predicate, cutoff, limit) do

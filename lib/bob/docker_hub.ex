@@ -24,10 +24,10 @@ defmodule Bob.DockerHub do
 
   @doc """
   Pages every tag of `repo` from Docker Hub, invoking `on_page` with each page's
-  `{tag, archs, built_at, last_pulled}` list as it arrives. Returns `:ok` once
-  the full set is fetched or `:error` if any page failed, so the caller can avoid
-  applying a partial set. Pages stream through `on_page` rather than accumulating,
-  so the response set is never held in memory in full.
+  `{tag, archs, built_at}` list as it arrives. Returns `:ok` once the full set
+  is fetched or `:error` if any page failed, so the caller can avoid applying a
+  partial set. Pages stream through `on_page` rather than accumulating, so the
+  response set is never held in memory in full.
   """
   def stream_repo_tags(repo, on_page) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags?page=${page}&page_size=100"
@@ -131,17 +131,7 @@ defmodule Bob.DockerHub do
     else
       # DockerHub returns dupes sometimes?
       archs = images |> Enum.map(&:binary.copy(&1["architecture"])) |> Enum.uniq()
-      {:binary.copy(result["name"]), archs, built_at, last_pulled(result)}
-    end
-  end
-
-  # `tag_last_pulled` is the last time Docker Hub served this tag's manifest. It
-  # is null for a tag that has never been pulled, and historically a zero
-  # sentinel; both map to nil so callers can treat "never pulled" uniformly.
-  defp last_pulled(result) do
-    case result["tag_last_pulled"] do
-      "0001-01-01" <> _ -> nil
-      value -> parse_timestamp(value)
+      {:binary.copy(result["name"]), archs, built_at}
     end
   end
 

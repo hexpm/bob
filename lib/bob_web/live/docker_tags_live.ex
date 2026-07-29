@@ -99,7 +99,7 @@ defmodule BobWeb.DockerTagsLive do
   defp retention_status(true, _d), do: :reserved
 
   defp retention_status(false, d) do
-    case Bob.DockerCleanup.removal_at(d.repo, d.built_at, d.last_pulled) do
+    case Bob.DockerCleanup.removal_at(d.repo, d.built_at) do
       nil ->
         :none
 
@@ -198,9 +198,6 @@ defmodule BobWeb.DockerTagsLive do
           </:col>
           <:col :let={d} label="built" class="col-time">
             <span class="c-time"><%= fmt(d.built_at) %></span>
-          </:col>
-          <:col :let={d} label="last pulled" class="col-time">
-            <span class="c-time"><%= fmt(d.last_pulled) %></span>
           </:col>
         </.table>
         <div :if={!@loading and @results == []} class="empty-mini">No matching tags.</div>

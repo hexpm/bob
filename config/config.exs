@@ -60,12 +60,7 @@ config :bob,
   hexpm_impl: Bob.Hexpm.Impl,
   # :dry_run logs the counts a live run would delete without touching Docker
   # Hub; :live deletes.
-  docker_cleanup_mode: :dry_run,
-  # Repo groups a live run may delete from. :per_arch covers the single-arch
-  # staging repos and keys on built_at; :manifest covers the repos users pull
-  # from and keys on last_pulled, which only has values once Bob.Reconcile has
-  # swapped the repo at least once.
-  docker_cleanup_scope: [:per_arch]
+  docker_cleanup_mode: :dry_run
 
 # Metrics are served by a standalone Bandit listener (see Bob.Application)
 # on :metrics_port instead of PromEx's built-in cowboy server

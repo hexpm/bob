@@ -52,10 +52,10 @@ defmodule BobWeb.DockerTagsLiveTest do
     refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
   end
 
-  test "shows last pulled and flags tags nearing removal", %{conn: conn} do
+  test "flags per-arch tags nearing removal and never manifest tags", %{conn: conn} do
     now = DateTime.utc_now()
 
-    # per-arch built long ago -> removing (age-based)
+    # per-arch built long ago -> removing
     Bob.Artifacts.add_docker_tag(
       "hexpm/elixir-amd64",
       "1.10.0-erlang-23.0-ubuntu-noble-20200101",
@@ -63,18 +63,16 @@ defmodule BobWeb.DockerTagsLiveTest do
       DateTime.add(now, -90, :day)
     )
 
-    # manifest pulled recently despite an old build -> kept
+    # manifest repos are not pruned, so however old the build, no warning
     Bob.Artifacts.add_docker_tag(
       "hexpm/erlang",
       "26.0-ubuntu-noble-20250101",
       ["amd64", "arm64"],
-      DateTime.add(now, -300, :day),
-      DateTime.add(now, -1, :day)
+      DateTime.add(now, -300, :day)
     )
 
     {:ok, _view, html} = live(conn, ~p"/docker")
 
-    assert html =~ "last pulled"
     assert removing?(html, "1.10.0-erlang-23.0-ubuntu-noble-20200101")
     refute removing?(html, "26.0-ubuntu-noble-20250101")
   end

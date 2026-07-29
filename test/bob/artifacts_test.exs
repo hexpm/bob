@@ -7,7 +7,6 @@ defmodule Bob.ArtifactsTest do
 
   @docker_built_at ~U[2025-01-02 03:04:05.000000Z]
   @newer_docker_built_at ~U[2025-02-03 04:05:06.000000Z]
-  @docker_last_pulled ~U[2026-03-04 05:06:07.000000Z]
 
   describe "Artifact.changeset/2" do
     test "casts a posted artifact, parsing the ISO8601 date" do
@@ -218,22 +217,6 @@ defmodule Bob.ArtifactsTest do
       assert [%DockerTag{built_at: @docker_built_at}] = Repo.all(DockerTag)
     end
 
-    test "stores last_pulled and preserves it across a rebuild that reports none" do
-      Artifacts.add_docker_tag(
-        "hexpm/erlang-amd64",
-        "27.0-ubuntu-noble-20250101",
-        ["amd64"],
-        @docker_built_at,
-        @docker_last_pulled
-      )
-
-      assert [%DockerTag{last_pulled: @docker_last_pulled}] = Repo.all(DockerTag)
-
-      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
-
-      assert [%DockerTag{last_pulled: @docker_last_pulled}] = Repo.all(DockerTag)
-    end
-
     test "unions archs on conflicting (repo, tag)" do
       Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
       Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["arm64"])
@@ -300,41 +283,6 @@ defmodule Bob.ArtifactsTest do
       ])
 
       assert [%DockerTag{built_at: @docker_built_at}] = Repo.all(DockerTag)
-    end
-
-    test "swaps the staged last_pulled into the row" do
-      replace("hexpm/erlang-amd64", [
-        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @docker_built_at, @docker_last_pulled)
-      ])
-
-      assert [%DockerTag{last_pulled: @docker_last_pulled}] = Repo.all(DockerTag)
-    end
-
-    test "updates last_pulled for otherwise unchanged rows" do
-      replace("hexpm/erlang-amd64", [
-        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @docker_built_at)
-      ])
-
-      replace("hexpm/erlang-amd64", [
-        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @docker_built_at, @docker_last_pulled)
-      ])
-
-      assert [%DockerTag{last_pulled: @docker_last_pulled}] = Repo.all(DockerTag)
-    end
-
-    test "keeps a known last_pulled when the staged value is missing" do
-      replace("hexpm/erlang", [
-        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @docker_built_at, @docker_last_pulled)
-      ])
-
-      # Docker Hub transiently reports no pull time (null or the zero sentinel):
-      # the recorded pull time must survive the swap, or an old-but-pulled
-      # manifest tag would fall back to built_at and become a cleanup candidate.
-      replace("hexpm/erlang", [
-        docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @docker_built_at)
-      ])
-
-      assert [%DockerTag{last_pulled: @docker_last_pulled}] = Repo.all(DockerTag)
     end
 
     test "updates built_at for otherwise unchanged rows" do
@@ -985,60 +933,7 @@ defmodule Bob.ArtifactsTest do
                [{"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"}]
     end
 
-    test "manifest candidates are tags neither pulled nor built since the cutoff" do
-      old = days_ago(250)
-      recent = days_ago(10)
-      cutoff = days_ago(180)
-
-      # old build, old last_pulled -> stale
-      Artifacts.add_docker_tag(
-        "hexpm/erlang",
-        "27.0-ubuntu-noble-20250101",
-        ["amd64"],
-        old,
-        old
-      )
-
-      # recent last_pulled despite old build -> kept
-      Artifacts.add_docker_tag(
-        "hexpm/erlang",
-        "26.0-ubuntu-noble-20250101",
-        ["amd64"],
-        old,
-        recent
-      )
-
-      # rebuilt recently despite an old last_pulled -> kept; deleting it would
-      # 404 pullers only for the checker to rebuild it from the per-arch tags
-      Artifacts.add_docker_tag(
-        "hexpm/erlang",
-        "25.0-ubuntu-noble-20250101",
-        ["amd64"],
-        recent,
-        old
-      )
-
-      # never pulled, old build -> stale via fallback
-      Artifacts.add_docker_tag(
-        "hexpm/elixir",
-        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
-        ["amd64"],
-        old
-      )
-
-      # never pulled, recent build -> kept via fallback
-      Artifacts.add_docker_tag(
-        "hexpm/elixir",
-        "1.18.1-erlang-27.0-ubuntu-noble-20250101",
-        ["amd64"],
-        recent
-      )
-
-      assert Artifacts.count_stale_manifest_tags(cutoff) ==
-               %{"hexpm/erlang" => 1, "hexpm/elixir" => 1}
-    end
-
-    test "a non-expired build request reserves its per-arch and manifest tags" do
+    test "a non-expired build request reserves its per-arch tags" do
       old = days_ago(250)
 
       Artifacts.add_docker_tag(
@@ -1052,7 +947,6 @@ defmodule Bob.ArtifactsTest do
         "hexpm/elixir",
         "1.18.0-erlang-27.0-ubuntu-noble-20250101",
         ["amd64"],
-        old,
         old
       )
 
@@ -1067,7 +961,6 @@ defmodule Bob.ArtifactsTest do
       })
 
       assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{}
-      assert Artifacts.count_stale_manifest_tags(days_ago(180)) == %{}
     end
 
     test "an expired build request does not reserve its tags" do
@@ -1177,14 +1070,10 @@ defmodule Bob.ArtifactsTest do
     Artifacts.swap_docker_tags(token, repo)
   end
 
-  defp docker_tag(tag, archs, built_at \\ @docker_built_at, last_pulled \\ nil),
-    do: {tag, archs, built_at, last_pulled}
+  defp docker_tag(tag, archs, built_at \\ @docker_built_at), do: {tag, archs, built_at}
 
   defp docker_tag_tuple({tag, archs}), do: docker_tag(tag, archs)
   defp docker_tag_tuple({tag, archs, built_at}), do: docker_tag(tag, archs, built_at)
-
-  defp docker_tag_tuple({tag, archs, built_at, last_pulled}),
-    do: docker_tag(tag, archs, built_at, last_pulled)
 
   defp attrs() do
     %{

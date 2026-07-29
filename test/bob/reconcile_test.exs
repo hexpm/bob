@@ -5,9 +5,8 @@ defmodule Bob.ReconcileTest do
 
   @docker_built_at ~U[2025-01-02 03:04:05.000000Z]
   @newer_docker_built_at ~U[2025-02-03 04:05:06.000000Z]
-  @docker_last_pulled ~U[2026-03-04 05:06:07.000000Z]
 
-  # Streamer stub: invokes on_page once with the canned {tag, archs, built_at, last_pulled} list
+  # Streamer stub: invokes on_page once with the canned {tag, archs, built_at} list
   # for the repo (mimicking a single Docker Hub page), or nothing for an empty repo.
   defp streamer(map) do
     fn repo, on_page ->
@@ -25,12 +24,7 @@ defmodule Bob.ReconcileTest do
       stream =
         streamer(%{
           "hexpm/erlang-amd64" => [
-            docker_tag(
-              "27.0-ubuntu-noble-20250101",
-              ["amd64", "arm64"],
-              @docker_built_at,
-              @docker_last_pulled
-            )
+            docker_tag("27.0-ubuntu-noble-20250101", ["amd64", "arm64"], @docker_built_at)
           ],
           "hexpm/elixir-arm64" => [
             docker_tag(
@@ -49,10 +43,7 @@ defmodule Bob.ReconcileTest do
       assert Artifacts.docker_tags("hexpm/elixir-arm64") ==
                [{"1.18.0-erlang-27.0-ubuntu-noble-20250101", ["arm64"]}]
 
-      assert %Bob.Artifacts.DockerTag{
-               built_at: @docker_built_at,
-               last_pulled: @docker_last_pulled
-             } =
+      assert %Bob.Artifacts.DockerTag{built_at: @docker_built_at} =
                Repo.get_by!(Bob.Artifacts.DockerTag,
                  repo: "hexpm/erlang-amd64",
                  tag: "27.0-ubuntu-noble-20250101"
@@ -258,6 +249,5 @@ defmodule Bob.ReconcileTest do
     end
   end
 
-  defp docker_tag(tag, archs, built_at \\ @docker_built_at, last_pulled \\ nil),
-    do: {tag, archs, built_at, last_pulled}
+  defp docker_tag(tag, archs, built_at \\ @docker_built_at), do: {tag, archs, built_at}
 end

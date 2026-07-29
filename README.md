@@ -71,9 +71,8 @@ Requesting an image also reserves it from cleanup, permanently. If the image alr
 
 ### Retention and cleanup
 
-Old tags are removed automatically so the repositories don't grow without bound:
+**The images you pull are never removed.** Every tag in `hexpm/erlang` and `hexpm/elixir` stays available indefinitely, however old it is and however rarely it is used.
 
-* The `hexpm/erlang` and `hexpm/elixir` repositories hold the multi-arch images you pull. A tag that has been neither pulled nor rebuilt for 180 days is removed.
-* The per-architecture repositories (`hexpm/erlang-amd64`, `hexpm/erlang-arm64`, `hexpm/elixir-amd64`, `hexpm/elixir-arm64`) only hold the single-arch images the multi-arch manifests are assembled from. They keep the last 30 days of builds; older single-arch tags are removed even though the multi-arch image they back stays available.
+Cleanup only touches the per-architecture repositories (`hexpm/erlang-amd64`, `hexpm/erlang-arm64`, `hexpm/elixir-amd64`, `hexpm/elixir-arm64`), which hold the single-arch images the multi-arch manifests are assembled from rather than images meant to be pulled directly. They keep the last 30 days of builds; older single-arch tags are removed, and the multi-arch image they back stays available. Tags approaching removal are flagged as `removing` on the [Docker tags page](https://bob.hex.pm/docker).
 
-Tags reserved by a build request are never removed and are flagged as `reserved` on the [Docker tags page](https://bob.hex.pm/docker). To keep an image indefinitely, request it at https://bob.hex.pm/request.
+Tags reserved by a build request are never removed and are flagged as `reserved`. To pin a single-arch tag indefinitely, request it at https://bob.hex.pm/request.
