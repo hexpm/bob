@@ -15,6 +15,16 @@ if config_env() == :prod do
     end
   end
 
+  # How many tags one nightly run may delete. Needs to stay well inside
+  # Bob.Runner's three-hour job timeout at Docker Hub's 600 requests/minute, so
+  # raising it much past the default trades a killed run for a faster drain.
+  cleanup_batch = fn ->
+    case Integer.parse(System.get_env("BOB_DOCKER_CLEANUP_BATCH", "")) do
+      {batch, ""} when batch > 0 -> batch
+      _other -> nil
+    end
+  end
+
   config :bob,
     github_user: System.fetch_env!("BOB_GITHUB_USER"),
     github_token: System.fetch_env!("BOB_GITHUB_TOKEN"),
@@ -29,7 +39,8 @@ if config_env() == :prod do
     hexpm_url: System.get_env("BOB_HEXPM_URL", "https://hex.pm"),
     oauth_client_id: System.fetch_env!("BOB_OAUTH_CLIENT_ID"),
     oauth_client_secret: System.fetch_env!("BOB_OAUTH_CLIENT_SECRET"),
-    docker_cleanup_mode: cleanup_mode.()
+    docker_cleanup_mode: cleanup_mode.(),
+    docker_cleanup_batch: cleanup_batch.()
 
   config :ex_aws,
     access_key_id: System.fetch_env!("BOB_S3_ACCESS_KEY"),

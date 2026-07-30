@@ -117,12 +117,19 @@ defmodule Bob.QueueTest do
   end
 
   # A scheduled job that backs off stops re-running on its interval: one
-  # transient failure suppresses it for 30 minutes, doubling to a day. Catches a
-  # job added to the schedule without being exempted.
-  test "every queued job on the master schedule is exempt from backoff" do
-    for opts <- Application.fetch_env!(:bob, :master_schedule), opts[:queue] do
-      refute Queue.backoff?(opts[:module]),
-             "#{inspect(opts[:module])} is on the master schedule but would back off after a failure"
+  # transient failure suppresses it for 30 minutes, doubling to a day, and the
+  # schedule only re-queues once a night. Listed explicitly rather than read
+  # from :master_schedule, which config/test.exs overrides to [] — walking it
+  # here would assert nothing at all.
+  test "the scheduled jobs are all exempt from backoff" do
+    for module <- [
+          Bob.Job.OTPChecker,
+          Bob.Job.DockerChecker,
+          Bob.Job.Reconcile,
+          Bob.Job.ReconcileBaseImages,
+          Bob.Job.DockerCleanup
+        ] do
+      refute Queue.backoff?(module), "#{inspect(module)} would back off after a failure"
     end
   end
 

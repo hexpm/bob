@@ -17,9 +17,17 @@ defmodule Bob.Artifacts do
   # wraps.
   @long_query_timeout 5 * 60 * 1000
 
-  @docker_cleanup_per_arch_repos ~w(
-    hexpm/erlang-amd64 hexpm/erlang-arm64 hexpm/elixir-amd64 hexpm/elixir-arm64
-  )
+  # Only the elixir per-arch repos are pruned. The erlang ones look equally
+  # disposable but are not: `Bob.Job.DockerChecker.expected_elixir_tags/0`
+  # derives the whole elixir build matrix from the erlang per-arch rows in this
+  # mirror, filtered by `latest_erlang_versions/0`, which ranks by version and
+  # never by date. Deleting an erlang per-arch tag therefore drops every elixir
+  # image built on it out of the expected set, and `erlang/0` will not put it
+  # back — its own recency filter has long since passed the tag by. A new Elixir
+  # release then silently never builds for that base image. The elixir per-arch
+  # repos carry no such dependency: nothing derives an expected set from them,
+  # they are only checked for presence. They are also 96% of the rows.
+  @docker_cleanup_per_arch_repos ~w(hexpm/elixir-amd64 hexpm/elixir-arm64)
 
   # A tag is reserved (never auto-deleted) while a non-expired build request pins
   # it. A request maps deterministically to a single tag name, so the match is a
@@ -596,6 +604,31 @@ defmodule Bob.Artifacts do
       )
 
     reserved?
+  end
+
+  @doc """
+  Whether the cleanup may still delete `tag` in `repo`: the row exists, is
+  older than `cutoff`, and no build request reserves it.
+
+  Re-checked immediately before each delete rather than trusted from candidate
+  selection. A rate-limited batch runs for a long time, and in that window a
+  request can pin the tag or a re-push can reset its `built_at` — deleting
+  either would take out an image someone just asked for or just pushed. A row
+  that has vanished is not deletable, so a concurrent run cannot double-delete.
+  """
+  def docker_tag_deletable?(repo, tag, cutoff) do
+    %{rows: [[deletable?]]} =
+      Repo.query!(
+        """
+        SELECT EXISTS(
+          SELECT 1 FROM docker_tags d
+          WHERE d.repo = $1 AND d.tag = $2 AND d.built_at < $3 AND NOT #{@reserved_predicate}
+        )
+        """,
+        [repo, tag, dump_utc_datetime(cutoff)]
+      )
+
+    deletable?
   end
 
   @doc """

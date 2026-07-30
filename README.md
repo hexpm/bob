@@ -67,12 +67,12 @@ If you need a specific patch version that is not built automatically, request it
 
 Requested builds are limited to ten image builds per user per hour. Build progress can be followed on the jobs dashboard at https://bob.hex.pm.
 
-Requesting an image also reserves it from cleanup, permanently. If the image already exists it is reserved without rebuilding, so requesting a build doubles as a way to keep an old image you depend on from being removed (see Retention and cleanup below).
+Requesting an image also reserves it from cleanup, permanently. If the image already exists it is reserved without rebuilding. The multi-arch images you pull are never removed anyway, so this only matters for the per-architecture build images (see Retention and cleanup below).
 
 ### Retention and cleanup
 
 **The images you pull are never removed.** Every tag in `hexpm/erlang` and `hexpm/elixir` stays available indefinitely, however old it is and however rarely it is used.
 
-Cleanup only touches the per-architecture repositories (`hexpm/erlang-amd64`, `hexpm/erlang-arm64`, `hexpm/elixir-amd64`, `hexpm/elixir-arm64`), which hold the single-arch images the multi-arch manifests are assembled from rather than images meant to be pulled directly. They keep the last 30 days of builds; older single-arch tags are removed, and the multi-arch image they back stays available. Tags approaching removal are flagged as `removing` on the [Docker tags page](https://bob.hex.pm/docker).
+Cleanup only touches `hexpm/elixir-amd64` and `hexpm/elixir-arm64`, which hold the single-arch images the multi-arch manifests are assembled from rather than images meant to be pulled directly. They keep the last 30 days of builds; older single-arch tags are removed, and the multi-arch image they back stays available. Tags approaching removal are flagged as `removing` on the [Docker tags page](https://bob.hex.pm/docker).
 
 Tags reserved by a build request are never removed and are flagged as `reserved`. To pin a single-arch tag indefinitely, request it at https://bob.hex.pm/request.

@@ -911,26 +911,35 @@ defmodule Bob.ArtifactsTest do
       recent = days_ago(10)
       cutoff = days_ago(30)
 
-      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
 
       Artifacts.add_docker_tag(
-        "hexpm/erlang-amd64",
-        "28.0-ubuntu-noble-20250101",
+        "hexpm/elixir-amd64",
+        "1.18.1-erlang-27.0-ubuntu-noble-20250101",
         ["amd64"],
         recent
       )
 
       Artifacts.add_docker_tag(
-        "hexpm/erlang",
-        "26.0-ubuntu-noble-20250101",
+        "hexpm/elixir",
+        "1.17.0-erlang-27.0-ubuntu-noble-20250101",
         ["amd64", "arm64"],
         old
       )
 
-      assert Artifacts.count_stale_per_arch_tags(cutoff) == %{"hexpm/erlang-amd64" => 1}
+      # The erlang per-arch repos are not under cleanup — expected_elixir_tags/0
+      # is derived from them, so pruning them silently stops Elixir builds.
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+
+      assert Artifacts.count_stale_per_arch_tags(cutoff) == %{"hexpm/elixir-amd64" => 1}
 
       assert Artifacts.stale_per_arch_tags(cutoff, 100) ==
-               [{"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"}]
+               [{"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"}]
     end
 
     test "a non-expired build request reserves its per-arch tags" do
@@ -965,8 +974,8 @@ defmodule Bob.ArtifactsTest do
 
     test "an expired build request does not reserve its tags" do
       Artifacts.add_docker_tag(
-        "hexpm/erlang-amd64",
-        "27.0-ubuntu-noble-20250101",
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
         ["amd64"],
         days_ago(40)
       )
@@ -983,7 +992,7 @@ defmodule Bob.ArtifactsTest do
 
       BuildRequests.expire(request)
 
-      assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{"hexpm/erlang-amd64" => 1}
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{"hexpm/elixir-amd64" => 1}
     end
 
     test "the SQL reservation predicate matches the tag name request_target/1 derives" do
