@@ -4,8 +4,10 @@ defmodule Bob.DockerHub do
   @dockerhub_url "https://hub.docker.com/"
 
   # Caps re-attempts after a 429 so a throttled account can't loop forever. Each
-  # attempt takes a slot, which the limiter holds until the budget recovers.
-  @max_rate_limit_retries 20
+  # attempt takes a slot, which the limiter holds until the budget recovers, and
+  # Bob.HTTP.retry multiplies its own attempts on top, so a small number here
+  # already covers a window's worth of waiting.
+  @max_rate_limit_retries 5
 
   def auth(username, password) do
     url = @dockerhub_url <> "v2/users/login/"

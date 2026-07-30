@@ -64,50 +64,17 @@ defmodule Bob.DockerHub.RateLimiterTest do
     end
   end
 
-  describe "the trailing window" do
-    test "admits up to the limit, then blocks" do
-      clock = new_clock()
-      limiter = start_limiter(clock)
-
-      for _ <- 1..5, do: take(limiter, headers(5, 5))
-
-      assert blocks?(limiter)
-    end
-
-    test "a send frees its slot only once it has left the window" do
-      clock = new_clock()
-      limiter = start_limiter(clock)
-
-      take(limiter, headers(5, 5))
-      advance(clock, 1_000)
-      for _ <- 1..4, do: take(limiter, headers(5, 5))
-
-      assert blocks?(limiter)
-
-      advance(clock, 58_999)
-      assert blocks?(limiter)
-
-      advance(clock, 1)
-      assert RateLimiter.acquire(limiter) == :ok
-    end
-
-    test "a slot reopens per send that ages out, not a whole budget at once" do
-      clock = new_clock()
-      limiter = start_limiter(clock)
-
-      take(limiter, headers(5, 5))
-      advance(clock, 55_000)
-      for _ <- 1..4, do: take(limiter, headers(5, 5))
-
-      advance(clock, 5_000)
-
-      assert RateLimiter.acquire(limiter) == :ok
-      assert blocks?(limiter)
-    end
-  end
-
   describe "the account budget" do
-    test "a remaining spent by another node closes the gate while our own window has room" do
+    test "admits while the budget lasts, then blocks" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      for remaining <- [4, 3, 2, 1, 0], do: take(limiter, headers(600, remaining))
+
+      assert blocks?(limiter)
+    end
+
+    test "a budget spent by another node closes the gate on this one" do
       clock = new_clock()
       limiter = start_limiter(clock)
 
@@ -118,18 +85,49 @@ defmodule Bob.DockerHub.RateLimiterTest do
       assert blocks?(limiter)
     end
 
-    test "remaining is read against the requests still in flight" do
+    test "the budget is admitted against headroom for the requests in flight" do
       clock = new_clock()
       limiter = start_limiter(clock)
 
       take(limiter, headers(600, 3))
 
-      # The server has not counted these yet, so they come off the reading.
-      for _ <- 1..3, do: assert(RateLimiter.acquire(limiter) == :ok)
+      # Three left on the reading, but each grant also has to clear the set the
+      # server has not answered yet, so the last one is held back.
+      for _ <- 1..2, do: assert(RateLimiter.acquire(limiter) == :ok)
 
       assert blocks?(limiter)
     end
 
+    test "a spent budget reopens once the reading has aged out of the window" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 0))
+      assert blocks?(limiter)
+
+      advance(clock, 59_999)
+      assert blocks?(limiter)
+
+      advance(clock, 1)
+      assert RateLimiter.acquire(limiter) == :ok
+    end
+
+    test "a recovered budget is seen as recovered" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 0))
+      assert blocks?(limiter)
+
+      advance(clock, 30_000)
+      RateLimiter.observe(headers(600, 500), limiter)
+      sync(limiter)
+
+      assert RateLimiter.acquire(limiter) == :ok
+    end
+  end
+
+  describe "the unmeasured path" do
     test "only one request goes until the budget has been measured" do
       clock = new_clock()
       limiter = start_limiter(clock)
@@ -141,6 +139,22 @@ defmodule Bob.DockerHub.RateLimiterTest do
       sync(limiter)
 
       assert RateLimiter.acquire(limiter) == :ok
+    end
+
+    test "responses without rate headers stay bounded by the trailing window" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(2, 2))
+      advance(clock, 60_000)
+
+      # Every response now comes back without usable rate headers, so no reading
+      # is ever established and `limit` plus the trailing sends are the only
+      # thing holding this down.
+      take(limiter, [])
+      take(limiter, [])
+
+      assert blocks?(limiter)
     end
 
     test "a reading older than the window is dropped and one request re-establishes it" do
@@ -166,7 +180,7 @@ defmodule Bob.DockerHub.RateLimiterTest do
   end
 
   describe "throttle/2" do
-    test "a 429 holds the gate shut until the park elapses" do
+    test "a 429 without rate headers is read as a spent budget" do
       clock = new_clock()
       limiter = start_limiter(clock, park_ms: 5_000)
 
@@ -177,11 +191,12 @@ defmodule Bob.DockerHub.RateLimiterTest do
 
       assert blocks?(limiter)
 
+      # The park alone would have released a burst against the pre-429 reading.
       advance(clock, 5_000)
-      assert RateLimiter.acquire(limiter) == :ok
+      assert blocks?(limiter)
     end
 
-    test "a 429 carrying a negative remaining keeps the gate shut past the park" do
+    test "a 429 carrying a budget holds the gate past the park" do
       clock = new_clock()
       limiter = start_limiter(clock, park_ms: 5_000)
 
@@ -195,17 +210,74 @@ defmodule Bob.DockerHub.RateLimiterTest do
     end
   end
 
-  describe "callers that die" do
+  describe "slots" do
     test "a caller that dies without reporting does not keep its slot" do
       clock = new_clock()
       limiter = start_limiter(clock)
 
-      take(limiter, headers(3, 3))
+      take(limiter, headers(600, 3))
 
       task = Task.async(fn -> RateLimiter.acquire(limiter) end)
       assert Task.await(task) == :ok
 
       assert eventually(fn -> sync(limiter).in_flight == 0 end)
+    end
+
+    test "a slot held past the deadline is taken back" do
+      clock = new_clock()
+      limiter = start_limiter(clock, max_hold_ms: 120_000)
+
+      take(limiter, headers(600, 2))
+
+      # A caller that never reports would otherwise hold this for good, and the
+      # gate is a singleton.
+      holder = spawn(fn -> Process.sleep(:infinity) end)
+      send(limiter, :wake)
+      assert RateLimiter.acquire(limiter) == :ok
+      assert sync(limiter).in_flight == 1
+
+      advance(clock, 120_000)
+      send(limiter, :wake)
+      assert sync(limiter).in_flight == 0
+
+      Process.exit(holder, :kill)
+    end
+
+    test "a waiter killed while queued is not handed a slot" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 0))
+
+      task = Task.async(fn -> RateLimiter.acquire(limiter) end)
+      assert Task.yield(task, 50) == nil
+      Task.shutdown(task, :brutal_kill)
+
+      before = :queue.len(sync(limiter).sends)
+
+      # The budget recovers; the corpse must not be handed one of the slots.
+      RateLimiter.observe(headers(600, 600), limiter)
+      sync(limiter)
+
+      assert :queue.len(sync(limiter).sends) == before
+    end
+
+    test "a caller arriving as the gate reopens does not jump the queue" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 0))
+
+      parent = self()
+      waiter = spawn(fn -> send(parent, {:admitted, RateLimiter.acquire(limiter)}) end)
+      assert eventually(fn -> :queue.len(sync(limiter).waiters) == 1 end)
+
+      advance(clock, 60_000)
+
+      assert RateLimiter.acquire(limiter) == :ok
+      assert_receive {:admitted, :ok}, 500
+
+      Process.exit(waiter, :kill)
     end
   end
 
