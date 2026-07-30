@@ -37,10 +37,10 @@ defmodule Bob.DockerCleanup do
   # asserts the inequality.
   @per_arch_max_age_days 30
 
-  # What one scheduled run deletes. Sized to finish well inside `Bob.Runner`'s
+  # What one scheduled run deletes, sized to finish well inside `Bob.Runner`'s
   # three-hour job timeout at Docker Hub's 600 requests/minute. Steady state is
-  # only tens of tags a night, so this matters for the initial backlog — and for
-  # that, `drain/1` is the better tool than a raised batch.
+  # only tens of tags a night, so nothing needs to tune this; the initial
+  # backlog is what `drain/1` is for, and it takes `:limit` directly.
   @default_batch 10_000
 
   # Rows are dropped in chunks as the batch progresses rather than once at the
@@ -96,7 +96,7 @@ defmodule Bob.DockerCleanup do
   """
   def drain(opts \\ []) do
     opts = Keyword.put_new(opts, :mode, :live)
-    batch = Keyword.get(opts, :limit, configured_batch())
+    batch = Keyword.get(opts, :limit, @default_batch)
 
     Stream.repeatedly(fn -> run(Keyword.put(opts, :limit, batch)) end)
     |> Enum.reduce_while(0, fn {:live, deleted}, total ->
@@ -128,23 +128,22 @@ defmodule Bob.DockerCleanup do
   defp dry_run() do
     per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff())
     backlog = per_arch |> Map.values() |> Enum.sum()
-    batch = configured_batch()
 
-    # The backlog is the whole candidate set; a live run stops at the batch
-    # limit. Reporting only the backlog would overstate one night's deletions by
-    # orders of magnitude, and that is the number read before flipping to :live.
+    # The backlog is the whole candidate set; a scheduled run stops at the batch.
+    # Reporting only the backlog would overstate one night's deletions by orders
+    # of magnitude, and that is the number read before going live.
     Logger.info(
       "DOCKER CLEANUP dry-run: per-arch built_at < #{@per_arch_max_age_days}d -> " <>
-        "#{format_counts(per_arch)}; a live run would delete #{min(backlog, batch)} of them " <>
-        "tonight (batch #{batch})"
+        "#{format_counts(per_arch)}; one scheduled run would delete " <>
+        "#{min(backlog, @default_batch)} of them (batch #{@default_batch})"
     )
 
-    {:dry_run, %{per_arch: per_arch, backlog: backlog, next_run: min(backlog, batch)}}
+    {:dry_run, %{per_arch: per_arch, backlog: backlog, next_run: min(backlog, @default_batch)}}
   end
 
   defp live(opts) do
     deleter = Keyword.get(opts, :deleter, &Bob.DockerHub.delete_tag/2)
-    limit = Keyword.get(opts, :limit, configured_batch())
+    limit = Keyword.get(opts, :limit, @default_batch)
     cutoff = per_arch_cutoff()
 
     delete_opts = [
@@ -231,12 +230,6 @@ defmodule Bob.DockerCleanup do
   end
 
   defp per_arch_cutoff(), do: DateTime.add(DateTime.utc_now(), -@per_arch_max_age_days, :day)
-
-  # `||` rather than a get_env default: runtime.exs sets the key to nil when
-  # BOB_DOCKER_CLEANUP_BATCH is unset or unparseable, and a set-but-nil key
-  # would otherwise defeat the default.
-  defp configured_batch(),
-    do: Application.get_env(:bob, :docker_cleanup_batch) || @default_batch
 
   defp format_counts(counts) do
     total = counts |> Map.values() |> Enum.sum()
