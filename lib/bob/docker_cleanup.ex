@@ -3,9 +3,13 @@ defmodule Bob.DockerCleanup do
   Deletes per-arch Docker Hub tags older than 30 days. Tags reserved by a build
   request are kept. The manifest repos are not pruned.
 
-  `run/1` deletes one batch and is what the nightly job calls; `drain/1` loops
-  until the backlog is empty. `:docker_cleanup_mode` gates whether `run/1`
-  deletes or only reports.
+  A live run keeps taking batches until one deletes nothing, so it clears the
+  whole backlog rather than a single batch. What bounds it is the job's timeout.
+  `:docker_cleanup_mode` gates whether it deletes or only reports.
+
+  `:repos` narrows a run to some of the per-arch repos. Docker Hub rate limits
+  deletes per source IP, so pointing one node at each repo doubles throughput,
+  where two nodes on the same repo just race for the same tags.
   """
 
   require Logger
@@ -16,7 +20,7 @@ defmodule Bob.DockerCleanup do
   # tags the checker still expects. Asserted in docker_cleanup_test.
   @per_arch_max_age_days 30
 
-  # Sized to finish inside Bob.Runner's three-hour job timeout.
+  # Candidate query page size.
   @default_batch 10_000
 
   # Rows are committed per chunk so a killed run keeps its progress.
@@ -29,42 +33,21 @@ defmodule Bob.DockerCleanup do
   @default_concurrency 25
 
   def run(opts \\ []) do
+    repos = Keyword.get(opts, :repos, Artifacts.docker_cleanup_per_arch_repos())
+
     case Keyword.get(opts, :mode, configured_mode()) do
-      :dry_run -> dry_run()
-      :live -> live(opts)
+      :dry_run -> dry_run(repos)
+      :live -> live(opts, repos)
     end
-  end
-
-  @doc """
-  Runs batches until one deletes nothing. Always deletes, whatever
-  `:docker_cleanup_mode` says, and is not the scheduled path — the job runner
-  kills anything past three hours, so start this from a supervised task.
-  """
-  def drain(opts \\ []) do
-    opts = Keyword.put_new(opts, :mode, :live)
-    batch = Keyword.get(opts, :limit, @default_batch)
-
-    Stream.repeatedly(fn -> run(Keyword.put(opts, :limit, batch)) end)
-    |> Enum.reduce_while(0, fn {:live, deleted}, total ->
-      total = total + deleted
-
-      if deleted == 0 do
-        Logger.info("DOCKER CLEANUP drain finished, deleted #{total} tag(s)")
-        {:halt, total}
-      else
-        Logger.info("DOCKER CLEANUP drain progress, deleted #{total} tag(s) so far")
-        {:cont, total}
-      end
-    end)
   end
 
   defp configured_mode(), do: Application.get_env(:bob, :docker_cleanup_mode, :dry_run)
 
-  defp dry_run() do
-    per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff())
+  defp dry_run(repos) do
+    per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), repos)
     backlog = per_arch |> Map.values() |> Enum.sum()
 
-    # Report both: the backlog is every candidate, a run stops at the batch.
+    # The backlog is every candidate; a scheduled run stops at the batch.
     Logger.info(
       "DOCKER CLEANUP dry-run: per-arch built_at < #{@per_arch_max_age_days}d -> " <>
         "#{format_counts(per_arch)}; one scheduled run would delete " <>
@@ -74,15 +57,22 @@ defmodule Bob.DockerCleanup do
     {:dry_run, %{per_arch: per_arch}}
   end
 
-  defp live(opts) do
+  defp live(opts, repos) do
     deleter = Keyword.get(opts, :deleter, &Bob.DockerHub.delete_tag/2)
     limit = Keyword.get(opts, :limit, @default_batch)
     cutoff = per_arch_cutoff()
 
-    candidates = Artifacts.stale_per_arch_tags(cutoff, limit)
+    deleted =
+      Stream.repeatedly(fn ->
+        cutoff
+        |> Artifacts.stale_per_arch_tags(limit, repos)
+        |> delete(deleter, cutoff)
+      end)
+      |> Enum.reduce_while(0, fn batch, total ->
+        if batch == 0, do: {:halt, total}, else: {:cont, total + batch}
+      end)
 
-    deleted = delete(candidates, deleter, cutoff)
-    Logger.info("DOCKER CLEANUP deleted #{deleted}/#{length(candidates)} tag(s)")
+    Logger.info("DOCKER CLEANUP deleted #{deleted} tag(s) from #{Enum.join(repos, ", ")}")
     {:live, deleted}
   end
 
@@ -97,8 +87,7 @@ defmodule Bob.DockerCleanup do
       Artifacts.delete_docker_tags(confirmed)
       deleted = deleted + length(confirmed)
 
-      # Whole failed chunks, not individual errors: concurrent deletes have no
-      # "consecutive", and a flaky tag shouldn't trip the abort.
+      # Counted per chunk so a flaky tag does not trip the abort.
       dead_chunks = if failed > 0 and confirmed == [], do: dead_chunks + 1, else: 0
 
       if dead_chunks >= @dead_chunk_ceiling do

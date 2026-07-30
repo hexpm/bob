@@ -74,6 +74,37 @@ defmodule Bob.Queue.MaintenanceTest do
     assert [%Job{state: "running"}] = Repo.all(Job)
   end
 
+  test "leaves a job running past the default timeout but inside its own" do
+    old = ago(4 * @hour)
+
+    insert_job(
+      module_key: Bob.Job.DockerCleanup,
+      state: "running",
+      inserted_at: old,
+      started_at: old
+    )
+
+    Maintenance.run()
+
+    # Requeuing a cleanup at three hours starts a second one alongside it.
+    assert [%Job{state: "running"}] = Repo.all(Job)
+  end
+
+  test "requeues a long-timeout job once past its own timeout" do
+    old = ago(24 * @hour)
+
+    insert_job(
+      module_key: Bob.Job.DockerCleanup,
+      state: "running",
+      inserted_at: old,
+      started_at: old
+    )
+
+    Maintenance.run()
+
+    assert [%Job{state: "queued", requeues: 1}] = Repo.all(Job)
+  end
+
   test "prunes failures older than the expiry window" do
     insert_failure(last_failed_at: ago(8 * @day))
 

@@ -9,10 +9,8 @@ defmodule Bob.Runner do
 
   # A build that hangs (e.g. a wedged `docker build`) blocks its task forever and
   # keeps counting its weight against the shared budget, so the agent stops
-  # pulling new builds. Reap a task that outlives the master's stale-job timeout
-  # (mirrors Bob.Queue.Maintenance @job_timeout_seconds) so the slot is freed and
-  # the job is reported failed.
-  @job_timeout 3 * 60 * 60 * 1000
+  # pulling new builds. Reap a task that outlives its job's timeout so the slot
+  # is freed and the job is reported failed.
 
   def start_link([]) do
     GenServer.start_link(__MODULE__, new_state(), name: __MODULE__)
@@ -92,7 +90,7 @@ defmodule Bob.Runner do
     end
   end
 
-  # A task still running past @job_timeout is wedged (e.g. a hung `docker build`).
+  # A task still running past its timeout is wedged (e.g. a hung `docker build`).
   # Kill it so it stops leaking its weight, fail the job, and pull fresh work.
   # The kill triggers an abnormal :DOWN, but the row is already gone so that
   # clause no-ops.
@@ -202,7 +200,7 @@ defmodule Bob.Runner do
   defp start_job(id, key, args, state) do
     Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
     task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(key, args) end)
-    timer = Process.send_after(self(), {:job_timeout, task.ref}, @job_timeout)
+    timer = Process.send_after(self(), {:job_timeout, task.ref}, Bob.Job.timeout(key))
     put_in(state.tasks[task.ref], {key, args, id, task.pid, timer})
   end
 

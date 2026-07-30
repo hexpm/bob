@@ -15,7 +15,6 @@ defmodule Bob.Queue.Maintenance do
   alias Bob.Queue.{Job, Failure}
 
   @interval_seconds 60
-  @job_timeout_seconds 3 * 60 * 60
   # A job stuck in running this long means its node died hard (OOM, node loss),
   # so the work itself is not suspect — requeue it. The cap stops a job that
   # reliably kills its node or genuinely exceeds the timeout from looping.
@@ -67,12 +66,23 @@ defmodule Bob.Queue.Maintenance do
 
   defp sweep_stale_running() do
     now = DateTime.utc_now()
-    cutoff = DateTime.add(now, -@job_timeout_seconds, :second)
 
-    stale =
+    # Pre-filter on the shortest timeout any job can have, then keep only those
+    # past their own.
+    cutoff = DateTime.add(now, -div(Bob.Job.default_timeout(), 1000), :second)
+
+    stale_ids =
       from(j in Job,
-        where: j.state == "running" and not is_nil(j.started_at) and j.started_at < ^cutoff
+        where: j.state == "running" and not is_nil(j.started_at) and j.started_at < ^cutoff,
+        select: {j.id, j.module_key, j.started_at}
       )
+      |> Repo.all()
+      |> Enum.filter(fn {_id, module_key, started_at} ->
+        DateTime.diff(now, started_at, :millisecond) > Bob.Job.timeout(module_key)
+      end)
+      |> Enum.map(fn {id, _module_key, _started_at} -> id end)
+
+    stale = from(j in Job, where: j.id in ^stale_ids)
 
     {requeued, _} =
       Repo.update_all(
