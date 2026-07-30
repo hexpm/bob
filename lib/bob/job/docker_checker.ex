@@ -42,6 +42,11 @@ defmodule Bob.Job.DockerChecker do
     |> Map.new(fn {repo, regexes} -> {repo, tags(repo, regexes)} end)
   end
 
+  @doc "The base-image os_versions the build matrix currently targets."
+  def current_os_versions(), do: os_versions(builds())
+
+  defp os_versions(builds), do: builds |> Map.values() |> List.flatten()
+
   defp tags(repo, regexes) do
     tags =
       ("library/" <> repo)
@@ -429,10 +434,8 @@ defmodule Bob.Job.DockerChecker do
   # only ones expected_elixir_tags/0 can use. Rows returned here always carry
   # search metadata, so the tag is guaranteed to match @erlang_tag_regex.
   defp current_erlang_tags(builds) do
-    os_versions = builds |> Map.values() |> List.flatten()
-
     @erlang_arch_repos
-    |> Bob.Artifacts.erlang_tags_for_os_versions(os_versions)
+    |> Bob.Artifacts.erlang_tags_for_os_versions(os_versions(builds))
     |> Enum.map(fn {"hexpm/erlang-" <> arch, tag} ->
       [erlang, os, os_version] = Regex.run(@erlang_tag_regex, tag, capture: :all_but_first)
       {erlang, os, os_version, arch}

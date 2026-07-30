@@ -1,23 +1,20 @@
 defmodule Bob.DockerCleanup do
   @moduledoc """
   Deletes per-arch Docker Hub tags older than 30 days. Tags reserved by a build
-  request are kept. The manifest repos are not pruned.
+  request are kept, as are the erlang tags on an os_version the build matrix
+  still targets. The manifest repos are not pruned.
 
   A live run keeps taking batches until one deletes nothing, so it clears the
   whole backlog rather than a single batch. What bounds it is the job's timeout.
   `:docker_cleanup_mode` gates whether it deletes or only reports.
-
-  `:repos` narrows a run to some of the per-arch repos. Docker Hub rate limits
-  deletes per source IP, so pointing one node at each repo doubles throughput,
-  where two nodes on the same repo just race for the same tags.
   """
 
   require Logger
 
   alias Bob.Artifacts
 
-  # Must stay >= Bob.Job.DockerChecker.build_freshness_days/0 or cleanup deletes
-  # tags the checker still expects. Asserted in docker_cleanup_test.
+  # Must stay >= the DockerChecker build freshness window or cleanup deletes
+  # tags that pass still expects.
   @per_arch_max_age_days 30
 
   # Candidate query page size.
@@ -33,57 +30,57 @@ defmodule Bob.DockerCleanup do
   @default_concurrency 25
 
   def run(opts \\ []) do
-    repos = Keyword.get(opts, :repos, Artifacts.docker_cleanup_per_arch_repos())
-
     case Keyword.get(opts, :mode, configured_mode()) do
-      :dry_run -> dry_run(repos)
-      :live -> live(opts, repos)
+      :dry_run -> dry_run()
+      :live -> live(opts)
     end
   end
 
   defp configured_mode(), do: Application.get_env(:bob, :docker_cleanup_mode, :dry_run)
 
-  defp dry_run(repos) do
-    per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), repos)
-    backlog = per_arch |> Map.values() |> Enum.sum()
+  defp dry_run() do
+    per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), current_os_versions())
 
-    # The backlog is every candidate; a scheduled run stops at the batch.
     Logger.info(
       "DOCKER CLEANUP dry-run: per-arch built_at < #{@per_arch_max_age_days}d -> " <>
-        "#{format_counts(per_arch)}; one scheduled run would delete " <>
-        "#{min(backlog, @default_batch)} of them (batch #{@default_batch})"
+        format_counts(per_arch)
     )
 
     {:dry_run, %{per_arch: per_arch}}
   end
 
-  defp live(opts, repos) do
+  defp live(opts) do
     deleter = Keyword.get(opts, :deleter, &Bob.DockerHub.delete_tag/2)
     limit = Keyword.get(opts, :limit, @default_batch)
     cutoff = per_arch_cutoff()
 
+    # Pinned for the whole run, like the cutoff. A base image released mid-run
+    # rotates the os_version it replaces out of the matrix, and the erlang tags
+    # on it must stay protected until the checker has built their replacements.
+    os_versions = current_os_versions()
+
     deleted =
       Stream.repeatedly(fn ->
         cutoff
-        |> Artifacts.stale_per_arch_tags(limit, repos)
-        |> delete(deleter, cutoff)
+        |> Artifacts.stale_per_arch_tags(limit, os_versions)
+        |> delete(deleter, cutoff, os_versions)
       end)
       |> Enum.reduce_while(0, fn batch, total ->
         if batch == 0, do: {:halt, total}, else: {:cont, total + batch}
       end)
 
-    Logger.info("DOCKER CLEANUP deleted #{deleted} tag(s) from #{Enum.join(repos, ", ")}")
+    Logger.info("DOCKER CLEANUP deleted #{deleted} tag(s)")
     {:live, deleted}
   end
 
   # Deleted rows are dropped only after Docker Hub confirms, so a failed tag is
   # retried next run. Candidates are re-checked per chunk because a run is slow
   # enough for a tag to get reserved or re-pushed while it works.
-  defp delete(candidates, deleter, cutoff) do
+  defp delete(candidates, deleter, cutoff, os_versions) do
     candidates
     |> Enum.chunk_every(@delete_chunk)
     |> Enum.reduce_while({0, 0}, fn chunk, {deleted, dead_chunks} ->
-      {confirmed, failed} = delete_chunk(chunk, deleter, cutoff)
+      {confirmed, failed} = delete_chunk(chunk, deleter, cutoff, os_versions)
       Artifacts.delete_docker_tags(confirmed)
       deleted = deleted + length(confirmed)
 
@@ -104,9 +101,9 @@ defmodule Bob.DockerCleanup do
     |> elem(0)
   end
 
-  defp delete_chunk(chunk, deleter, cutoff) do
+  defp delete_chunk(chunk, deleter, cutoff, os_versions) do
     chunk
-    |> Artifacts.deletable_docker_tags(cutoff)
+    |> Artifacts.deletable_docker_tags(cutoff, os_versions)
     |> Task.async_stream(
       fn {repo, tag} ->
         case deleter.(repo, tag) do
@@ -120,7 +117,7 @@ defmodule Bob.DockerCleanup do
       end,
       max_concurrency: @default_concurrency,
       ordered: false,
-      # The limiter can park a caller until its window resets.
+      # The limiter can hold a caller until the budget recovers.
       timeout: :infinity
     )
     |> Enum.reduce({[], 0}, fn
@@ -130,6 +127,8 @@ defmodule Bob.DockerCleanup do
   end
 
   defp per_arch_cutoff(), do: DateTime.add(DateTime.utc_now(), -@per_arch_max_age_days, :day)
+
+  defp current_os_versions(), do: Bob.Job.DockerChecker.current_os_versions()
 
   defp format_counts(counts) do
     total = counts |> Map.values() |> Enum.sum()
