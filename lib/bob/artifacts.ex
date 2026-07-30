@@ -520,14 +520,10 @@ defmodule Bob.Artifacts do
 
   defp unreserved(query), do: where(query, [d], d.tag not in ^reserved_targets())
 
-  def docker_cleanup_per_arch_repos(), do: @docker_cleanup_per_arch_repos
-
-  # Only the known per-arch repos, so a caller cannot point the cleanup at a
-  # manifest repo.
-  defp stale_per_arch(cutoff, repos, current_os_versions) do
-    repos = Enum.filter(@docker_cleanup_per_arch_repos, &(&1 in repos))
-
-    from(d in DockerTag, where: d.repo in ^repos and d.built_at < ^cutoff)
+  defp stale_per_arch(cutoff, current_os_versions) do
+    from(d in DockerTag,
+      where: d.repo in ^@docker_cleanup_per_arch_repos and d.built_at < ^cutoff
+    )
     |> keep_current_erlang(current_os_versions)
   end
 
@@ -546,8 +542,8 @@ defmodule Bob.Artifacts do
   end
 
   @doc "Per-repo count of the tags a run would delete."
-  def count_stale_per_arch_tags(cutoff, repos, current_os_versions) do
-    stale_per_arch(cutoff, repos, current_os_versions)
+  def count_stale_per_arch_tags(cutoff, current_os_versions) do
+    stale_per_arch(cutoff, current_os_versions)
     |> unreserved()
     |> group_by([d], d.repo)
     |> select([d], {d.repo, count(d.id)})
@@ -556,8 +552,8 @@ defmodule Bob.Artifacts do
   end
 
   @doc "Up to `limit` deletable `{repo, tag}` pairs."
-  def stale_per_arch_tags(cutoff, limit, repos, current_os_versions) do
-    stale_per_arch(cutoff, repos, current_os_versions)
+  def stale_per_arch_tags(cutoff, limit, current_os_versions) do
+    stale_per_arch(cutoff, current_os_versions)
     |> unreserved()
     |> limit(^limit)
     |> select([d], {d.repo, d.tag})

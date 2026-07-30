@@ -216,61 +216,6 @@ defmodule Bob.DockerCleanupTest do
     end
   end
 
-  describe "run/1 scoped to some repos" do
-    setup do
-      for repo <- ~w(hexpm/elixir-amd64 hexpm/elixir-arm64) do
-        Artifacts.add_docker_tag(
-          repo,
-          "1.18.0-erlang-27.0-ubuntu-noble-20250101",
-          ["amd64"],
-          old()
-        )
-      end
-
-      :ok
-    end
-
-    test "deletes only from the named repo" do
-      test = self()
-      deleter = fn repo, _tag -> send(test, {:deleted, repo}) && :ok end
-
-      assert {:live, 1} =
-               DockerCleanup.run(
-                 mode: :live,
-                 deleter: deleter,
-                 repos: ["hexpm/elixir-amd64"]
-               )
-
-      assert_received {:deleted, "hexpm/elixir-amd64"}
-      refute_received {:deleted, "hexpm/elixir-arm64"}
-      assert Artifacts.docker_tags("hexpm/elixir-arm64") != []
-    end
-
-    test "the dry run counts only the named repo" do
-      assert {:dry_run, %{per_arch: counts}} =
-               DockerCleanup.run(mode: :dry_run, repos: ["hexpm/elixir-arm64"])
-
-      assert counts == %{"hexpm/elixir-arm64" => 1}
-    end
-
-    # A repo outside the list would be the images users pull.
-    test "a repo outside the per-arch list is ignored, not deleted from" do
-      deleter = fn _repo, _tag -> :ok end
-
-      Artifacts.add_docker_tag(
-        "hexpm/elixir",
-        "1.17.0-erlang-27.0-ubuntu-noble-20250101",
-        ["amd64", "arm64"],
-        ancient()
-      )
-
-      assert {:live, 0} =
-               DockerCleanup.run(mode: :live, deleter: deleter, repos: ["hexpm/elixir"])
-
-      assert Artifacts.docker_tags("hexpm/elixir") != []
-    end
-  end
-
   describe "run/1 clears the whole backlog" do
     test "keeps taking batches until nothing is left" do
       deleter = fn _repo, _tag -> :ok end

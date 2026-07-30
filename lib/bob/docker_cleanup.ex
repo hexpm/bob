@@ -7,11 +7,6 @@ defmodule Bob.DockerCleanup do
   A live run keeps taking batches until one deletes nothing, so it clears the
   whole backlog rather than a single batch. What bounds it is the job's timeout.
   `:docker_cleanup_mode` gates whether it deletes or only reports.
-
-  `:repos` narrows a run to some of the per-arch repos. Docker Hub meters the
-  API per account rather than per source IP, so a second node deleting at the
-  same time draws down the same budget: the two together get no more through
-  than one does, and spend the difference on 429s. Run one at a time.
   """
 
   require Logger
@@ -35,33 +30,26 @@ defmodule Bob.DockerCleanup do
   @default_concurrency 25
 
   def run(opts \\ []) do
-    repos = Keyword.get(opts, :repos, Artifacts.docker_cleanup_per_arch_repos())
-
     case Keyword.get(opts, :mode, configured_mode()) do
-      :dry_run -> dry_run(repos)
-      :live -> live(opts, repos)
+      :dry_run -> dry_run()
+      :live -> live(opts)
     end
   end
 
   defp configured_mode(), do: Application.get_env(:bob, :docker_cleanup_mode, :dry_run)
 
-  defp dry_run(repos) do
-    per_arch =
-      Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), repos, current_os_versions())
+  defp dry_run() do
+    per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), current_os_versions())
 
-    backlog = per_arch |> Map.values() |> Enum.sum()
-
-    # The backlog is every candidate; a scheduled run stops at the batch.
     Logger.info(
       "DOCKER CLEANUP dry-run: per-arch built_at < #{@per_arch_max_age_days}d -> " <>
-        "#{format_counts(per_arch)}; one scheduled run would delete " <>
-        "#{min(backlog, @default_batch)} of them (batch #{@default_batch})"
+        format_counts(per_arch)
     )
 
     {:dry_run, %{per_arch: per_arch}}
   end
 
-  defp live(opts, repos) do
+  defp live(opts) do
     deleter = Keyword.get(opts, :deleter, &Bob.DockerHub.delete_tag/2)
     limit = Keyword.get(opts, :limit, @default_batch)
     cutoff = per_arch_cutoff()
@@ -73,14 +61,14 @@ defmodule Bob.DockerCleanup do
         os_versions = current_os_versions()
 
         cutoff
-        |> Artifacts.stale_per_arch_tags(limit, repos, os_versions)
+        |> Artifacts.stale_per_arch_tags(limit, os_versions)
         |> delete(deleter, cutoff, os_versions)
       end)
       |> Enum.reduce_while(0, fn batch, total ->
         if batch == 0, do: {:halt, total}, else: {:cont, total + batch}
       end)
 
-    Logger.info("DOCKER CLEANUP deleted #{deleted} tag(s) from #{Enum.join(repos, ", ")}")
+    Logger.info("DOCKER CLEANUP deleted #{deleted} tag(s)")
     {:live, deleted}
   end
 
@@ -128,7 +116,7 @@ defmodule Bob.DockerCleanup do
       end,
       max_concurrency: @default_concurrency,
       ordered: false,
-      # The limiter can park a caller until its window resets.
+      # The limiter can hold a caller until the budget recovers.
       timeout: :infinity
     )
     |> Enum.reduce({[], 0}, fn

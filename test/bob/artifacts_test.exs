@@ -934,10 +934,10 @@ defmodule Bob.ArtifactsTest do
 
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
 
-      assert Artifacts.count_stale_per_arch_tags(cutoff, repos(), []) ==
+      assert Artifacts.count_stale_per_arch_tags(cutoff, []) ==
                %{"hexpm/elixir-amd64" => 1, "hexpm/erlang-amd64" => 1}
 
-      assert Artifacts.stale_per_arch_tags(cutoff, 100, repos(), []) |> Enum.sort() ==
+      assert Artifacts.stale_per_arch_tags(cutoff, 100, []) |> Enum.sort() ==
                [
                  {"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"},
                  {"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"}
@@ -953,10 +953,10 @@ defmodule Bob.ArtifactsTest do
 
       # expected_elixir_tags/0 ranks these by version, not date, so the newest
       # tag of an old OTP line stays in use however old it gets.
-      assert Artifacts.count_stale_per_arch_tags(cutoff, repos(), ["noble-20250101"]) ==
+      assert Artifacts.count_stale_per_arch_tags(cutoff, ["noble-20250101"]) ==
                %{"hexpm/erlang-amd64" => 1}
 
-      assert Artifacts.stale_per_arch_tags(cutoff, 100, repos(), ["noble-20250101"]) ==
+      assert Artifacts.stale_per_arch_tags(cutoff, 100, ["noble-20250101"]) ==
                [{"hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101"}]
 
       # And the per-chunk re-check applies the same rule.
@@ -977,7 +977,7 @@ defmodule Bob.ArtifactsTest do
         days_ago(40)
       )
 
-      assert Artifacts.count_stale_per_arch_tags(days_ago(30), repos(), ["noble-20250101"]) ==
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), ["noble-20250101"]) ==
                %{"hexpm/elixir-amd64" => 1}
     end
 
@@ -1008,7 +1008,7 @@ defmodule Bob.ArtifactsTest do
         builds_count: 0
       })
 
-      assert Artifacts.count_stale_per_arch_tags(days_ago(30), repos(), []) == %{}
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), []) == %{}
     end
 
     test "an expired build request does not reserve its tags" do
@@ -1031,7 +1031,7 @@ defmodule Bob.ArtifactsTest do
 
       BuildRequests.expire(request)
 
-      assert Artifacts.count_stale_per_arch_tags(days_ago(30), repos(), []) ==
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), []) ==
                %{"hexpm/elixir-amd64" => 1}
     end
 
@@ -1087,8 +1087,6 @@ defmodule Bob.ArtifactsTest do
   end
 
   defp days_ago(days), do: DateTime.add(DateTime.utc_now(), -days, :day)
-
-  defp repos(), do: Artifacts.docker_cleanup_per_arch_repos()
 
   defp replace(repo, tag_archs) do
     token = Ecto.UUID.generate()
