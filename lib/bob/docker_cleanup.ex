@@ -79,15 +79,9 @@ defmodule Bob.DockerCleanup do
     limit = Keyword.get(opts, :limit, @default_batch)
     cutoff = per_arch_cutoff()
 
-    delete_opts = [
-      cutoff: cutoff,
-      chunk: Keyword.get(opts, :chunk, @delete_chunk),
-      concurrency: Keyword.get(opts, :concurrency, @default_concurrency)
-    ]
-
     candidates = Artifacts.stale_per_arch_tags(cutoff, limit)
 
-    deleted = delete(candidates, deleter, delete_opts)
+    deleted = delete(candidates, deleter, cutoff)
     Logger.info("DOCKER CLEANUP deleted #{deleted}/#{length(candidates)} tag(s)")
     {:live, deleted}
   end
@@ -95,15 +89,11 @@ defmodule Bob.DockerCleanup do
   # Deleted rows are dropped only after Docker Hub confirms, so a failed tag is
   # retried next run. Candidates are re-checked per chunk because a run is slow
   # enough for a tag to get reserved or re-pushed while it works.
-  defp delete(candidates, deleter, opts) do
-    cutoff = Keyword.fetch!(opts, :cutoff)
-    chunk_size = Keyword.fetch!(opts, :chunk)
-    concurrency = Keyword.fetch!(opts, :concurrency)
-
+  defp delete(candidates, deleter, cutoff) do
     candidates
-    |> Enum.chunk_every(chunk_size)
+    |> Enum.chunk_every(@delete_chunk)
     |> Enum.reduce_while({0, 0}, fn chunk, {deleted, dead_chunks} ->
-      {confirmed, failed} = delete_chunk(chunk, deleter, cutoff, concurrency)
+      {confirmed, failed} = delete_chunk(chunk, deleter, cutoff)
       Artifacts.delete_docker_tags(confirmed)
       deleted = deleted + length(confirmed)
 
@@ -125,7 +115,7 @@ defmodule Bob.DockerCleanup do
     |> elem(0)
   end
 
-  defp delete_chunk(chunk, deleter, cutoff, concurrency) do
+  defp delete_chunk(chunk, deleter, cutoff) do
     chunk
     |> Artifacts.deletable_docker_tags(cutoff)
     |> Task.async_stream(
@@ -139,7 +129,7 @@ defmodule Bob.DockerCleanup do
             :error
         end
       end,
-      max_concurrency: concurrency,
+      max_concurrency: @default_concurrency,
       ordered: false,
       # The limiter can park a caller until its window resets.
       timeout: :infinity

@@ -3,6 +3,9 @@ defmodule Bob.DockerCleanupTest do
 
   alias Bob.{Artifacts, BuildRequests, DockerCleanup}
 
+  # Mirrors Bob.DockerCleanup's own chunk size so these exercise real boundaries.
+  @chunk 100
+
   defp days_ago(days), do: DateTime.add(DateTime.utc_now(), -days, :day)
   defp old(), do: days_ago(40)
   defp ancient(), do: days_ago(250)
@@ -94,43 +97,22 @@ defmodule Bob.DockerCleanupTest do
                [{"1.25.0-erlang-27.0-ubuntu-noble-20250101", ["amd64", "arm64"]}]
     end
 
-    test "skips a tag that was reserved after the candidates were selected" do
-      test = self()
+    test "a tag reserved during a run is spared from the next chunk" do
+      tags = add_stale_tags("hexpm/elixir-amd64", @chunk + 50)
 
-      # Reserve every candidate while the first is deleted.
-      deleter = fn repo, tag ->
-        send(test, {:deleted, repo, tag})
-
-        for elixir <- ["1.26.0", "1.27.0"] do
-          BuildRequests.create(%{
-            username: "eric",
-            kind: "elixir",
-            elixir: elixir,
-            erlang: "27.0",
-            os: "ubuntu",
-            os_version: "noble-20250101",
-            builds_count: 0
-          })
+      # Reserve every tag while the first chunk is being deleted. That chunk was
+      # already re-checked so it goes, but the next one must find them pinned.
+      deleter = fn _repo, _tag ->
+        unless Process.get(:reserved) do
+          Process.put(:reserved, true)
+          reserve_targets(tags)
         end
 
         :ok
       end
 
-      for elixir <- ["1.26.0", "1.27.0"] do
-        Artifacts.add_docker_tag(
-          "hexpm/elixir-amd64",
-          "#{elixir}-erlang-27.0-ubuntu-noble-20250101",
-          ["amd64"],
-          old()
-        )
-      end
-
-      assert {:live, 1} =
-               DockerCleanup.run(mode: :live, deleter: deleter, chunk: 1, concurrency: 1)
-
-      assert_received {:deleted, "hexpm/elixir-amd64", _tag}
-      refute_received {:deleted, _repo, _tag}
-      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 1
+      assert {:live, @chunk} = DockerCleanup.run(mode: :live, deleter: deleter)
+      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 50
     end
 
     test "keeps the row when deletion errors" do
@@ -185,101 +167,52 @@ defmodule Bob.DockerCleanupTest do
   describe "run/1 durability" do
     test "rows are dropped as the batch progresses, not only at the end" do
       test = self()
+      add_stale_tags("hexpm/elixir-amd64", @chunk + 50)
 
-      # Surviving row count at each delete: it falls only if chunks commit.
       deleter = fn repo, _tag ->
         send(test, {:remaining, length(Artifacts.docker_tags(repo))})
         :ok
       end
 
-      for n <- 1..4 do
-        Artifacts.add_docker_tag(
-          "hexpm/elixir-amd64",
-          "1.2#{n}.0-erlang-27.0-ubuntu-noble-20250101",
-          ["amd64"],
-          old()
-        )
-      end
+      assert {:live, total} = DockerCleanup.run(mode: :live, deleter: deleter)
+      assert total == @chunk + 50
 
-      assert {:live, 4} =
-               DockerCleanup.run(
-                 mode: :live,
-                 deleter: deleter,
-                 limit: 10,
-                 chunk: 1,
-                 concurrency: 1
-               )
-
-      assert_received {:remaining, 4}
-      assert_received {:remaining, 3}
-      assert_received {:remaining, 2}
-      assert_received {:remaining, 1}
+      # Committing only at the end would report the full count throughout.
+      assert Enum.min(received_remaining()) == 50
       assert Artifacts.docker_tags("hexpm/elixir-amd64") == []
     end
 
     test "a tag re-pushed mid-run is no longer deletable" do
-      test = self()
+      tags = add_stale_tags("hexpm/elixir-amd64", @chunk + 50)
 
-      # Reconcile bumping built_at mid-run.
-      tags =
-        for n <- 1..2, do: "1.2#{n}.0-erlang-27.0-ubuntu-noble-20250101"
+      # Reconcile bumping built_at while the first chunk is being deleted.
+      deleter = fn repo, _tag ->
+        unless Process.get(:repushed) do
+          Process.put(:repushed, true)
+          for tag <- tags, do: Artifacts.add_docker_tag(repo, tag, ["amd64"], DateTime.utc_now())
+        end
 
-      for tag <- tags do
-        Artifacts.add_docker_tag("hexpm/elixir-amd64", tag, ["amd64"], old())
-      end
-
-      # Re-pushes whichever tag is not the one currently being deleted, so the
-      # assertion holds whatever order the candidate query returned.
-      deleter = fn repo, tag ->
-        send(test, {:deleted, tag})
-        other = Enum.find(tags, &(&1 != tag))
-        Artifacts.add_docker_tag(repo, other, ["amd64"], DateTime.utc_now())
         :ok
       end
 
-      assert {:live, 1} =
-               DockerCleanup.run(mode: :live, deleter: deleter, chunk: 1, concurrency: 1)
-
-      assert_received {:deleted, _first}
-      refute_received {:deleted, _second}
-      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 1
+      assert {:live, @chunk} = DockerCleanup.run(mode: :live, deleter: deleter)
+      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 50
     end
 
-    # A token without delete permission 401s on every candidate. Without a
-    # ceiling that is hours of full-rate Docker Hub traffic, nightly.
     test "a run where every delete fails aborts instead of walking the batch" do
       test = self()
+      add_stale_tags("hexpm/elixir-amd64", @chunk * 5)
 
       deleter = fn _repo, _tag ->
         send(test, :attempted)
         {:error, :unauthorized}
       end
 
-      for n <- 1..40 do
-        Artifacts.add_docker_tag(
-          "hexpm/elixir-amd64",
-          "1.#{n}.0-erlang-27.0-ubuntu-noble-20250101",
-          ["amd64"],
-          old()
-        )
-      end
+      assert {:live, 0} = DockerCleanup.run(mode: :live, deleter: deleter)
 
-      assert {:live, 0} = DockerCleanup.run(mode: :live, deleter: deleter, chunk: 10)
-
-      attempts =
-        Enum.count(
-          Stream.repeatedly(fn -> nil end)
-          |> Enum.take_while(fn _ ->
-            receive do
-              :attempted -> true
-            after
-              0 -> false
-            end
-          end)
-        )
-
-      assert attempts < 40
-      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 40
+      # Stops after @dead_chunk_ceiling chunks rather than walking all five.
+      assert count_received(:attempted) == @chunk * 3
+      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == @chunk * 5
     end
   end
 
@@ -345,5 +278,91 @@ defmodule Bob.DockerCleanupTest do
       assert DockerCleanup.drain(limit: 2, deleter: deleter) == 0
       assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 2
     end
+  end
+
+  # Bulk insert: these tests need more rows than one chunk, and add_docker_tag/4
+  # a few hundred times dominates the runtime.
+  defp add_stale_tags(repo, count) do
+    now = DateTime.utc_now()
+    built_at = old()
+
+    rows =
+      for n <- 1..count do
+        %{
+          repo: repo,
+          tag: "1.#{n}.0-erlang-27.0-ubuntu-noble-20250101",
+          archs: ["amd64"],
+          search: %{},
+          built_at: built_at,
+          inserted_at: now,
+          updated_at: now
+        }
+      end
+
+    Repo.insert_all(Bob.Artifacts.DockerTag, rows)
+    Enum.map(rows, & &1.tag)
+  end
+
+  defp reserve_targets(tags) do
+    now = DateTime.utc_now()
+
+    rows =
+      for tag <- tags do
+        [elixir, erlang, os, os_version] =
+          Regex.run(~r/^(.+)-erlang-(.+)-(alpine|ubuntu|debian)-(.+)$/, tag,
+            capture: :all_but_first
+          )
+
+        %{
+          username: "eric",
+          kind: "elixir",
+          elixir: elixir,
+          erlang: erlang,
+          os: os,
+          os_version: os_version,
+          builds_count: 0,
+          state: "completed",
+          inserted_at: now,
+          updated_at: now
+        }
+      end
+
+    Repo.insert_all(Bob.BuildRequests.BuildRequest, rows)
+  end
+
+  defp received_remaining() do
+    Enum.flat_map(drain_mailbox(), fn
+      {:remaining, n} -> [n]
+      _other -> []
+    end)
+  end
+
+  defp count_received(msg), do: Enum.count(drain_mailbox(), &(&1 == msg))
+
+  defp drain_mailbox() do
+    Stream.repeatedly(fn ->
+      receive do
+        m -> m
+      after
+        0 -> :__empty__
+      end
+    end)
+    |> Enum.take_while(&(&1 != :__empty__))
+  end
+
+  defp drain_messages(take) do
+    Stream.repeatedly(fn ->
+      receive do
+        m -> m
+      after
+        0 -> :done
+      end
+    end)
+    |> Enum.take_while(&(&1 != :done))
+    |> Enum.map(fn
+      {:remaining, n} -> n
+      other -> other
+    end)
+    |> tap(fn _ -> take end)
   end
 end
