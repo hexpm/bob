@@ -995,27 +995,6 @@ defmodule Bob.ArtifactsTest do
       assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{"hexpm/elixir-amd64" => 1}
     end
 
-    test "a reservation matches the tag name it maps to" do
-      erlang_attrs = %{
-        username: "eric",
-        kind: "erlang",
-        erlang: "27.0",
-        os: "ubuntu",
-        os_version: "noble-20250101",
-        builds_count: 0
-      }
-
-      elixir_attrs = %{erlang_attrs | kind: "elixir"} |> Map.put(:elixir, "1.18.0")
-
-      for {repo, attrs} <- [{"hexpm/erlang", erlang_attrs}, {"hexpm/elixir", elixir_attrs}] do
-        {:ok, request} = BuildRequests.create(attrs)
-
-        target = BuildRequests.request_target(request)
-        Artifacts.add_docker_tag(repo, target, ["amd64"])
-        assert Artifacts.docker_tag_reserved?(repo, target)
-      end
-    end
-
     test "delete_docker_tags removes the given rows" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "a", ["amd64"])
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "b", ["amd64"])

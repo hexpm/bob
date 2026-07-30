@@ -509,8 +509,6 @@ defmodule Bob.Artifacts do
     Enum.map(rows, fn [tag, archs] -> {tag, archs} end)
   end
 
-  def docker_cleanup_per_arch_repos(), do: @docker_cleanup_per_arch_repos
-
   # build_requests is small, so the reserved tag names are cheaper to collect
   # and match against than to reconstruct from the component columns in SQL.
   defp reserved_targets() do
@@ -546,13 +544,6 @@ defmodule Bob.Artifacts do
     |> limit(^limit)
     |> select([d], {d.repo, d.tag})
     |> Repo.all(timeout: @long_query_timeout)
-  end
-
-  @doc "Whether a build request currently reserves `tag` in `repo`."
-  def docker_tag_reserved?(repo, tag) do
-    from(d in DockerTag, where: d.repo == ^repo and d.tag == ^tag)
-    |> reserved()
-    |> Repo.exists?()
   end
 
   @doc """

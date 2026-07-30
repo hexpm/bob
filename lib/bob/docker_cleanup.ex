@@ -73,7 +73,7 @@ defmodule Bob.DockerCleanup do
         "#{min(backlog, @default_batch)} of them (batch #{@default_batch})"
     )
 
-    {:dry_run, %{per_arch: per_arch, backlog: backlog, next_run: min(backlog, @default_batch)}}
+    {:dry_run, %{per_arch: per_arch}}
   end
 
   defp live(opts) do
