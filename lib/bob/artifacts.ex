@@ -513,7 +513,7 @@ defmodule Bob.Artifacts do
   defp reserved_targets() do
     from(br in BuildRequest, where: br.state in ["pending", "completed"])
     |> Repo.all()
-    |> Enum.map(&BuildRequest.target/1)
+    |> Enum.flat_map(&BuildRequest.targets/1)
   end
 
   defp reserved(query), do: where(query, [d], d.tag in ^reserved_targets())
@@ -527,17 +527,30 @@ defmodule Bob.Artifacts do
     |> keep_current_erlang(current_os_versions)
   end
 
+  # An empty list means the build matrix could not be read, which protects every
+  # erlang tag. `<> ALL('{}')` is true, so leaving this to the general clause
+  # would delete the lot.
+  defp keep_current_erlang(query, []) do
+    where(query, [d], d.repo not in ^@erlang_arch_repos)
+  end
+
   # An erlang per-arch tag on one of the os_versions the build matrix currently
   # targets is kept whatever its age. DockerChecker.expected_elixir_tags/0 reads
   # those rows to decide which Elixir images to build and ranks them by version,
   # not by date, so the newest tag of an old OTP line stays in use indefinitely.
-  # A row whose search metadata carries no os_version is kept too.
+  # A tag whose metadata carries no os_version is kept, spelled out rather than
+  # left to `NULL <> ALL(...)` returning NULL.
   defp keep_current_erlang(query, current_os_versions) do
     where(
       query,
       [d],
       d.repo not in ^@erlang_arch_repos or
-        fragment("?->>'os_version' <> ALL(?)", d.search, ^current_os_versions)
+        fragment(
+          "?->>'os_version' IS NOT NULL AND ?->>'os_version' <> ALL(?)",
+          d.search,
+          d.search,
+          ^current_os_versions
+        )
     )
   end
 
@@ -563,8 +576,8 @@ defmodule Bob.Artifacts do
   @doc """
   The subset of `repo_tags` still deletable: present, older than `cutoff`,
   unreserved and not an erlang tag the build matrix still targets. Re-checked
-  per chunk because a run is slow enough for a tag to get reserved, re-pushed,
-  or pulled into the matrix by a base image release while it works.
+  per chunk because a run is slow enough for a tag to get reserved or re-pushed
+  while it works.
   """
   def deletable_docker_tags([], _cutoff, _current_os_versions), do: []
 

@@ -67,7 +67,9 @@ defmodule BobWeb.DockerTagsLiveTest do
 
     assert reserved?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
     refute reserved?(html, "1.18.1-erlang-27.0-ubuntu-noble-20250101")
-    refute reserved?(html, "27.0-ubuntu-noble-20250101")
+
+    # The elixir image is built FROM this one, so the request holds it too.
+    assert reserved?(html, "27.0-ubuntu-noble-20250101")
   end
 
   test "applies filters from URL params on load", %{conn: conn} do

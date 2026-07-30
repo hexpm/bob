@@ -934,10 +934,12 @@ defmodule Bob.ArtifactsTest do
 
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
 
-      assert Artifacts.count_stale_per_arch_tags(cutoff, []) ==
+      current = ["jammy-20250101"]
+
+      assert Artifacts.count_stale_per_arch_tags(cutoff, current) ==
                %{"hexpm/elixir-amd64" => 1, "hexpm/erlang-amd64" => 1}
 
-      assert Artifacts.stale_per_arch_tags(cutoff, 100, []) |> Enum.sort() ==
+      assert Artifacts.stale_per_arch_tags(cutoff, 100, current) |> Enum.sort() ==
                [
                  {"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"},
                  {"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"}
@@ -967,6 +969,58 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.deletable_docker_tags(chunk, cutoff, ["noble-20250101"]) ==
                [{"hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101"}]
+    end
+
+    test "no readable build matrix protects every erlang tag" do
+      old = days_ago(40)
+
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      # An empty list means the matrix could not be read, not that nothing is
+      # current, so the erlang tags are held back and only elixir is a candidate.
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), []) ==
+               %{"hexpm/elixir-amd64" => 1}
+
+      chunk = [
+        {"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"},
+        {"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"}
+      ]
+
+      assert Artifacts.deletable_docker_tags(chunk, days_ago(30), []) ==
+               [{"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"}]
+    end
+
+    test "an elixir build request reserves the erlang image it builds FROM" do
+      old = days_ago(40)
+
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      BuildRequests.create(%{
+        username: "eric",
+        kind: "elixir",
+        elixir: "1.18.0",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 0
+      })
+
+      # jammy is current, so the noble base is not held by the os_version rule.
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), ["jammy-20250101"]) == %{}
     end
 
     test "a current os_version does not protect an elixir tag" do

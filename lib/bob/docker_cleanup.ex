@@ -13,8 +13,8 @@ defmodule Bob.DockerCleanup do
 
   alias Bob.Artifacts
 
-  # Must stay >= Bob.Job.DockerChecker.build_freshness_days/0 or cleanup deletes
-  # tags the checker still expects. Asserted in docker_cleanup_test.
+  # Must stay >= the DockerChecker build freshness window or cleanup deletes
+  # tags that pass still expects.
   @per_arch_max_age_days 30
 
   # Candidate query page size.
@@ -54,12 +54,13 @@ defmodule Bob.DockerCleanup do
     limit = Keyword.get(opts, :limit, @default_batch)
     cutoff = per_arch_cutoff()
 
+    # Pinned for the whole run, like the cutoff. A base image released mid-run
+    # rotates the os_version it replaces out of the matrix, and the erlang tags
+    # on it must stay protected until the checker has built their replacements.
+    os_versions = current_os_versions()
+
     deleted =
       Stream.repeatedly(fn ->
-        # Re-read per batch so a base image released mid-run pulls the erlang
-        # tags built against it back under protection.
-        os_versions = current_os_versions()
-
         cutoff
         |> Artifacts.stale_per_arch_tags(limit, os_versions)
         |> delete(deleter, cutoff, os_versions)

@@ -278,8 +278,8 @@ defmodule BobWeb.RequestLive do
         <p class="req-intro">
           Requesting an image also reserves it from cleanup, permanently — and if the image
           already exists it is reserved without rebuilding. The multi-arch images you pull are
-          never removed; only the per-architecture Elixir build images they are assembled from
-          are cleaned up, after 30 days.
+          never removed; only the per-architecture build images they are assembled from are
+          cleaned up, after 30 days.
         </p>
 
         <form phx-change="validate" phx-submit="request" class="filter-bar filter-bar--wrap">
