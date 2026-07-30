@@ -131,20 +131,20 @@ defmodule Bob.DockerCleanupTest do
                [{"1.26.0-erlang-27.0-ubuntu-noble-20250101", ["amd64"]}]
     end
 
-    test "respects the batch limit so a run deletes a bounded slice" do
+    test "the batch limit pages the candidate query without capping the run" do
       deleter = fn _repo, _tag -> :ok end
 
       for n <- 1..3 do
         Artifacts.add_docker_tag(
           "hexpm/elixir-amd64",
-          "2#{n}.0-ubuntu-noble-20250101",
+          "1.2#{n}.0-erlang-27.0-ubuntu-noble-20250101",
           ["amd64"],
           old()
         )
       end
 
-      assert {:live, 2} = DockerCleanup.run(mode: :live, deleter: deleter, limit: 2)
-      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 1
+      assert {:live, 3} = DockerCleanup.run(mode: :live, deleter: deleter, limit: 2)
+      assert Artifacts.docker_tags("hexpm/elixir-amd64") == []
     end
 
     test "an ancient manifest tag is never a candidate, whatever the limit" do
@@ -216,8 +216,8 @@ defmodule Bob.DockerCleanupTest do
     end
   end
 
-  describe "drain/1" do
-    test "keeps going past the batch limit until nothing is left" do
+  describe "run/1 clears the whole backlog" do
+    test "keeps taking batches until nothing is left" do
       deleter = fn _repo, _tag -> :ok end
 
       for n <- 1..7 do
@@ -229,8 +229,7 @@ defmodule Bob.DockerCleanupTest do
         )
       end
 
-      # A single run of this batch size would stop at 2; the drain loops.
-      assert DockerCleanup.drain(limit: 2, deleter: deleter) == 7
+      assert {:live, 7} = DockerCleanup.run(mode: :live, limit: 2, deleter: deleter)
       assert Artifacts.docker_tags("hexpm/elixir-amd64") == []
     end
 
@@ -244,7 +243,7 @@ defmodule Bob.DockerCleanupTest do
         old()
       )
 
-      assert DockerCleanup.drain(deleter: deleter) == 0
+      assert {:live, 0} = DockerCleanup.run(mode: :live, deleter: deleter)
       assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 1
     end
 
@@ -275,7 +274,7 @@ defmodule Bob.DockerCleanupTest do
         builds_count: 0
       })
 
-      assert DockerCleanup.drain(limit: 2, deleter: deleter) == 0
+      assert {:live, 0} = DockerCleanup.run(mode: :live, limit: 2, deleter: deleter)
       assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 2
     end
   end

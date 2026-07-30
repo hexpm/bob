@@ -3,9 +3,9 @@ defmodule Bob.DockerCleanup do
   Deletes per-arch Docker Hub tags older than 30 days. Tags reserved by a build
   request are kept. The manifest repos are not pruned.
 
-  `run/1` deletes one batch and is what the nightly job calls; `drain/1` loops
-  until the backlog is empty. `:docker_cleanup_mode` gates whether `run/1`
-  deletes or only reports.
+  A live run keeps taking batches until one deletes nothing, so it clears the
+  whole backlog rather than a single batch. What bounds it is the job's timeout.
+  `:docker_cleanup_mode` gates whether it deletes or only reports.
   """
 
   require Logger
@@ -16,7 +16,7 @@ defmodule Bob.DockerCleanup do
   # tags the checker still expects. Asserted in docker_cleanup_test.
   @per_arch_max_age_days 30
 
-  # Sized to finish inside Bob.Runner's three-hour job timeout.
+  # Candidate query page size, not a cap on the run.
   @default_batch 10_000
 
   # Rows are committed per chunk so a killed run keeps its progress.
@@ -33,29 +33,6 @@ defmodule Bob.DockerCleanup do
       :dry_run -> dry_run()
       :live -> live(opts)
     end
-  end
-
-  @doc """
-  Runs batches until one deletes nothing. Always deletes, whatever
-  `:docker_cleanup_mode` says, and is not the scheduled path — the job runner
-  kills anything past three hours, so start this from a supervised task.
-  """
-  def drain(opts \\ []) do
-    opts = Keyword.put_new(opts, :mode, :live)
-    batch = Keyword.get(opts, :limit, @default_batch)
-
-    Stream.repeatedly(fn -> run(Keyword.put(opts, :limit, batch)) end)
-    |> Enum.reduce_while(0, fn {:live, deleted}, total ->
-      total = total + deleted
-
-      if deleted == 0 do
-        Logger.info("DOCKER CLEANUP drain finished, deleted #{total} tag(s)")
-        {:halt, total}
-      else
-        Logger.info("DOCKER CLEANUP drain progress, deleted #{total} tag(s) so far")
-        {:cont, total}
-      end
-    end)
   end
 
   defp configured_mode(), do: Application.get_env(:bob, :docker_cleanup_mode, :dry_run)
@@ -79,10 +56,17 @@ defmodule Bob.DockerCleanup do
     limit = Keyword.get(opts, :limit, @default_batch)
     cutoff = per_arch_cutoff()
 
-    candidates = Artifacts.stale_per_arch_tags(cutoff, limit)
+    deleted =
+      Stream.repeatedly(fn ->
+        cutoff
+        |> Artifacts.stale_per_arch_tags(limit)
+        |> delete(deleter, cutoff)
+      end)
+      |> Enum.reduce_while(0, fn batch, total ->
+        if batch == 0, do: {:halt, total}, else: {:cont, total + batch}
+      end)
 
-    deleted = delete(candidates, deleter, cutoff)
-    Logger.info("DOCKER CLEANUP deleted #{deleted}/#{length(candidates)} tag(s)")
+    Logger.info("DOCKER CLEANUP deleted #{deleted} tag(s)")
     {:live, deleted}
   end
 
