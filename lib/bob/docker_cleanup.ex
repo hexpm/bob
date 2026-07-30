@@ -21,7 +21,8 @@ defmodule Bob.DockerCleanup do
   `run/1` honours `:docker_cleanup_mode` (`:dry_run` by default, or `:live`). A
   dry run logs and returns the counts a live run would delete without touching
   Docker Hub; a live run deletes a bounded batch, paced by the shared rate
-  limiter, and converges over successive daily runs.
+  limiter, and converges over successive daily runs. `drain/1` clears the whole
+  backlog in one go for the initial cleanup.
   """
 
   require Logger
@@ -36,10 +37,10 @@ defmodule Bob.DockerCleanup do
   # asserts the inequality.
   @per_arch_max_age_days 30
 
-  # Sized so a full batch finishes well inside `Bob.Runner`'s three-hour job
-  # timeout: deletes are serial and paced at Docker Hub's 600 requests/minute,
-  # so this is roughly 20 minutes of pacing plus per-tag overhead. A backlog
-  # larger than this drains over successive nights.
+  # What one scheduled run deletes. Sized to finish well inside `Bob.Runner`'s
+  # three-hour job timeout at Docker Hub's 600 requests/minute. Steady state is
+  # only tens of tags a night, so this matters for the initial backlog — and for
+  # that, `drain/1` is the better tool than a raised batch.
   @default_batch 10_000
 
   # Rows are dropped in chunks as the batch progresses rather than once at the
@@ -49,11 +50,17 @@ defmodule Bob.DockerCleanup do
   # rate limit for a batch of 404s, and makes no progress either.
   @delete_chunk 100
 
-  # A run where every delete fails is a misconfiguration, not a backlog: a token
-  # without delete permission returns 401 for all 10,000 candidates. Without a
-  # ceiling that is hours of full-rate Docker Hub traffic and 10,000 error lines,
+  # A run where whole chunks fail is a misconfiguration, not a backlog: a token
+  # without delete permission returns 401 for every candidate. Without a ceiling
+  # that is hours of full-rate Docker Hub traffic and an error line per tag,
   # repeated nightly.
-  @error_ceiling 25
+  @dead_chunk_ceiling 3
+
+  # Concurrent deletes in flight. The rate limiter enforces the real ceiling, so
+  # this only needs to be high enough that round-trip latency is not the
+  # bottleneck. Deliberately below the pool size (10 in prod) is unnecessary —
+  # the re-check is one query per chunk, not per tag.
+  @default_concurrency 25
 
   def run(opts \\ []) do
     case Keyword.get(opts, :mode, configured_mode()) do
@@ -63,6 +70,43 @@ defmodule Bob.DockerCleanup do
   end
 
   def per_arch_max_age_days(), do: @per_arch_max_age_days
+
+  @doc """
+  Deletes the whole backlog instead of one night's batch, looping until a pass
+  deletes nothing.
+
+  Not the scheduled path. `Bob.Job.DockerCleanup` runs through `Bob.Runner`,
+  which kills any job at three hours, and the initial backlog is far larger than
+  three hours of rate-limited deletes. Run this detached from the shell that
+  starts it, or it dies with the rpc connection:
+
+      bin/bob rpc 'Task.Supervisor.start_child(Bob.Tasks, fn -> Bob.DockerCleanup.drain() end)'
+
+  Rows are committed per chunk, so a pod restart mid-drain loses at most the
+  chunk in flight, and re-running picks up from wherever it stopped. Safe to run
+  while the nightly job is also enabled — both re-check each tag before deleting
+  and a vanished row is simply not a candidate.
+
+  A pass that deletes nothing ends the drain, so a tag Docker Hub keeps
+  rejecting stops the loop rather than spinning on it.
+  """
+  def drain(opts \\ []) do
+    opts = Keyword.put_new(opts, :mode, :live)
+    batch = Keyword.get(opts, :limit, configured_batch())
+
+    Stream.repeatedly(fn -> run(Keyword.put(opts, :limit, batch)) end)
+    |> Enum.reduce_while(0, fn {:live, deleted}, total ->
+      total = total + deleted
+
+      if deleted == 0 do
+        Logger.info("DOCKER CLEANUP drain finished, deleted #{total} tag(s)")
+        {:halt, total}
+      else
+        Logger.info("DOCKER CLEANUP drain progress, deleted #{total} tag(s) so far")
+        {:cont, total}
+      end
+    end)
+  end
 
   @doc """
   When a tag becomes eligible for removal, or `nil` for a repo not under
@@ -97,14 +141,20 @@ defmodule Bob.DockerCleanup do
   defp live(opts) do
     deleter = Keyword.get(opts, :deleter, &Bob.DockerHub.delete_tag/2)
     limit = Keyword.get(opts, :limit, configured_batch())
-    chunk = Keyword.get(opts, :chunk, @delete_chunk)
     cutoff = per_arch_cutoff()
 
+    delete_opts = [
+      cutoff: cutoff,
+      chunk: Keyword.get(opts, :chunk, @delete_chunk),
+      concurrency: Keyword.get(opts, :concurrency, @default_concurrency)
+    ]
+
     # `limit` bounds a single run's deletes so a large backlog is spread over
-    # successive days rather than spending hours of the rate limiter at once.
+    # successive nights rather than spending hours of the rate limiter at once.
+    # `Bob.DockerCleanup.drain/1` is the escape hatch when you want it all gone.
     candidates = Artifacts.stale_per_arch_tags(cutoff, limit)
 
-    deleted = delete(candidates, deleter, cutoff, chunk)
+    deleted = delete(candidates, deleter, delete_opts)
     Logger.info("DOCKER CLEANUP deleted #{deleted}/#{length(candidates)} tag(s)")
     {:live, deleted}
   end
@@ -115,47 +165,64 @@ defmodule Bob.DockerCleanup do
   # the rate-limited batch can run for hours, and in that window a request can
   # pin a tag or a re-push can make it fresh again. Both must be honoured, or
   # the run deletes an image someone just asked for or just pushed.
-  defp delete(candidates, deleter, cutoff, chunk) do
+  defp delete(candidates, deleter, opts) do
+    cutoff = Keyword.fetch!(opts, :cutoff)
+    chunk_size = Keyword.fetch!(opts, :chunk)
+    concurrency = Keyword.fetch!(opts, :concurrency)
+
     candidates
-    |> Enum.chunk_every(chunk)
-    |> Enum.reduce_while({0, 0}, fn chunk, {deleted, consecutive_errors} ->
-      {confirmed, consecutive_errors} = delete_chunk(chunk, deleter, cutoff, consecutive_errors)
+    |> Enum.chunk_every(chunk_size)
+    |> Enum.reduce_while({0, 0}, fn chunk, {deleted, dead_chunks} ->
+      {confirmed, failed} = delete_chunk(chunk, deleter, cutoff, concurrency)
       Artifacts.delete_docker_tags(confirmed)
       deleted = deleted + length(confirmed)
 
-      if consecutive_errors >= @error_ceiling do
+      # A chunk where every attempt failed is the signal, not individual
+      # errors: with concurrent deletes "consecutive" has no meaning, and a
+      # broken token fails a whole chunk at a time while a flaky tag does not.
+      dead_chunks = if failed > 0 and confirmed == [], do: dead_chunks + 1, else: 0
+
+      if dead_chunks >= @dead_chunk_ceiling do
         Logger.error(
-          "DOCKER CLEANUP aborting after #{consecutive_errors} consecutive failures, " <>
+          "DOCKER CLEANUP aborting after #{dead_chunks} chunks with no successful delete, " <>
             "deleted #{deleted} tag(s) so far"
         )
 
-        {:halt, {deleted, consecutive_errors}}
+        {:halt, {deleted, dead_chunks}}
       else
-        {:cont, {deleted, consecutive_errors}}
+        {:cont, {deleted, dead_chunks}}
       end
     end)
     |> elem(0)
   end
 
-  defp delete_chunk(chunk, deleter, cutoff, consecutive_errors) do
-    Enum.reduce(chunk, {[], consecutive_errors}, fn {repo, tag}, {confirmed, errors} ->
-      cond do
-        errors >= @error_ceiling ->
-          {confirmed, errors}
+  # Deletes run concurrently. The shared rate limiter is the real throttle and
+  # blocks each caller until the window has budget, so concurrency here only
+  # stops the run being bound by round-trip latency — serial deletes spend most
+  # of their time waiting and use a fraction of the budget Docker Hub allows.
+  defp delete_chunk(chunk, deleter, cutoff, concurrency) do
+    chunk
+    |> Artifacts.deletable_docker_tags(cutoff)
+    |> Task.async_stream(
+      fn {repo, tag} ->
+        case deleter.(repo, tag) do
+          :ok ->
+            {:ok, {repo, tag}}
 
-        not Artifacts.docker_tag_deletable?(repo, tag, cutoff) ->
-          {confirmed, 0}
-
-        true ->
-          case deleter.(repo, tag) do
-            :ok ->
-              {[{repo, tag} | confirmed], 0}
-
-            {:error, reason} ->
-              Logger.error("DOCKER CLEANUP failed to delete #{repo}:#{tag}: #{inspect(reason)}")
-              {confirmed, errors + 1}
-          end
-      end
+          {:error, reason} ->
+            Logger.error("DOCKER CLEANUP failed to delete #{repo}:#{tag}: #{inspect(reason)}")
+            :error
+        end
+      end,
+      max_concurrency: concurrency,
+      ordered: false,
+      # The limiter can park a caller until the window resets, so the only
+      # sensible task deadline is the job timeout that already bounds the run.
+      timeout: :infinity
+    )
+    |> Enum.reduce({[], 0}, fn
+      {:ok, {:ok, repo_tag}}, {confirmed, failed} -> {[repo_tag | confirmed], failed}
+      {:ok, :error}, {confirmed, failed} -> {confirmed, failed + 1}
     end)
   end
 

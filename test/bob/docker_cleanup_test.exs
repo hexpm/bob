@@ -147,7 +147,8 @@ defmodule Bob.DockerCleanupTest do
         )
       end
 
-      assert {:live, 1} = DockerCleanup.run(mode: :live, deleter: deleter)
+      assert {:live, 1} =
+               DockerCleanup.run(mode: :live, deleter: deleter, chunk: 1, concurrency: 1)
 
       assert_received {:deleted, "hexpm/elixir-amd64", _tag}
       refute_received {:deleted, _repo, _tag}
@@ -209,12 +210,14 @@ defmodule Bob.DockerCleanupTest do
     # Committing only at the end meant the next run re-issued every delete,
     # spent the rate limit on 404s, and made no progress either.
     test "rows are dropped as the batch progresses, not only at the end" do
-      # Blows up on whichever tag is reached third, so the assertion does not
-      # depend on the order of the unordered candidate query.
-      deleter = fn _repo, _tag ->
-        n = (Process.get(:deletes) || 0) + 1
-        Process.put(:deletes, n)
-        if n == 3, do: raise("killed mid-batch")
+      test = self()
+
+      # Reports how many rows survive at the moment each delete runs. With
+      # per-chunk commits that count falls as the run proceeds; committing only
+      # at the end would report the full count every time, which is exactly the
+      # bug that let a killed run lose all its work.
+      deleter = fn repo, _tag ->
+        send(test, {:remaining, length(Artifacts.docker_tags(repo))})
         :ok
       end
 
@@ -227,14 +230,20 @@ defmodule Bob.DockerCleanupTest do
         )
       end
 
-      assert_raise RuntimeError, "killed mid-batch", fn ->
-        DockerCleanup.run(mode: :live, deleter: deleter, limit: 10, chunk: 1)
-      end
+      assert {:live, 4} =
+               DockerCleanup.run(
+                 mode: :live,
+                 deleter: deleter,
+                 limit: 10,
+                 chunk: 1,
+                 concurrency: 1
+               )
 
-      # The two that succeeded before the raise are committed. Committing only
-      # at the end would have left all four rows behind while Docker Hub had
-      # already lost two tags.
-      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 2
+      assert_received {:remaining, 4}
+      assert_received {:remaining, 3}
+      assert_received {:remaining, 2}
+      assert_received {:remaining, 1}
+      assert Artifacts.docker_tags("hexpm/elixir-amd64") == []
     end
 
     test "a tag re-pushed mid-run is no longer deletable" do
@@ -258,7 +267,8 @@ defmodule Bob.DockerCleanupTest do
         :ok
       end
 
-      assert {:live, 1} = DockerCleanup.run(mode: :live, deleter: deleter, chunk: 1)
+      assert {:live, 1} =
+               DockerCleanup.run(mode: :live, deleter: deleter, chunk: 1, concurrency: 1)
 
       assert_received {:deleted, _first}
       refute_received {:deleted, _second}
@@ -284,7 +294,7 @@ defmodule Bob.DockerCleanupTest do
         )
       end
 
-      assert {:live, 0} = DockerCleanup.run(mode: :live, deleter: deleter)
+      assert {:live, 0} = DockerCleanup.run(mode: :live, deleter: deleter, chunk: 10)
 
       attempts =
         Enum.count(
@@ -300,6 +310,70 @@ defmodule Bob.DockerCleanupTest do
 
       assert attempts < 40
       assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 40
+    end
+  end
+
+  describe "drain/1" do
+    test "keeps going past the batch limit until nothing is left" do
+      deleter = fn _repo, _tag -> :ok end
+
+      for n <- 1..7 do
+        Artifacts.add_docker_tag(
+          "hexpm/elixir-amd64",
+          "1.#{n}.0-erlang-27.0-ubuntu-noble-20250101",
+          ["amd64"],
+          old()
+        )
+      end
+
+      # A single run of this batch size would stop at 2; the drain loops.
+      assert DockerCleanup.drain(limit: 2, deleter: deleter) == 7
+      assert Artifacts.docker_tags("hexpm/elixir-amd64") == []
+    end
+
+    test "stops rather than spinning when a tag cannot be deleted" do
+      deleter = fn _repo, _tag -> {:error, :nope} end
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old()
+      )
+
+      assert DockerCleanup.drain(deleter: deleter) == 0
+      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 1
+    end
+
+    test "leaves reserved and recent tags alone" do
+      deleter = fn _repo, _tag -> :ok end
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        recent()
+      )
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.19.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old()
+      )
+
+      BuildRequests.create(%{
+        username: "eric",
+        kind: "elixir",
+        elixir: "1.19.0",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 0
+      })
+
+      assert DockerCleanup.drain(limit: 2, deleter: deleter) == 0
+      assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 2
     end
   end
 

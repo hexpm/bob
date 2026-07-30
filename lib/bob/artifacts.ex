@@ -607,28 +607,38 @@ defmodule Bob.Artifacts do
   end
 
   @doc """
-  Whether the cleanup may still delete `tag` in `repo`: the row exists, is
+  The subset of `repo_tags` the cleanup may still delete: the row exists, is
   older than `cutoff`, and no build request reserves it.
 
-  Re-checked immediately before each delete rather than trusted from candidate
-  selection. A rate-limited batch runs for a long time, and in that window a
-  request can pin the tag or a re-push can reset its `built_at` — deleting
-  either would take out an image someone just asked for or just pushed. A row
-  that has vanished is not deletable, so a concurrent run cannot double-delete.
+  Re-checked just before deleting rather than trusted from candidate selection,
+  because a run works through a large batch over a long time and in that window
+  a request can pin a tag or a re-push can reset its `built_at`. Deleting either
+  would take out an image someone just asked for or just pushed. One query per
+  chunk rather than one per tag: the pool is small and shared with the web
+  endpoint, and a per-tag round trip would dominate the run.
+
+  A row that has vanished is not returned, so a concurrent run cannot
+  double-delete.
   """
-  def docker_tag_deletable?(repo, tag, cutoff) do
-    %{rows: [[deletable?]]} =
+  def deletable_docker_tags([], _cutoff), do: []
+
+  def deletable_docker_tags(repo_tags, cutoff) do
+    {repos, tags} = Enum.unzip(repo_tags)
+
+    %{rows: rows} =
       Repo.query!(
         """
-        SELECT EXISTS(
-          SELECT 1 FROM docker_tags d
-          WHERE d.repo = $1 AND d.tag = $2 AND d.built_at < $3 AND NOT #{@reserved_predicate}
-        )
+        SELECT d.repo, d.tag
+        FROM docker_tags d
+        JOIN unnest($1::text[], $2::text[]) AS c(repo, tag)
+          ON d.repo = c.repo AND d.tag = c.tag
+        WHERE d.built_at < $3 AND NOT #{@reserved_predicate}
         """,
-        [repo, tag, dump_utc_datetime(cutoff)]
+        [repos, tags, dump_utc_datetime(cutoff)],
+        timeout: @long_query_timeout
       )
 
-    deletable?
+    Enum.map(rows, fn [repo, tag] -> {repo, tag} end)
   end
 
   @doc """
