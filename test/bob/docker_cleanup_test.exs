@@ -117,9 +117,7 @@ defmodule Bob.DockerCleanupTest do
     test "skips a tag that was reserved after the candidates were selected" do
       test = self()
 
-      # The rate-limited batch can run for hours after the candidate list is
-      # built. Reserving every candidate while the first is deleted simulates a
-      # user requesting an image mid-run: the remaining tag must survive.
+      # Reserve every candidate while the first is deleted.
       deleter = fn repo, tag ->
         send(test, {:deleted, repo, tag})
 
@@ -205,17 +203,10 @@ defmodule Bob.DockerCleanupTest do
   end
 
   describe "run/1 durability" do
-    # A killed run (the three-hour job timeout, a rolling deploy, an OOM) must
-    # leave docker_tags agreeing with Docker Hub for everything deleted so far.
-    # Committing only at the end meant the next run re-issued every delete,
-    # spent the rate limit on 404s, and made no progress either.
     test "rows are dropped as the batch progresses, not only at the end" do
       test = self()
 
-      # Reports how many rows survive at the moment each delete runs. With
-      # per-chunk commits that count falls as the run proceeds; committing only
-      # at the end would report the full count every time, which is exactly the
-      # bug that let a killed run lose all its work.
+      # Surviving row count at each delete: it falls only if chunks commit.
       deleter = fn repo, _tag ->
         send(test, {:remaining, length(Artifacts.docker_tags(repo))})
         :ok
@@ -249,8 +240,7 @@ defmodule Bob.DockerCleanupTest do
     test "a tag re-pushed mid-run is no longer deletable" do
       test = self()
 
-      # Simulates the nightly reconcile bumping built_at from Docker Hub while a
-      # long batch is still working through candidates selected before it.
+      # Reconcile bumping built_at mid-run.
       tags =
         for n <- 1..2, do: "1.2#{n}.0-erlang-27.0-ubuntu-noble-20250101"
 
@@ -378,10 +368,6 @@ defmodule Bob.DockerCleanupTest do
   end
 
   describe "retention windows" do
-    # The checker's expected set is filtered on release recency while cleanup
-    # filters on build dates, and a tag is always built after the release that
-    # triggered it. Once the cleanup window is shorter than the checker's, every
-    # run deletes tags the checker still expects and queues them for rebuild.
     test "per-arch retention is at least the checker's build freshness window" do
       assert DockerCleanup.per_arch_max_age_days() >=
                Bob.Job.DockerChecker.build_freshness_days()

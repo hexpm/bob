@@ -1,9 +1,6 @@
 defmodule Bob.Repo.Migrations.AddTargetToBuildRequests do
   use Ecto.Migration
 
-  # The Docker tag a request maps to. Cleanup matches reservations by equality
-  # on this rather than rebuilding the tag name from the component columns in
-  # SQL, which needed a CASE the Elixir side had to be kept in step with.
   def up do
     alter table(:build_requests) do
       add(:target, :string)

@@ -263,17 +263,9 @@ defmodule Bob.Job.DockerChecker do
     Bob.Cache.fetch({__MODULE__, key}, @github_cache_ttl, fun)
   end
 
-  # Auto-builds only fire when one of the image's components — its base image,
-  # OTP, or Elixir — was released within this window. Old combinations that
-  # Docker Hub prunes for lack of pulls then stay pruned instead of being
-  # rebuilt every cycle; users can still request them explicitly.
-  #
-  # This window is measured against release dates while the per-arch cleanup's
-  # is measured against build dates, and a tag is always built after the release
-  # that triggered it. So as long as `Bob.DockerCleanup.per_arch_max_age_days/0`
-  # is at least this, cleanup can only reach tags that have already dropped out
-  # of the expected set — raise this without raising that and every night's
-  # cleanup hands the next morning's checker a pile of tags to rebuild.
+  # Auto-builds only fire when the image's base image, OTP or Elixir was
+  # released within this window. Keep Bob.DockerCleanup.per_arch_max_age_days/0
+  # >= this, or cleanup deletes tags this pass still expects.
   @build_freshness_days 30
 
   def build_freshness_days(), do: @build_freshness_days
@@ -536,10 +528,8 @@ defmodule Bob.Job.DockerChecker do
   @request_ttl_days 14
 
   # User-requested builds are one-time: pinned to the os_version current at
-  # request time and reconciled here until every target tag exists. A fully
-  # built request completes — and stays a permanent reservation — even if its
-  # os_version has since rotated out of builds() or its TTL has passed; only
-  # requests that still need jobs expire on those grounds.
+  # request time and reconciled here until every target tag exists. Only
+  # requests that still need jobs expire.
   def requests() do
     builds = builds()
 

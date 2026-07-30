@@ -116,11 +116,8 @@ defmodule Bob.QueueTest do
     assert size(Bob.Job.DockerChecker) == 1
   end
 
-  # A scheduled job that backs off stops re-running on its interval: one
-  # transient failure suppresses it for 30 minutes, doubling to a day, and the
-  # schedule only re-queues once a night. Listed explicitly rather than read
-  # from :master_schedule, which config/test.exs overrides to [] — walking it
-  # here would assert nothing at all.
+  # Listed explicitly: config/test.exs sets :master_schedule to [], so reading
+  # it here would assert nothing.
   test "the scheduled jobs are all exempt from backoff" do
     for module <- [
           Bob.Job.OTPChecker,
@@ -305,10 +302,7 @@ defmodule Bob.QueueTest do
   end
 
   describe "read functions" do
-    # These order assertions use DateTime.compare/2 rather than >=/<=: term
-    # order on a struct is map key order, which puts :microsecond ahead of
-    # :second, so two timestamps straddling a second boundary compare
-    # backwards. That is a real intermittent CI failure, not a theoretical one.
+    # DateTime.compare/2, not >=: term order puts :microsecond before :second.
     test "running/0 returns running jobs newest-started first" do
       Bob.Queue.add(Bob.Job.OTPChecker, [:a])
       Bob.Queue.add(Bob.Job.OTPChecker, [:b])
@@ -340,9 +334,6 @@ defmodule Bob.QueueTest do
 
       recent = Bob.Queue.recent(50, 0)
       assert Enum.map(recent, & &1.state) |> Enum.sort() == ["done", "failed"]
-      # DateTime.compare/2, not >=: term order on the struct compares
-      # :microsecond before :second, so two timestamps straddling a second
-      # boundary compare backwards and this passed only by luck.
       assert DateTime.compare(hd(recent).finished_at, List.last(recent).finished_at) != :lt
     end
 

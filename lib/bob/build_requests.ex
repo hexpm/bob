@@ -25,12 +25,8 @@ defmodule Bob.BuildRequests do
     end
   end
 
-  # An already-built image still records a request, so a manual request doubles as
-  # a permanent reservation that exempts the image from cleanup. No build runs, so
-  # it costs nothing against the hourly limit; an existing reservation for the same
-  # target is left in place rather than duplicated. The check-then-insert is
-  # serialized on the target — reservations dedupe across users, so a per-user
-  # lock would not keep two users' concurrent submits from both inserting.
+  # A request for an existing image reserves it instead of building. Locked on
+  # the target, not the user: reservations dedupe across users.
   defp reserve(request, attrs) do
     {:ok, :ok} =
       Repo.transaction(fn ->

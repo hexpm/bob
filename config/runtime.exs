@@ -6,8 +6,7 @@ if config_env() == :prod do
     result
   end
 
-  # Defaults to the narrowest setting, so an unset variable can only ever mean
-  # "report, delete nothing" rather than a live run nobody asked for.
+  # Anything but "live" means dry run.
   cleanup_mode = fn ->
     case System.get_env("BOB_DOCKER_CLEANUP_MODE", "dry_run") do
       "live" -> :live

@@ -236,10 +236,7 @@ defmodule BobWeb.DockerTagsLiveTest do
       ~r/<code class="dk-tag-code"[^>]*>#{Regex.escape(tag)}<\/code>\s*<span[^>]*dk-reserved/
   end
 
-  # Matches the removing badge anywhere in the tag's cell, not just directly
-  # after </code>. Anchoring it tight made the "reserved tags are not also
-  # flagged removing" refute unfalsifiable, since the reserved span is emitted
-  # first and pushed dk-removing out of the pattern.
+  # Matches anywhere in the cell: the reserved span can come first.
   defp removing?(html, tag) do
     html =~
       ~r/<code class="dk-tag-code"[^>]*>#{Regex.escape(tag)}<\/code>(?:(?!<\/div>).)*dk-removing/s

@@ -18,16 +18,8 @@ defmodule Bob.Artifacts do
   # wraps.
   @long_query_timeout 5 * 60 * 1000
 
-  # Only the elixir per-arch repos are pruned. The erlang ones look equally
-  # disposable but are not: `Bob.Job.DockerChecker.expected_elixir_tags/0`
-  # derives the whole elixir build matrix from the erlang per-arch rows in this
-  # mirror, filtered by `latest_erlang_versions/0`, which ranks by version and
-  # never by date. Deleting an erlang per-arch tag therefore drops every elixir
-  # image built on it out of the expected set, and `erlang/0` will not put it
-  # back — its own recency filter has long since passed the tag by. A new Elixir
-  # release then silently never builds for that base image. The elixir per-arch
-  # repos carry no such dependency: nothing derives an expected set from them,
-  # they are only checked for presence. They are also 96% of the rows.
+  # Elixir only. DockerChecker.expected_elixir_tags/0 derives the Elixir build
+  # matrix from the erlang per-arch rows, so pruning those stops Elixir builds.
   @docker_cleanup_per_arch_repos ~w(hexpm/elixir-amd64 hexpm/elixir-arm64)
 
   def add(attrs) do
@@ -519,10 +511,8 @@ defmodule Bob.Artifacts do
 
   def docker_cleanup_per_arch_repos(), do: @docker_cleanup_per_arch_repos
 
-  # A tag is reserved, and so never auto-deleted, while a non-expired build
-  # request names it as a target. Matching on the stored target keeps the rule
-  # in one place: BuildRequest.target/1 writes it, these read it. Both callers
-  # bind the outer row as `:tag`.
+  # Reserved while a non-expired request names the tag. Callers bind the outer
+  # row as `:tag`.
   defp reserving_requests() do
     from(br in BuildRequest,
       where: br.state in ["pending", "completed"] and br.target == parent_as(:tag).tag,
@@ -541,11 +531,7 @@ defmodule Bob.Artifacts do
     )
   end
 
-  @doc """
-  Counts, per repo, the per-arch tags the cleanup would delete: those built
-  before `cutoff`, excluding reserved tags. Used by the cleanup's dry run to
-  report what live deletion would remove.
-  """
+  @doc "Per-repo count of the tags a run would delete."
   def count_stale_per_arch_tags(cutoff) do
     stale_per_arch(cutoff)
     |> unreserved()
@@ -555,11 +541,7 @@ defmodule Bob.Artifacts do
     |> Map.new()
   end
 
-  @doc """
-  A batch of `{repo, tag}` the cleanup may delete, same predicates as
-  `count_stale_per_arch_tags/1`. `limit` bounds the batch so a single run
-  deletes a manageable slice and converges over successive runs.
-  """
+  @doc "Up to `limit` deletable `{repo, tag}` pairs."
   def stale_per_arch_tags(cutoff, limit) do
     stale_per_arch(cutoff)
     |> unreserved()
@@ -576,18 +558,9 @@ defmodule Bob.Artifacts do
   end
 
   @doc """
-  The subset of `repo_tags` the cleanup may still delete: the row exists, is
-  older than `cutoff`, and no build request reserves it.
-
-  Re-checked just before deleting rather than trusted from candidate selection,
-  because a run works through a large batch over a long time and in that window
-  a request can pin a tag or a re-push can reset its `built_at`. Deleting either
-  would take out an image someone just asked for or just pushed. One query per
-  chunk rather than one per tag: the pool is small and shared with the web
-  endpoint, and a per-tag round trip would dominate the run.
-
-  A row that has vanished is not returned, so a concurrent run cannot
-  double-delete.
+  The subset of `repo_tags` still deletable: present, older than `cutoff` and
+  unreserved. Re-checked per chunk because a run is slow enough for a tag to get
+  reserved or re-pushed while it works.
   """
   def deletable_docker_tags([], _cutoff), do: []
 
@@ -603,9 +576,7 @@ defmodule Bob.Artifacts do
     )
     |> unreserved()
     |> Repo.all(timeout: @long_query_timeout)
-    # `repo in .. and tag in ..` is the cross product of the two lists, so a tag
-    # present in both per-arch repos comes back for each. Keep only the pairs
-    # actually asked for.
+    # The two `in` clauses match a cross product, so drop pairs not asked for.
     |> Enum.filter(&MapSet.member?(wanted, &1))
   end
 
