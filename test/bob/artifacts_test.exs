@@ -995,7 +995,7 @@ defmodule Bob.ArtifactsTest do
       assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{"hexpm/elixir-amd64" => 1}
     end
 
-    test "the SQL reservation predicate matches the tag name request_target/1 derives" do
+    test "a reservation matches the tag name it stored as its target" do
       erlang_attrs = %{
         username: "eric",
         kind: "erlang",
@@ -1007,16 +1007,11 @@ defmodule Bob.ArtifactsTest do
 
       elixir_attrs = %{erlang_attrs | kind: "elixir"} |> Map.put(:elixir, "1.18.0")
 
-      # The reservation predicate rebuilds the request->tag mapping in SQL; if
-      # either encoding drifts, reservations silently stop matching and the
-      # cleanup deletes tags users pinned. Derive the tag through the Elixir
-      # mapping and assert the SQL side agrees.
       for {repo, attrs} <- [{"hexpm/erlang", erlang_attrs}, {"hexpm/elixir", elixir_attrs}] do
         {:ok, request} = BuildRequests.create(attrs)
-        tag = BuildRequests.request_target(request)
 
-        Artifacts.add_docker_tag(repo, tag, ["amd64"])
-        assert Artifacts.docker_tag_reserved?(repo, tag)
+        Artifacts.add_docker_tag(repo, request.target, ["amd64"])
+        assert Artifacts.docker_tag_reserved?(repo, request.target)
       end
     end
 

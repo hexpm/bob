@@ -3,6 +3,7 @@ defmodule Bob.Artifacts do
 
   alias Bob.Repo
   alias Bob.Artifacts.{Artifact, BaseImageTag, DockerTag, DockerTagSearch, DockerTagStaging}
+  alias Bob.BuildRequests.BuildRequest
 
   @builds_txt_lock 4_771_002
 
@@ -28,28 +29,6 @@ defmodule Bob.Artifacts do
   # repos carry no such dependency: nothing derives an expected set from them,
   # they are only checked for presence. They are also 96% of the rows.
   @docker_cleanup_per_arch_repos ~w(hexpm/elixir-amd64 hexpm/elixir-arm64)
-
-  # A tag is reserved (never auto-deleted) while a non-expired build request pins
-  # it. A request maps deterministically to a single tag name, so the match is a
-  # plain equality on the indexed `tag` column — a hash anti-join against the
-  # small build_requests table — rather than extracting JSONB per scanned row.
-  # The erlang and elixir tag-name formats are disjoint (elixir carries
-  # `-erlang-`), so the name alone identifies the kind. `d` is the docker_tags
-  # row the predicate is applied to. The CASE mirrors
-  # `Bob.BuildRequests.request_target/1`; a test asserts the two encodings
-  # agree — update both together.
-  @reserved_predicate """
-  EXISTS (
-    SELECT 1
-    FROM build_requests br
-    WHERE br.state IN ('pending', 'completed')
-      AND d.tag =
-        CASE br.kind
-          WHEN 'erlang' THEN br.erlang || '-' || br.os || '-' || br.os_version
-          ELSE br.elixir || '-erlang-' || br.erlang || '-' || br.os || '-' || br.os_version
-        END
-  )
-  """
 
   def add(attrs) do
     upsert(attrs)
@@ -540,70 +519,60 @@ defmodule Bob.Artifacts do
 
   def docker_cleanup_per_arch_repos(), do: @docker_cleanup_per_arch_repos
 
+  # A tag is reserved, and so never auto-deleted, while a non-expired build
+  # request names it as a target. Matching on the stored target keeps the rule
+  # in one place: BuildRequest.target/1 writes it, these read it. Both callers
+  # bind the outer row as `:tag`.
+  defp reserving_requests() do
+    from(br in BuildRequest,
+      where: br.state in ["pending", "completed"] and br.target == parent_as(:tag).tag,
+      select: 1
+    )
+  end
+
+  defp reserved(query), do: where(query, exists(reserving_requests()))
+
+  defp unreserved(query), do: where(query, not exists(reserving_requests()))
+
+  defp stale_per_arch(cutoff) do
+    from(d in DockerTag,
+      as: :tag,
+      where: d.repo in @docker_cleanup_per_arch_repos and d.built_at < ^cutoff
+    )
+  end
+
   @doc """
   Counts, per repo, the per-arch tags the cleanup would delete: those built
   before `cutoff`, excluding reserved tags. Used by the cleanup's dry run to
   report what live deletion would remove.
   """
   def count_stale_per_arch_tags(cutoff) do
-    count_stale(@docker_cleanup_per_arch_repos, "d.built_at < $2", cutoff)
-  end
-
-  defp count_stale(repos, age_predicate, cutoff) do
-    %{rows: rows} =
-      Repo.query!(
-        """
-        SELECT d.repo, count(*)
-        FROM docker_tags d
-        WHERE d.repo = ANY($1) AND #{age_predicate} AND NOT #{@reserved_predicate}
-        GROUP BY d.repo
-        """,
-        [repos, dump_utc_datetime(cutoff)],
-        timeout: @long_query_timeout
-      )
-
-    Map.new(rows, fn [repo, count] -> {repo, count} end)
+    stale_per_arch(cutoff)
+    |> unreserved()
+    |> group_by([d], d.repo)
+    |> select([d], {d.repo, count(d.id)})
+    |> Repo.all(timeout: @long_query_timeout)
+    |> Map.new()
   end
 
   @doc """
   A batch of `{repo, tag}` the cleanup may delete, same predicates as
-  `count_stale_*`. `limit` bounds the batch so a single run deletes a manageable
-  slice and converges over successive runs.
+  `count_stale_per_arch_tags/1`. `limit` bounds the batch so a single run
+  deletes a manageable slice and converges over successive runs.
   """
   def stale_per_arch_tags(cutoff, limit) do
-    stale(@docker_cleanup_per_arch_repos, "d.built_at < $2", cutoff, limit)
-  end
-
-  defp stale(repos, age_predicate, cutoff, limit) do
-    %{rows: rows} =
-      Repo.query!(
-        """
-        SELECT d.repo, d.tag
-        FROM docker_tags d
-        WHERE d.repo = ANY($1) AND #{age_predicate} AND NOT #{@reserved_predicate}
-        LIMIT $3
-        """,
-        [repos, dump_utc_datetime(cutoff), limit],
-        timeout: @long_query_timeout
-      )
-
-    Enum.map(rows, fn [repo, tag] -> {repo, tag} end)
+    stale_per_arch(cutoff)
+    |> unreserved()
+    |> limit(^limit)
+    |> select([d], {d.repo, d.tag})
+    |> Repo.all(timeout: @long_query_timeout)
   end
 
   @doc "Whether a build request currently reserves `tag` in `repo`."
   def docker_tag_reserved?(repo, tag) do
-    %{rows: [[reserved?]]} =
-      Repo.query!(
-        """
-        SELECT EXISTS(
-          SELECT 1 FROM docker_tags d
-          WHERE d.repo = $1 AND d.tag = $2 AND #{@reserved_predicate}
-        )
-        """,
-        [repo, tag]
-      )
-
-    reserved?
+    from(d in DockerTag, as: :tag, where: d.repo == ^repo and d.tag == ^tag)
+    |> reserved()
+    |> Repo.exists?()
   end
 
   @doc """
@@ -624,21 +593,20 @@ defmodule Bob.Artifacts do
 
   def deletable_docker_tags(repo_tags, cutoff) do
     {repos, tags} = Enum.unzip(repo_tags)
+    wanted = MapSet.new(repo_tags)
 
-    %{rows: rows} =
-      Repo.query!(
-        """
-        SELECT d.repo, d.tag
-        FROM docker_tags d
-        JOIN unnest($1::text[], $2::text[]) AS c(repo, tag)
-          ON d.repo = c.repo AND d.tag = c.tag
-        WHERE d.built_at < $3 AND NOT #{@reserved_predicate}
-        """,
-        [repos, tags, dump_utc_datetime(cutoff)],
-        timeout: @long_query_timeout
-      )
-
-    Enum.map(rows, fn [repo, tag] -> {repo, tag} end)
+    from(d in DockerTag,
+      as: :tag,
+      where: d.repo in ^Enum.uniq(repos) and d.tag in ^Enum.uniq(tags),
+      where: d.built_at < ^cutoff,
+      select: {d.repo, d.tag}
+    )
+    |> unreserved()
+    |> Repo.all(timeout: @long_query_timeout)
+    # `repo in .. and tag in ..` is the cross product of the two lists, so a tag
+    # present in both per-arch repos comes back for each. Keep only the pairs
+    # actually asked for.
+    |> Enum.filter(&MapSet.member?(wanted, &1))
   end
 
   @doc """
@@ -650,13 +618,10 @@ defmodule Bob.Artifacts do
   def reserved_docker_tag_ids(tags) do
     ids = Enum.map(tags, & &1.id)
 
-    %{rows: rows} =
-      Repo.query!(
-        "SELECT d.id FROM docker_tags d WHERE d.id = ANY($1::bigint[]) AND #{@reserved_predicate}",
-        [ids]
-      )
-
-    MapSet.new(rows, fn [id] -> id end)
+    from(d in DockerTag, as: :tag, where: d.id in ^ids, select: d.id)
+    |> reserved()
+    |> Repo.all()
+    |> MapSet.new()
   end
 
   @doc "Drops `docker_tags` rows for the given `{repo, tag}` pairs, after Docker Hub deletion."
@@ -666,9 +631,8 @@ defmodule Bob.Artifacts do
     repo_tags
     |> Enum.group_by(fn {repo, _tag} -> repo end, fn {_repo, tag} -> tag end)
     |> Enum.each(fn {repo, tags} ->
-      Repo.query!("DELETE FROM docker_tags WHERE repo = $1 AND tag = ANY($2)", [repo, tags],
-        timeout: @long_query_timeout
-      )
+      from(d in DockerTag, where: d.repo == ^repo and d.tag in ^tags)
+      |> Repo.delete_all(timeout: @long_query_timeout)
     end)
 
     :ok

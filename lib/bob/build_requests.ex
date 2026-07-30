@@ -160,18 +160,8 @@ defmodule Bob.BuildRequests do
     builds_count_for_user_since(username, hour_ago) + builds_count > @hourly_build_limit
   end
 
-  @doc """
-  The Docker tag name a request maps to. The reservation predicate in
-  `Bob.Artifacts` rebuilds this same mapping in SQL, and a test asserts the two
-  encodings agree — update both together.
-  """
-  def request_target(%{kind: "erlang"} = request) do
-    "#{request.erlang}-#{request.os}-#{request.os_version}"
-  end
-
-  def request_target(%{kind: "elixir"} = request) do
-    "#{request.elixir}-erlang-#{request.erlang}-#{request.os}-#{request.os_version}"
-  end
+  @doc "The Docker tag name a request maps to, stored on the row as `target`."
+  defdelegate request_target(request), to: BuildRequest, as: :target
 
   def create(attrs) do
     %BuildRequest{}
