@@ -403,20 +403,4 @@ defmodule Bob.DockerCleanupTest do
     end)
     |> Enum.take_while(&(&1 != :__empty__))
   end
-
-  defp drain_messages(take) do
-    Stream.repeatedly(fn ->
-      receive do
-        m -> m
-      after
-        0 -> :done
-      end
-    end)
-    |> Enum.take_while(&(&1 != :done))
-    |> Enum.map(fn
-      {:remaining, n} -> n
-      other -> other
-    end)
-    |> tap(fn _ -> take end)
-  end
 end

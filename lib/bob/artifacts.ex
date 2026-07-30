@@ -18,9 +18,8 @@ defmodule Bob.Artifacts do
   # wraps.
   @long_query_timeout 5 * 60 * 1000
 
-  # Elixir only. DockerChecker.expected_elixir_tags/0 derives the Elixir build
-  # matrix from the erlang per-arch rows, so pruning those stops Elixir builds.
-  @docker_cleanup_per_arch_repos ~w(hexpm/elixir-amd64 hexpm/elixir-arm64)
+  @erlang_arch_repos ~w(hexpm/erlang-amd64 hexpm/erlang-arm64)
+  @docker_cleanup_per_arch_repos ~w(hexpm/elixir-amd64 hexpm/elixir-arm64) ++ @erlang_arch_repos
 
   def add(attrs) do
     upsert(attrs)
@@ -525,15 +524,30 @@ defmodule Bob.Artifacts do
 
   # Only the known per-arch repos, so a caller cannot point the cleanup at a
   # manifest repo.
-  defp stale_per_arch(cutoff, repos) do
+  defp stale_per_arch(cutoff, repos, current_os_versions) do
     repos = Enum.filter(@docker_cleanup_per_arch_repos, &(&1 in repos))
 
     from(d in DockerTag, where: d.repo in ^repos and d.built_at < ^cutoff)
+    |> keep_current_erlang(current_os_versions)
+  end
+
+  # An erlang per-arch tag on one of the os_versions the build matrix currently
+  # targets is kept whatever its age. DockerChecker.expected_elixir_tags/0 reads
+  # those rows to decide which Elixir images to build and ranks them by version,
+  # not by date, so the newest tag of an old OTP line stays in use indefinitely.
+  # A row whose search metadata carries no os_version is kept too.
+  defp keep_current_erlang(query, current_os_versions) do
+    where(
+      query,
+      [d],
+      d.repo not in ^@erlang_arch_repos or
+        fragment("?->>'os_version' <> ALL(?)", d.search, ^current_os_versions)
+    )
   end
 
   @doc "Per-repo count of the tags a run would delete."
-  def count_stale_per_arch_tags(cutoff, repos \\ @docker_cleanup_per_arch_repos) do
-    stale_per_arch(cutoff, repos)
+  def count_stale_per_arch_tags(cutoff, repos, current_os_versions) do
+    stale_per_arch(cutoff, repos, current_os_versions)
     |> unreserved()
     |> group_by([d], d.repo)
     |> select([d], {d.repo, count(d.id)})
@@ -542,8 +556,8 @@ defmodule Bob.Artifacts do
   end
 
   @doc "Up to `limit` deletable `{repo, tag}` pairs."
-  def stale_per_arch_tags(cutoff, limit, repos \\ @docker_cleanup_per_arch_repos) do
-    stale_per_arch(cutoff, repos)
+  def stale_per_arch_tags(cutoff, limit, repos, current_os_versions) do
+    stale_per_arch(cutoff, repos, current_os_versions)
     |> unreserved()
     |> limit(^limit)
     |> select([d], {d.repo, d.tag})
@@ -551,13 +565,14 @@ defmodule Bob.Artifacts do
   end
 
   @doc """
-  The subset of `repo_tags` still deletable: present, older than `cutoff` and
-  unreserved. Re-checked per chunk because a run is slow enough for a tag to get
-  reserved or re-pushed while it works.
+  The subset of `repo_tags` still deletable: present, older than `cutoff`,
+  unreserved and not an erlang tag the build matrix still targets. Re-checked
+  per chunk because a run is slow enough for a tag to get reserved, re-pushed,
+  or pulled into the matrix by a base image release while it works.
   """
-  def deletable_docker_tags([], _cutoff), do: []
+  def deletable_docker_tags([], _cutoff, _current_os_versions), do: []
 
-  def deletable_docker_tags(repo_tags, cutoff) do
+  def deletable_docker_tags(repo_tags, cutoff, current_os_versions) do
     {repos, tags} = Enum.unzip(repo_tags)
     wanted = MapSet.new(repo_tags)
 
@@ -567,6 +582,7 @@ defmodule Bob.Artifacts do
       select: {d.repo, d.tag}
     )
     |> unreserved()
+    |> keep_current_erlang(current_os_versions)
     |> Repo.all(timeout: @long_query_timeout)
     # The two `in` clauses match a cross product, so drop pairs not asked for.
     |> Enum.filter(&MapSet.member?(wanted, &1))

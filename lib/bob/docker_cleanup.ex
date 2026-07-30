@@ -1,15 +1,17 @@
 defmodule Bob.DockerCleanup do
   @moduledoc """
   Deletes per-arch Docker Hub tags older than 30 days. Tags reserved by a build
-  request are kept. The manifest repos are not pruned.
+  request are kept, as are the erlang tags on an os_version the build matrix
+  still targets. The manifest repos are not pruned.
 
   A live run keeps taking batches until one deletes nothing, so it clears the
   whole backlog rather than a single batch. What bounds it is the job's timeout.
   `:docker_cleanup_mode` gates whether it deletes or only reports.
 
-  `:repos` narrows a run to some of the per-arch repos. Docker Hub rate limits
-  deletes per source IP, so pointing one node at each repo doubles throughput,
-  where two nodes on the same repo just race for the same tags.
+  `:repos` narrows a run to some of the per-arch repos. Docker Hub meters the
+  API per account rather than per source IP, so a second node deleting at the
+  same time draws down the same budget: the two together get no more through
+  than one does, and spend the difference on 429s. Run one at a time.
   """
 
   require Logger
@@ -44,7 +46,9 @@ defmodule Bob.DockerCleanup do
   defp configured_mode(), do: Application.get_env(:bob, :docker_cleanup_mode, :dry_run)
 
   defp dry_run(repos) do
-    per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), repos)
+    per_arch =
+      Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), repos, current_os_versions())
+
     backlog = per_arch |> Map.values() |> Enum.sum()
 
     # The backlog is every candidate; a scheduled run stops at the batch.
@@ -64,9 +68,13 @@ defmodule Bob.DockerCleanup do
 
     deleted =
       Stream.repeatedly(fn ->
+        # Re-read per batch so a base image released mid-run pulls the erlang
+        # tags built against it back under protection.
+        os_versions = current_os_versions()
+
         cutoff
-        |> Artifacts.stale_per_arch_tags(limit, repos)
-        |> delete(deleter, cutoff)
+        |> Artifacts.stale_per_arch_tags(limit, repos, os_versions)
+        |> delete(deleter, cutoff, os_versions)
       end)
       |> Enum.reduce_while(0, fn batch, total ->
         if batch == 0, do: {:halt, total}, else: {:cont, total + batch}
@@ -79,11 +87,11 @@ defmodule Bob.DockerCleanup do
   # Deleted rows are dropped only after Docker Hub confirms, so a failed tag is
   # retried next run. Candidates are re-checked per chunk because a run is slow
   # enough for a tag to get reserved or re-pushed while it works.
-  defp delete(candidates, deleter, cutoff) do
+  defp delete(candidates, deleter, cutoff, os_versions) do
     candidates
     |> Enum.chunk_every(@delete_chunk)
     |> Enum.reduce_while({0, 0}, fn chunk, {deleted, dead_chunks} ->
-      {confirmed, failed} = delete_chunk(chunk, deleter, cutoff)
+      {confirmed, failed} = delete_chunk(chunk, deleter, cutoff, os_versions)
       Artifacts.delete_docker_tags(confirmed)
       deleted = deleted + length(confirmed)
 
@@ -104,9 +112,9 @@ defmodule Bob.DockerCleanup do
     |> elem(0)
   end
 
-  defp delete_chunk(chunk, deleter, cutoff) do
+  defp delete_chunk(chunk, deleter, cutoff, os_versions) do
     chunk
-    |> Artifacts.deletable_docker_tags(cutoff)
+    |> Artifacts.deletable_docker_tags(cutoff, os_versions)
     |> Task.async_stream(
       fn {repo, tag} ->
         case deleter.(repo, tag) do
@@ -130,6 +138,8 @@ defmodule Bob.DockerCleanup do
   end
 
   defp per_arch_cutoff(), do: DateTime.add(DateTime.utc_now(), -@per_arch_max_age_days, :day)
+
+  defp current_os_versions(), do: Bob.Job.DockerChecker.current_os_versions()
 
   defp format_counts(counts) do
     total = counts |> Map.values() |> Enum.sum()

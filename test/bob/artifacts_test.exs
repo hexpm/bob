@@ -932,14 +932,53 @@ defmodule Bob.ArtifactsTest do
         old
       )
 
-      # The erlang per-arch repos are not under cleanup — expected_elixir_tags/0
-      # is derived from them, so pruning them silently stops Elixir builds.
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
 
-      assert Artifacts.count_stale_per_arch_tags(cutoff) == %{"hexpm/elixir-amd64" => 1}
+      assert Artifacts.count_stale_per_arch_tags(cutoff, repos(), []) ==
+               %{"hexpm/elixir-amd64" => 1, "hexpm/erlang-amd64" => 1}
 
-      assert Artifacts.stale_per_arch_tags(cutoff, 100) ==
-               [{"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"}]
+      assert Artifacts.stale_per_arch_tags(cutoff, 100, repos(), []) |> Enum.sort() ==
+               [
+                 {"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"},
+                 {"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"}
+               ]
+    end
+
+    test "an erlang tag on an os_version the build matrix targets is never a candidate" do
+      old = days_ago(40)
+      cutoff = days_ago(30)
+
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101", ["amd64"], old)
+
+      # expected_elixir_tags/0 ranks these by version, not date, so the newest
+      # tag of an old OTP line stays in use however old it gets.
+      assert Artifacts.count_stale_per_arch_tags(cutoff, repos(), ["noble-20250101"]) ==
+               %{"hexpm/erlang-amd64" => 1}
+
+      assert Artifacts.stale_per_arch_tags(cutoff, 100, repos(), ["noble-20250101"]) ==
+               [{"hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101"}]
+
+      # And the per-chunk re-check applies the same rule.
+      chunk = [
+        {"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"},
+        {"hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101"}
+      ]
+
+      assert Artifacts.deletable_docker_tags(chunk, cutoff, ["noble-20250101"]) ==
+               [{"hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101"}]
+    end
+
+    test "a current os_version does not protect an elixir tag" do
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        days_ago(40)
+      )
+
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), repos(), ["noble-20250101"]) ==
+               %{"hexpm/elixir-amd64" => 1}
     end
 
     test "a non-expired build request reserves its per-arch tags" do
@@ -969,7 +1008,7 @@ defmodule Bob.ArtifactsTest do
         builds_count: 0
       })
 
-      assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{}
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), repos(), []) == %{}
     end
 
     test "an expired build request does not reserve its tags" do
@@ -992,7 +1031,8 @@ defmodule Bob.ArtifactsTest do
 
       BuildRequests.expire(request)
 
-      assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{"hexpm/elixir-amd64" => 1}
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), repos(), []) ==
+               %{"hexpm/elixir-amd64" => 1}
     end
 
     test "delete_docker_tags removes the given rows" do
@@ -1047,6 +1087,8 @@ defmodule Bob.ArtifactsTest do
   end
 
   defp days_ago(days), do: DateTime.add(DateTime.utc_now(), -days, :day)
+
+  defp repos(), do: Artifacts.docker_cleanup_per_arch_repos()
 
   defp replace(repo, tag_archs) do
     token = Ecto.UUID.generate()
