@@ -60,13 +60,6 @@ defmodule Bob.DockerCleanup do
     end)
   end
 
-  @doc "When a tag becomes deletable, or nil for a repo not under cleanup."
-  def removal_at(repo, built_at) do
-    if repo in Artifacts.docker_cleanup_per_arch_repos() do
-      DateTime.add(built_at, @per_arch_max_age_days, :day)
-    end
-  end
-
   defp configured_mode(), do: Application.get_env(:bob, :docker_cleanup_mode, :dry_run)
 
   defp dry_run() do

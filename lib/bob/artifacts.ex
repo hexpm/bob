@@ -511,22 +511,20 @@ defmodule Bob.Artifacts do
 
   def docker_cleanup_per_arch_repos(), do: @docker_cleanup_per_arch_repos
 
-  # Reserved while a non-expired request names the tag. Callers bind the outer
-  # row as `:tag`.
-  defp reserving_requests() do
-    from(br in BuildRequest,
-      where: br.state in ["pending", "completed"] and br.target == parent_as(:tag).tag,
-      select: 1
-    )
+  # build_requests is small, so the reserved tag names are cheaper to collect
+  # and match against than to reconstruct from the component columns in SQL.
+  defp reserved_targets() do
+    from(br in BuildRequest, where: br.state in ["pending", "completed"])
+    |> Repo.all()
+    |> Enum.map(&BuildRequest.target/1)
   end
 
-  defp reserved(query), do: where(query, exists(reserving_requests()))
+  defp reserved(query), do: where(query, [d], d.tag in ^reserved_targets())
 
-  defp unreserved(query), do: where(query, not exists(reserving_requests()))
+  defp unreserved(query), do: where(query, [d], d.tag not in ^reserved_targets())
 
   defp stale_per_arch(cutoff) do
     from(d in DockerTag,
-      as: :tag,
       where: d.repo in @docker_cleanup_per_arch_repos and d.built_at < ^cutoff
     )
   end
@@ -552,7 +550,7 @@ defmodule Bob.Artifacts do
 
   @doc "Whether a build request currently reserves `tag` in `repo`."
   def docker_tag_reserved?(repo, tag) do
-    from(d in DockerTag, as: :tag, where: d.repo == ^repo and d.tag == ^tag)
+    from(d in DockerTag, where: d.repo == ^repo and d.tag == ^tag)
     |> reserved()
     |> Repo.exists?()
   end
@@ -569,7 +567,6 @@ defmodule Bob.Artifacts do
     wanted = MapSet.new(repo_tags)
 
     from(d in DockerTag,
-      as: :tag,
       where: d.repo in ^Enum.uniq(repos) and d.tag in ^Enum.uniq(tags),
       where: d.built_at < ^cutoff,
       select: {d.repo, d.tag}
@@ -589,7 +586,7 @@ defmodule Bob.Artifacts do
   def reserved_docker_tag_ids(tags) do
     ids = Enum.map(tags, & &1.id)
 
-    from(d in DockerTag, as: :tag, where: d.id in ^ids, select: d.id)
+    from(d in DockerTag, where: d.id in ^ids, select: d.id)
     |> reserved()
     |> Repo.all()
     |> MapSet.new()

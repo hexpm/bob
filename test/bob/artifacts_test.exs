@@ -995,7 +995,7 @@ defmodule Bob.ArtifactsTest do
       assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{"hexpm/elixir-amd64" => 1}
     end
 
-    test "a reservation matches the tag name it stored as its target" do
+    test "a reservation matches the tag name it maps to" do
       erlang_attrs = %{
         username: "eric",
         kind: "erlang",
@@ -1010,8 +1010,9 @@ defmodule Bob.ArtifactsTest do
       for {repo, attrs} <- [{"hexpm/erlang", erlang_attrs}, {"hexpm/elixir", elixir_attrs}] do
         {:ok, request} = BuildRequests.create(attrs)
 
-        Artifacts.add_docker_tag(repo, request.target, ["amd64"])
-        assert Artifacts.docker_tag_reserved?(repo, request.target)
+        target = BuildRequests.request_target(request)
+        Artifacts.add_docker_tag(repo, target, ["amd64"])
+        assert Artifacts.docker_tag_reserved?(repo, target)
       end
     end
 

@@ -73,6 +73,6 @@ Requesting an image also reserves it from cleanup, permanently. If the image alr
 
 **The images you pull are never removed.** Every tag in `hexpm/erlang` and `hexpm/elixir` stays available indefinitely, however old it is and however rarely it is used.
 
-Cleanup only touches `hexpm/elixir-amd64` and `hexpm/elixir-arm64`, which hold the single-arch images the multi-arch manifests are assembled from rather than images meant to be pulled directly. They keep the last 30 days of builds; older single-arch tags are removed, and the multi-arch image they back stays available. Tags approaching removal are flagged as `removing` on the [Docker tags page](https://bob.hex.pm/docker).
+Cleanup only touches `hexpm/elixir-amd64` and `hexpm/elixir-arm64`, which hold the single-arch images the multi-arch manifests are assembled from rather than images meant to be pulled directly. They keep the last 30 days of builds; older single-arch tags are removed, and the multi-arch image they back stays available.
 
 Tags reserved by a build request are never removed and are flagged as `reserved`. To pin a single-arch tag indefinitely, request it at https://bob.hex.pm/request.

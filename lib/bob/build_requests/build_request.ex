@@ -14,7 +14,6 @@ defmodule Bob.BuildRequests.BuildRequest do
     field(:os, :string)
     field(:os_version, :string)
     field(:builds_count, :integer)
-    field(:target, :string)
     field(:state, :string, default: "pending")
     timestamps(type: :utc_datetime_usec)
   end
@@ -24,10 +23,9 @@ defmodule Bob.BuildRequests.BuildRequest do
     |> cast(attrs, @fields)
     |> validate_required(@required)
     |> validate_inclusion(:kind, ~w(erlang elixir))
-    |> put_target()
   end
 
-  @doc "The Docker tag a request maps to. Stored so cleanup can match on it."
+  @doc "The Docker tag a request maps to."
   def target(%{kind: "erlang"} = request) do
     "#{request.erlang}-#{request.os}-#{request.os_version}"
   end
@@ -35,11 +33,4 @@ defmodule Bob.BuildRequests.BuildRequest do
   def target(%{kind: "elixir"} = request) do
     "#{request.elixir}-erlang-#{request.erlang}-#{request.os}-#{request.os_version}"
   end
-
-  # Needs valid component fields, so leave an invalid changeset alone.
-  defp put_target(%{valid?: true} = changeset) do
-    put_change(changeset, :target, target(apply_changes(changeset)))
-  end
-
-  defp put_target(changeset), do: changeset
 end

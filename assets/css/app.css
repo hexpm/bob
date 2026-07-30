@@ -1015,8 +1015,7 @@ pre,
   min-width: 0;
 }
 
-.dk-reserved,
-.dk-removing {
+.dk-reserved {
   flex: none;
   border-radius: 5px;
   padding: 1px 7px;
@@ -1031,12 +1030,6 @@ pre,
   border: 1px solid var(--color-green-200);
   background: var(--color-green-50);
   color: var(--color-green-700);
-}
-
-.dk-removing {
-  border: 1px solid var(--color-yellow-200);
-  background: var(--color-yellow-50);
-  color: var(--color-yellow-700);
 }
 
 .pager {
