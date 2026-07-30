@@ -35,8 +35,6 @@ defmodule Bob.DockerCleanup do
     end
   end
 
-  def per_arch_max_age_days(), do: @per_arch_max_age_days
-
   @doc """
   Runs batches until one deletes nothing. Always deletes, whatever
   `:docker_cleanup_mode` says, and is not the scheduled path — the job runner

@@ -126,7 +126,12 @@ defmodule Bob.QueueTest do
           Bob.Job.ReconcileBaseImages,
           Bob.Job.DockerCleanup
         ] do
-      refute Queue.backoff?(module), "#{inspect(module)} would back off after a failure"
+      Queue.add(module, [])
+      {:ok, {id, []}} = Queue.start(module)
+      Queue.failure(id)
+      Queue.add(module, [])
+
+      assert size(module) == 1, "#{inspect(module)} backed off after a failure"
     end
   end
 

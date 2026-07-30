@@ -268,8 +268,6 @@ defmodule Bob.Job.DockerChecker do
   # >= this, or cleanup deletes tags this pass still expects.
   @build_freshness_days 30
 
-  def build_freshness_days(), do: @build_freshness_days
-
   defp freshness_cutoff() do
     DateTime.add(DateTime.utc_now(), -@build_freshness_days, :day)
   end

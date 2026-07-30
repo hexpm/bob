@@ -276,11 +276,7 @@ defmodule Bob.Queue do
     )
   end
 
-  @doc """
-  Whether a failure of `module_key` should record backoff. False for the
-  periodic scheduler jobs, which re-run every interval regardless.
-  """
-  def backoff?(module_key) do
+  defp backoff?(module_key) do
     module =
       case module_key do
         {module, _arg} -> module

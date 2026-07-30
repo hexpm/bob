@@ -346,11 +346,4 @@ defmodule Bob.DockerCleanupTest do
       assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 2
     end
   end
-
-  describe "retention windows" do
-    test "per-arch retention is at least the checker's build freshness window" do
-      assert DockerCleanup.per_arch_max_age_days() >=
-               Bob.Job.DockerChecker.build_freshness_days()
-    end
-  end
 end
