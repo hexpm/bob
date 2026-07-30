@@ -6,8 +6,8 @@ defmodule Bob.ReconcileTest do
   @docker_built_at ~U[2025-01-02 03:04:05.000000Z]
   @newer_docker_built_at ~U[2025-02-03 04:05:06.000000Z]
 
-  # Streamer stub: invokes on_page once with the canned {tag, archs, built_at} list for the
-  # repo (mimicking a single Docker Hub page), or nothing for an empty repo.
+  # Streamer stub: invokes on_page once with the canned {tag, archs, built_at} list
+  # for the repo (mimicking a single Docker Hub page), or nothing for an empty repo.
   defp streamer(map) do
     fn repo, on_page ->
       case Map.get(map, repo, []) do

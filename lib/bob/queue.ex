@@ -14,7 +14,8 @@ defmodule Bob.Queue do
     Bob.Job.OTPChecker,
     Bob.Job.DockerChecker,
     Bob.Job.Reconcile,
-    Bob.Job.ReconcileBaseImages
+    Bob.Job.ReconcileBaseImages,
+    Bob.Job.DockerCleanup
   ]
 
   @dedup_conflict_target {:unsafe_fragment,

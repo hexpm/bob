@@ -18,7 +18,8 @@ defmodule BobWeb.DockerTagsLive do
         oses: options.oses,
         total: nil,
         loading: true,
-        results: []
+        results: [],
+        reserved: MapSet.new()
       )
 
     {:ok, socket}
@@ -81,7 +82,9 @@ defmodule BobWeb.DockerTagsLive do
 
     %{results: results, total: total} = Bob.Artifacts.docker_tag_page(filters, @page, offset)
 
-    assign(socket, results: results, total: total, loading: false)
+    reserved = Bob.Artifacts.reserved_docker_tag_ids(results)
+
+    assign(socket, results: results, total: total, loading: false, reserved: reserved)
   end
 
   defp fmt(nil), do: "—"
@@ -147,7 +150,16 @@ defmodule BobWeb.DockerTagsLive do
             </div>
           </:col>
           <:col :let={d} label="tag" class="col-dk-tag">
-            <code class="dk-tag-code" title={d.tag}><%= d.tag %></code>
+            <div class="dk-tag-cell">
+              <code class="dk-tag-code" title={d.tag}><%= d.tag %></code>
+              <span
+                :if={MapSet.member?(@reserved, d.id)}
+                class="dk-reserved"
+                title="Reserved by a build request — exempt from cleanup"
+              >
+                reserved
+              </span>
+            </div>
           </:col>
           <:col :let={d} label="archs" class="col-dk-archs">
             <div class="arch-list">

@@ -7,7 +7,7 @@ defmodule Bob.DockerHubTest do
   @image_pushed_at ~U[2025-02-03 04:05:06.000000Z]
 
   describe "parse/1" do
-    test "returns tag, archs, and Docker Hub last_updated timestamp" do
+    test "returns tag, archs and built_at" do
       assert DockerHub.parse(
                tag_payload(%{
                  "last_updated" => "2025-01-02T03:04:05.123456Z",

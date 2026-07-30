@@ -116,6 +116,25 @@ defmodule Bob.QueueTest do
     assert size(Bob.Job.DockerChecker) == 1
   end
 
+  # Listed explicitly: config/test.exs sets :master_schedule to [], so reading
+  # it here would assert nothing.
+  test "the scheduled jobs are all exempt from backoff" do
+    for module <- [
+          Bob.Job.OTPChecker,
+          Bob.Job.DockerChecker,
+          Bob.Job.Reconcile,
+          Bob.Job.ReconcileBaseImages,
+          Bob.Job.DockerCleanup
+        ] do
+      Queue.add(module, [])
+      {:ok, {id, []}} = Queue.start(module)
+      Queue.failure(id)
+      Queue.add(module, [])
+
+      assert size(module) == 1, "#{inspect(module)} backed off after a failure"
+    end
+  end
+
   test "success clears any existing backoff for the job" do
     # Set up a previously-failed job that is now running again, by inserting
     # the rows directly (a backed-off job will not re-enter the queue on its own).
@@ -288,6 +307,7 @@ defmodule Bob.QueueTest do
   end
 
   describe "read functions" do
+    # DateTime.compare/2, not >=: term order puts :microsecond before :second.
     test "running/0 returns running jobs newest-started first" do
       Bob.Queue.add(Bob.Job.OTPChecker, [:a])
       Bob.Queue.add(Bob.Job.OTPChecker, [:b])
@@ -297,14 +317,14 @@ defmodule Bob.QueueTest do
       running = Bob.Queue.running()
       assert length(running) == 2
       assert Enum.all?(running, &(&1.state == "running"))
-      assert hd(running).started_at >= List.last(running).started_at
+      assert DateTime.compare(hd(running).started_at, List.last(running).started_at) != :lt
     end
 
     test "queued_listing/2 returns queued jobs oldest-first with limit/offset" do
       for n <- 1..3, do: Bob.Queue.add(Bob.Job.OTPChecker, [n])
 
       assert [a, b] = Bob.Queue.queued_listing(2, 0)
-      assert a.inserted_at <= b.inserted_at
+      assert DateTime.compare(a.inserted_at, b.inserted_at) != :gt
       assert [_c] = Bob.Queue.queued_listing(2, 2)
     end
 
@@ -319,7 +339,7 @@ defmodule Bob.QueueTest do
 
       recent = Bob.Queue.recent(50, 0)
       assert Enum.map(recent, & &1.state) |> Enum.sort() == ["done", "failed"]
-      assert hd(recent).finished_at >= List.last(recent).finished_at
+      assert DateTime.compare(hd(recent).finished_at, List.last(recent).finished_at) != :lt
     end
 
     test "finished_count/0 counts done and failed jobs" do

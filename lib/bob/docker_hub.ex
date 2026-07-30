@@ -1,5 +1,11 @@
 defmodule Bob.DockerHub do
+  alias Bob.DockerHub.RateLimiter
+
   @dockerhub_url "https://hub.docker.com/"
+
+  # Caps re-attempts after a 429 so a permanently throttled IP can't loop forever;
+  # each attempt first feeds the limiter, which blocks until the window resets.
+  @max_rate_limit_retries 20
 
   def auth(username, password) do
     url = @dockerhub_url <> "v2/users/login/"
@@ -52,19 +58,54 @@ defmodule Bob.DockerHub do
     end
   end
 
+  @doc """
+  Deletes a tag on Docker Hub, paced by the shared rate limiter. A missing tag
+  (404) counts as success so the cleanup is idempotent across retries. Returns
+  `{:error, _}` for any other outcome so the caller can skip the tag and retry it
+  on a later run rather than crash the batch.
+  """
   def delete_tag(repo, tag) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
-    headers = headers()
-    opts = [recv_timeout: 20_000]
+
+    case paced_request(:delete, url) do
+      {:ok, status, _headers, _body} when status in [204, 404] -> :ok
+      other -> {:error, other}
+    end
+  end
+
+  @doc """
+  Sends `method` to `url` paced by the shared rate limiter: acquires a slot
+  (blocking until the window has budget), feeds the response back so the gate
+  tracks the limit, and waits out 429s up to the retry cap. Returns the final
+  non-429 result for the caller to match on. Every outcome reports to the
+  limiter — a response without usable rate headers, or a transport error,
+  releases the calibration probe's slot — so a failed request can't leave the
+  gate shut for every later caller.
+  """
+  def paced_request(method, url), do: paced_request(method, url, 0)
+
+  defp paced_request(method, url, attempts) do
+    RateLimiter.acquire()
 
     result =
-      Bob.HTTP.retry("DockerHub #{url}", fn ->
-        Bob.HTTP.request(:delete, url, headers, "", opts)
-      end)
+      Bob.HTTP.retry(
+        "DockerHub #{url}",
+        fn -> Bob.HTTP.request(method, url, headers(), "", recv_timeout: 20_000) end,
+        retry_rate_limit?: false
+      )
 
     case result do
-      {:ok, 204, _headers, _body} -> :ok
-      {:ok, 404, _headers, _body} -> :ok
+      {:ok, 429, response_headers, _body} when attempts < @max_rate_limit_retries ->
+        RateLimiter.throttle(response_headers)
+        paced_request(method, url, attempts + 1)
+
+      {:ok, _status, response_headers, _body} ->
+        RateLimiter.observe(response_headers)
+        result
+
+      {:error, _reason} ->
+        RateLimiter.observe([])
+        result
     end
   end
 

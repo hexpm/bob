@@ -16,12 +16,60 @@ defmodule Bob.BuildRequests do
     with :ok <- validate_combo(request) do
       case Bob.Job.DockerChecker.request_jobs(request) do
         [] ->
+          reserve(request, attrs)
           {:ok, :already_built}
 
         jobs ->
           submit_jobs(request, attrs, jobs)
       end
     end
+  end
+
+  # A request for an existing image reserves it instead of building. Locked on
+  # the target, not the user: reservations dedupe across users.
+  defp reserve(request, attrs) do
+    {:ok, :ok} =
+      Repo.transaction(fn ->
+        lock_target(request)
+
+        unless reserved?(request) do
+          {:ok, created} = create(Map.put(attrs, :builds_count, 0))
+          created = complete(created)
+
+          Logger.info(
+            "BUILD RESERVATION by #{created.username}: #{created.kind} #{request_target(created)}"
+          )
+        end
+
+        :ok
+      end)
+
+    :ok
+  end
+
+  defp lock_target(request) do
+    Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      "#{request.kind}:#{request_target(request)}"
+    ])
+  end
+
+  defp reserved?(request) do
+    query =
+      from(request_row in BuildRequest,
+        where:
+          request_row.state in ["pending", "completed"] and request_row.kind == ^request.kind and
+            request_row.erlang == ^request.erlang and request_row.os == ^request.os and
+            request_row.os_version == ^request.os_version
+      )
+
+    query =
+      if request.kind == "elixir" do
+        from(request_row in query, where: request_row.elixir == ^request.elixir)
+      else
+        query
+      end
+
+    Repo.exists?(query)
   end
 
   defp submit_jobs(request, attrs, jobs) do
@@ -108,13 +156,8 @@ defmodule Bob.BuildRequests do
     builds_count_for_user_since(username, hour_ago) + builds_count > @hourly_build_limit
   end
 
-  defp request_target(%{kind: "erlang"} = request) do
-    "#{request.erlang}-#{request.os}-#{request.os_version}"
-  end
-
-  defp request_target(%{kind: "elixir"} = request) do
-    "#{request.elixir}-erlang-#{request.erlang}-#{request.os}-#{request.os_version}"
-  end
+  @doc "The Docker tag name a request maps to, stored on the row as `target`."
+  defdelegate request_target(request), to: BuildRequest, as: :target
 
   def create(attrs) do
     %BuildRequest{}
@@ -162,8 +205,10 @@ defmodule Bob.BuildRequests do
   end
 
   @doc """
-  Deletes finished requests older than `older_than_seconds`. Pending requests
-  are left alone; the checker reconciliation expires or completes them first.
+  Deletes expired requests older than `older_than_seconds`. Completed requests
+  are permanent reservations and pending requests are still in flight, so only
+  expired dead-ends (an os_version that rotated out, or a request past its TTL)
+  are reclaimed.
   """
   def prune(older_than_seconds) do
     cutoff = DateTime.add(DateTime.utc_now(), -older_than_seconds, :second)
@@ -171,7 +216,7 @@ defmodule Bob.BuildRequests do
     {count, _} =
       Repo.delete_all(
         from(request in BuildRequest,
-          where: request.state in ["completed", "expired"] and request.inserted_at < ^cutoff
+          where: request.state == "expired" and request.inserted_at < ^cutoff
         )
       )
 

@@ -447,6 +447,43 @@ defmodule Bob.Job.DockerCheckerTest do
       assert Repo.reload!(request).state == "expired"
     end
 
+    test "completes a fully built request even when its os_version rotated out" do
+      request = insert_request(kind: "erlang", erlang: "27.0", os_version: "noble-20240101")
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20240101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20240101", ["arm64"])
+
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20240101", [
+        "amd64",
+        "arm64"
+      ])
+
+      DockerChecker.requests()
+
+      # The request backs a permanent reservation; expiring it would lift the
+      # reservation and expose the built image to cleanup.
+      assert Repo.all(Job) == []
+      assert Repo.reload!(request).state == "completed"
+    end
+
+    test "completes a fully built request even past the ttl" do
+      request = insert_request(kind: "erlang", erlang: "27.0")
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
+        "amd64",
+        "arm64"
+      ])
+
+      request
+      |> Ecto.Changeset.change(inserted_at: DateTime.add(DateTime.utc_now(), -15, :day))
+      |> Repo.update!()
+
+      DockerChecker.requests()
+
+      assert Repo.reload!(request).state == "completed"
+    end
+
     test "expires requests that never completed within the ttl" do
       request = insert_request(kind: "erlang", erlang: "27.0")
 

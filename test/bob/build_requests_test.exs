@@ -47,14 +47,36 @@ defmodule Bob.BuildRequestsTest do
       assert [%Job{module_key: {Bob.Job.BuildDockerErlang, "arm64"}}] = Repo.all(Job)
     end
 
-    test "reports already built tags without recording a request" do
+    test "records a completed reservation for an already-built image, no build" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
       Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
       Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
 
       assert BuildRequests.submit(@erlang_attrs) == {:ok, :already_built}
       assert Repo.all(Job) == []
-      assert Repo.all(BuildRequest) == []
+
+      assert [%BuildRequest{state: "completed", builds_count: 0, erlang: "27.0"}] =
+               Repo.all(BuildRequest)
+    end
+
+    test "reserves without rebuilding when only the staging tags were cleaned" do
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
+
+      assert BuildRequests.submit(@erlang_attrs) == {:ok, :already_built}
+      assert Repo.all(Job) == []
+
+      assert [%BuildRequest{state: "completed", builds_count: 0}] = Repo.all(BuildRequest)
+    end
+
+    test "does not duplicate a reservation for the same already-built image" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
+
+      assert BuildRequests.submit(@erlang_attrs) == {:ok, :already_built}
+      assert BuildRequests.submit(@erlang_attrs) == {:ok, :already_built}
+
+      assert [%BuildRequest{}] = Repo.all(BuildRequest)
     end
 
     test "enqueues only the manifest when the arch images already exist" do
@@ -235,16 +257,16 @@ defmodule Bob.BuildRequestsTest do
   end
 
   describe "prune/1" do
-    test "deletes finished requests older than the cutoff and keeps the rest" do
-      _old_completed = insert_aged(%{state: "completed"}, -100)
+    test "deletes only expired requests older than the cutoff, keeping reservations" do
+      old_completed = insert_aged(%{state: "completed"}, -100)
       _old_expired = insert_aged(%{state: "expired"}, -100)
       old_pending = insert_aged(%{state: "pending"}, -100)
-      recent_completed = insert_aged(%{state: "completed"}, -1)
+      recent_expired = insert_aged(%{state: "expired"}, -1)
 
-      assert BuildRequests.prune(90 * 24 * 60 * 60) == 2
+      assert BuildRequests.prune(90 * 24 * 60 * 60) == 1
 
       ids = Repo.all(BuildRequest) |> Enum.map(& &1.id) |> Enum.sort()
-      assert ids == Enum.sort([old_pending.id, recent_completed.id])
+      assert ids == Enum.sort([old_completed.id, old_pending.id, recent_expired.id])
     end
   end
 

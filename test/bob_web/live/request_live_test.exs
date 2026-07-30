@@ -193,7 +193,8 @@ defmodule BobWeb.RequestLiveTest do
       })
 
     assert html =~ "already built"
-    assert Repo.all(BuildRequest) == []
+    assert html =~ "reserved"
+    assert [%BuildRequest{state: "completed", builds_count: 0}] = Repo.all(BuildRequest)
     assert Repo.all(Job) == []
   end
 

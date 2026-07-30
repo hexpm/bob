@@ -24,4 +24,13 @@ defmodule Bob.BuildRequests.BuildRequest do
     |> validate_required(@required)
     |> validate_inclusion(:kind, ~w(erlang elixir))
   end
+
+  @doc "The Docker tag a request maps to."
+  def target(%{kind: "erlang"} = request) do
+    "#{request.erlang}-#{request.os}-#{request.os_version}"
+  end
+
+  def target(%{kind: "elixir"} = request) do
+    "#{request.elixir}-erlang-#{request.erlang}-#{request.os}-#{request.os_version}"
+  end
 end

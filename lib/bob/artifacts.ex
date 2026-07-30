@@ -3,10 +3,11 @@ defmodule Bob.Artifacts do
 
   alias Bob.Repo
   alias Bob.Artifacts.{Artifact, BaseImageTag, DockerTag, DockerTagSearch, DockerTagStaging}
+  alias Bob.BuildRequests.BuildRequest
 
   @builds_txt_lock 4_771_002
 
-  # Each staging row binds six parameters; Postgres caps a statement at 65535,
+  # Each staging row binds seven parameters; Postgres caps a statement at 65535,
   # so a page is inserted in chunks well under that ceiling.
   @staging_chunk 5000
 
@@ -16,6 +17,10 @@ defmodule Bob.Artifacts do
   # explicitly — a transaction's :timeout does not propagate to the queries it
   # wraps.
   @long_query_timeout 5 * 60 * 1000
+
+  # Elixir only. DockerChecker.expected_elixir_tags/0 derives the Elixir build
+  # matrix from the erlang per-arch rows, so pruning those stops Elixir builds.
+  @docker_cleanup_per_arch_repos ~w(hexpm/elixir-amd64 hexpm/elixir-arm64)
 
   def add(attrs) do
     upsert(attrs)
@@ -502,6 +507,94 @@ defmodule Bob.Artifacts do
       )
 
     Enum.map(rows, fn [tag, archs] -> {tag, archs} end)
+  end
+
+  # build_requests is small, so the reserved tag names are cheaper to collect
+  # and match against than to reconstruct from the component columns in SQL.
+  defp reserved_targets() do
+    from(br in BuildRequest, where: br.state in ["pending", "completed"])
+    |> Repo.all()
+    |> Enum.map(&BuildRequest.target/1)
+  end
+
+  defp reserved(query), do: where(query, [d], d.tag in ^reserved_targets())
+
+  defp unreserved(query), do: where(query, [d], d.tag not in ^reserved_targets())
+
+  defp stale_per_arch(cutoff) do
+    from(d in DockerTag,
+      where: d.repo in @docker_cleanup_per_arch_repos and d.built_at < ^cutoff
+    )
+  end
+
+  @doc "Per-repo count of the tags a run would delete."
+  def count_stale_per_arch_tags(cutoff) do
+    stale_per_arch(cutoff)
+    |> unreserved()
+    |> group_by([d], d.repo)
+    |> select([d], {d.repo, count(d.id)})
+    |> Repo.all(timeout: @long_query_timeout)
+    |> Map.new()
+  end
+
+  @doc "Up to `limit` deletable `{repo, tag}` pairs."
+  def stale_per_arch_tags(cutoff, limit) do
+    stale_per_arch(cutoff)
+    |> unreserved()
+    |> limit(^limit)
+    |> select([d], {d.repo, d.tag})
+    |> Repo.all(timeout: @long_query_timeout)
+  end
+
+  @doc """
+  The subset of `repo_tags` still deletable: present, older than `cutoff` and
+  unreserved. Re-checked per chunk because a run is slow enough for a tag to get
+  reserved or re-pushed while it works.
+  """
+  def deletable_docker_tags([], _cutoff), do: []
+
+  def deletable_docker_tags(repo_tags, cutoff) do
+    {repos, tags} = Enum.unzip(repo_tags)
+    wanted = MapSet.new(repo_tags)
+
+    from(d in DockerTag,
+      where: d.repo in ^Enum.uniq(repos) and d.tag in ^Enum.uniq(tags),
+      where: d.built_at < ^cutoff,
+      select: {d.repo, d.tag}
+    )
+    |> unreserved()
+    |> Repo.all(timeout: @long_query_timeout)
+    # The two `in` clauses match a cross product, so drop pairs not asked for.
+    |> Enum.filter(&MapSet.member?(wanted, &1))
+  end
+
+  @doc """
+  The ids of the given `DockerTag` rows that a build request reserves, as a
+  MapSet. Lets the tags page flag reserved tags without re-deriving the match.
+  """
+  def reserved_docker_tag_ids([]), do: MapSet.new()
+
+  def reserved_docker_tag_ids(tags) do
+    ids = Enum.map(tags, & &1.id)
+
+    from(d in DockerTag, where: d.id in ^ids, select: d.id)
+    |> reserved()
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc "Drops `docker_tags` rows for the given `{repo, tag}` pairs, after Docker Hub deletion."
+  def delete_docker_tags([]), do: :ok
+
+  def delete_docker_tags(repo_tags) do
+    repo_tags
+    |> Enum.group_by(fn {repo, _tag} -> repo end, fn {_repo, tag} -> tag end)
+    |> Enum.each(fn {repo, tags} ->
+      from(d in DockerTag, where: d.repo == ^repo and d.tag in ^tags)
+      |> Repo.delete_all(timeout: @long_query_timeout)
+    end)
+
+    :ok
   end
 
   def base_image_tags(repo) do

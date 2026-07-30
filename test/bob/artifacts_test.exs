@@ -3,6 +3,7 @@ defmodule Bob.ArtifactsTest do
 
   alias Bob.Artifacts
   alias Bob.Artifacts.{Artifact, BaseImageTag, DockerTag, DockerTagStaging}
+  alias Bob.BuildRequests
 
   @docker_built_at ~U[2025-01-02 03:04:05.000000Z]
   @newer_docker_built_at ~U[2025-02-03 04:05:06.000000Z]
@@ -903,6 +904,149 @@ defmodule Bob.ArtifactsTest do
       assert [%{name: "OTP-27.0"}] = Bob.Artifacts.search_artifacts(%{}, 1, 1)
     end
   end
+
+  describe "docker cleanup candidates" do
+    test "per-arch candidates are tags built before the cutoff, excluding manifest repos" do
+      old = days_ago(40)
+      recent = days_ago(10)
+      cutoff = days_ago(30)
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.1-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        recent
+      )
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.17.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"],
+        old
+      )
+
+      # The erlang per-arch repos are not under cleanup — expected_elixir_tags/0
+      # is derived from them, so pruning them silently stops Elixir builds.
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+
+      assert Artifacts.count_stale_per_arch_tags(cutoff) == %{"hexpm/elixir-amd64" => 1}
+
+      assert Artifacts.stale_per_arch_tags(cutoff, 100) ==
+               [{"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"}]
+    end
+
+    test "a non-expired build request reserves its per-arch tags" do
+      old = days_ago(250)
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      BuildRequests.create(%{
+        username: "eric",
+        kind: "elixir",
+        elixir: "1.18.0",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 0
+      })
+
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{}
+    end
+
+    test "an expired build request does not reserve its tags" do
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        days_ago(40)
+      )
+
+      {:ok, request} =
+        BuildRequests.create(%{
+          username: "eric",
+          kind: "erlang",
+          erlang: "27.0",
+          os: "ubuntu",
+          os_version: "noble-20250101",
+          builds_count: 0
+        })
+
+      BuildRequests.expire(request)
+
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30)) == %{"hexpm/elixir-amd64" => 1}
+    end
+
+    test "delete_docker_tags removes the given rows" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "a", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "b", ["amd64"])
+
+      assert Artifacts.delete_docker_tags([{"hexpm/erlang-amd64", "a"}]) == :ok
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"b", ["amd64"]}]
+    end
+
+    test "reserved_docker_tag_ids returns the ids matched by a build request, across repos" do
+      Artifacts.add_docker_tag("hexpm/elixir", "1.18.0-erlang-27.0-ubuntu-noble-20250101", [
+        "amd64",
+        "arm64"
+      ])
+
+      Artifacts.add_docker_tag("hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101", [
+        "amd64"
+      ])
+
+      Artifacts.add_docker_tag("hexpm/elixir", "1.17.0-erlang-27.0-ubuntu-noble-20250101", [
+        "amd64",
+        "arm64"
+      ])
+
+      BuildRequests.create(%{
+        username: "eric",
+        kind: "elixir",
+        elixir: "1.18.0",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 0
+      })
+
+      tags = Repo.all(DockerTag)
+      reserved = Artifacts.reserved_docker_tag_ids(tags)
+
+      reserved_tags =
+        tags
+        |> Enum.filter(&MapSet.member?(reserved, &1.id))
+        |> Enum.map(&{&1.repo, &1.tag})
+        |> Enum.sort()
+
+      assert reserved_tags == [
+               {"hexpm/elixir", "1.18.0-erlang-27.0-ubuntu-noble-20250101"},
+               {"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"}
+             ]
+
+      assert Artifacts.reserved_docker_tag_ids([]) == MapSet.new()
+    end
+  end
+
+  defp days_ago(days), do: DateTime.add(DateTime.utc_now(), -days, :day)
 
   defp replace(repo, tag_archs) do
     token = Ecto.UUID.generate()

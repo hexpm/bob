@@ -66,3 +66,13 @@ All provided images and tags can be searched at https://bob.hex.pm/docker.
 If you need a specific patch version that is not built automatically, request it at https://bob.hex.pm/request. Sign in with your hex.pm account, then pick the image kind (Erlang or Elixir), the OS and base image version, and the exact Erlang (and Elixir) version. The image is built for both architectures, including the multi-arch manifest; when an Elixir image needs an Erlang base image that does not exist yet, the base is built first and the Elixir image follows automatically.
 
 Requested builds are limited to ten image builds per user per hour. Build progress can be followed on the jobs dashboard at https://bob.hex.pm.
+
+Requesting an image also reserves it from cleanup, permanently. If the image already exists it is reserved without rebuilding. The multi-arch images you pull are never removed anyway, so this only matters for the per-architecture build images (see Retention and cleanup below).
+
+### Retention and cleanup
+
+**The images you pull are never removed.** Every tag in `hexpm/erlang` and `hexpm/elixir` stays available indefinitely, however old it is and however rarely it is used.
+
+Cleanup only touches `hexpm/elixir-amd64` and `hexpm/elixir-arm64`, which hold the single-arch images the multi-arch manifests are assembled from rather than images meant to be pulled directly. They keep the last 30 days of builds; older single-arch tags are removed, and the multi-arch image they back stays available.
+
+Tags reserved by a build request are never removed and are flagged as `reserved`. To pin a single-arch tag indefinitely, request it at https://bob.hex.pm/request.
