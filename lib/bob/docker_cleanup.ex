@@ -6,6 +6,10 @@ defmodule Bob.DockerCleanup do
   A live run keeps taking batches until one deletes nothing, so it clears the
   whole backlog rather than a single batch. What bounds it is the job's timeout.
   `:docker_cleanup_mode` gates whether it deletes or only reports.
+
+  `:repos` narrows a run to some of the per-arch repos. Docker Hub rate limits
+  deletes per source IP, so pointing one node at each repo doubles throughput,
+  where two nodes on the same repo just race for the same tags.
   """
 
   require Logger
@@ -29,16 +33,18 @@ defmodule Bob.DockerCleanup do
   @default_concurrency 25
 
   def run(opts \\ []) do
+    repos = Keyword.get(opts, :repos, Artifacts.docker_cleanup_per_arch_repos())
+
     case Keyword.get(opts, :mode, configured_mode()) do
-      :dry_run -> dry_run()
-      :live -> live(opts)
+      :dry_run -> dry_run(repos)
+      :live -> live(opts, repos)
     end
   end
 
   defp configured_mode(), do: Application.get_env(:bob, :docker_cleanup_mode, :dry_run)
 
-  defp dry_run() do
-    per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff())
+  defp dry_run(repos) do
+    per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), repos)
     backlog = per_arch |> Map.values() |> Enum.sum()
 
     # Report both: the backlog is every candidate, a run stops at the batch.
@@ -51,7 +57,7 @@ defmodule Bob.DockerCleanup do
     {:dry_run, %{per_arch: per_arch}}
   end
 
-  defp live(opts) do
+  defp live(opts, repos) do
     deleter = Keyword.get(opts, :deleter, &Bob.DockerHub.delete_tag/2)
     limit = Keyword.get(opts, :limit, @default_batch)
     cutoff = per_arch_cutoff()
@@ -59,14 +65,14 @@ defmodule Bob.DockerCleanup do
     deleted =
       Stream.repeatedly(fn ->
         cutoff
-        |> Artifacts.stale_per_arch_tags(limit)
+        |> Artifacts.stale_per_arch_tags(limit, repos)
         |> delete(deleter, cutoff)
       end)
       |> Enum.reduce_while(0, fn batch, total ->
         if batch == 0, do: {:halt, total}, else: {:cont, total + batch}
       end)
 
-    Logger.info("DOCKER CLEANUP deleted #{deleted} tag(s)")
+    Logger.info("DOCKER CLEANUP deleted #{deleted} tag(s) from #{Enum.join(repos, ", ")}")
     {:live, deleted}
   end
 
