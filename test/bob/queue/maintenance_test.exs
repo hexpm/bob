@@ -86,8 +86,7 @@ defmodule Bob.Queue.MaintenanceTest do
 
     Maintenance.run()
 
-    # A cleanup run clears the whole backlog and takes days; requeuing it at the
-    # default three hours would start a second one alongside it.
+    # Requeuing a cleanup at three hours starts a second one alongside it.
     assert [%Job{state: "running"}] = Repo.all(Job)
   end
 

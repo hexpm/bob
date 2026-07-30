@@ -509,8 +509,8 @@ defmodule Bob.Artifacts do
     Enum.map(rows, fn [tag, archs] -> {tag, archs} end)
   end
 
-  # build_requests is small, so the reserved tag names are cheaper to collect
-  # and match against than to reconstruct from the component columns in SQL.
+  # build_requests is small, so collecting the reserved tag names and matching
+  # against the list is cheap.
   defp reserved_targets() do
     from(br in BuildRequest, where: br.state in ["pending", "completed"])
     |> Repo.all()
@@ -523,8 +523,8 @@ defmodule Bob.Artifacts do
 
   def docker_cleanup_per_arch_repos(), do: @docker_cleanup_per_arch_repos
 
-  # Intersected with the known list rather than trusted, so a caller cannot
-  # point the cleanup at a manifest repo.
+  # Only the known per-arch repos, so a caller cannot point the cleanup at a
+  # manifest repo.
   defp stale_per_arch(cutoff, repos) do
     repos = Enum.filter(@docker_cleanup_per_arch_repos, &(&1 in repos))
 

@@ -20,7 +20,7 @@ defmodule Bob.DockerCleanup do
   # tags the checker still expects. Asserted in docker_cleanup_test.
   @per_arch_max_age_days 30
 
-  # Candidate query page size, not a cap on the run.
+  # Candidate query page size.
   @default_batch 10_000
 
   # Rows are committed per chunk so a killed run keeps its progress.
@@ -47,7 +47,7 @@ defmodule Bob.DockerCleanup do
     per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), repos)
     backlog = per_arch |> Map.values() |> Enum.sum()
 
-    # Report both: the backlog is every candidate, a run stops at the batch.
+    # The backlog is every candidate; a scheduled run stops at the batch.
     Logger.info(
       "DOCKER CLEANUP dry-run: per-arch built_at < #{@per_arch_max_age_days}d -> " <>
         "#{format_counts(per_arch)}; one scheduled run would delete " <>
@@ -87,8 +87,7 @@ defmodule Bob.DockerCleanup do
       Artifacts.delete_docker_tags(confirmed)
       deleted = deleted + length(confirmed)
 
-      # Whole failed chunks, not individual errors: concurrent deletes have no
-      # "consecutive", and a flaky tag shouldn't trip the abort.
+      # Counted per chunk so a flaky tag does not trip the abort.
       dead_chunks = if failed > 0 and confirmed == [], do: dead_chunks + 1, else: 0
 
       if dead_chunks >= @dead_chunk_ceiling do

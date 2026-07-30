@@ -253,8 +253,7 @@ defmodule Bob.DockerCleanupTest do
       assert counts == %{"hexpm/elixir-arm64" => 1}
     end
 
-    # Otherwise a typo, or a caller reaching for a repo it should not, would
-    # point the deleter at the images users pull.
+    # A repo outside the list would be the images users pull.
     test "a repo outside the per-arch list is ignored, not deleted from" do
       deleter = fn _repo, _tag -> :ok end
 

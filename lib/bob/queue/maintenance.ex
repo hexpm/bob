@@ -68,8 +68,7 @@ defmodule Bob.Queue.Maintenance do
     now = DateTime.utc_now()
 
     # Pre-filter on the shortest timeout any job can have, then keep only those
-    # past their own. Jobs that legitimately run for hours would otherwise be
-    # requeued out from under themselves.
+    # past their own.
     cutoff = DateTime.add(now, -div(Bob.Job.default_timeout(), 1000), :second)
 
     stale_ids =
