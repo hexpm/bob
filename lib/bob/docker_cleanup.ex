@@ -75,6 +75,10 @@ defmodule Bob.DockerCleanup do
   Deletes the whole backlog instead of one night's batch, looping until a pass
   deletes nothing.
 
+  This deletes whatever `:docker_cleanup_mode` says, including `:dry_run` — it
+  is an explicit "clear the backlog" command, and looping a dry run would just
+  spin. Pass `mode: :dry_run` to `run/1` instead if you wanted a report.
+
   Not the scheduled path. `Bob.Job.DockerCleanup` runs through `Bob.Runner`,
   which kills any job at three hours, and the initial backlog is far larger than
   three hours of rate-limited deletes. Run this detached from the shell that
