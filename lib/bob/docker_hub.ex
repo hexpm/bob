@@ -41,6 +41,14 @@ defmodule Bob.DockerHub do
     end
   end
 
+  @doc """
+  Fetches a tag as `{:ok, {name, archs, built_at}}`.
+
+  `:not_found` is Docker Hub saying the tag is gone. `:unreadable` is a response
+  that carried no usable image data, which says nothing about the tag either
+  way — callers deciding what an image should contain have to tell the two
+  apart.
+  """
   def fetch_tag(repo, tag) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
     headers = headers()
@@ -53,10 +61,13 @@ defmodule Bob.DockerHub do
 
     case result do
       {:ok, 200, _headers, body} ->
-        parse(JSON.decode!(body))
+        case parse(JSON.decode!(body)) do
+          nil -> :unreadable
+          parsed -> {:ok, parsed}
+        end
 
       {:ok, 404, _headers, _body} ->
-        nil
+        :not_found
     end
   end
 

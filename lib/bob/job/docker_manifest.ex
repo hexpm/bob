@@ -5,18 +5,26 @@ defmodule Bob.Job.DockerManifest do
     directory = Bob.Directory.new()
     Logger.info("Using directory #{directory}")
     tag = key_to_tag(kind, key)
-    archs = get_archs(kind, tag)
 
-    if archs == [] do
-      :ok
-    else
-      Bob.Script.run(
-        {:script, "docker/manifest.sh"},
-        [kind, tag] ++ archs,
-        directory
-      )
+    case get_archs(kind, tag) do
+      {:ok, []} ->
+        :ok
 
-      Bob.RemoteQueue.docker_add("hexpm/#{kind}", tag, archs)
+      {:ok, archs} ->
+        Bob.Script.run(
+          {:script, "docker/manifest.sh"},
+          [kind, tag] ++ archs,
+          directory
+        )
+
+        Bob.RemoteQueue.docker_add("hexpm/#{kind}", tag, archs)
+
+      {:unreadable, arch} ->
+        Logger.warning(
+          "MANIFEST hexpm/#{kind}:#{tag} left alone, hexpm/#{kind}-#{arch}:#{tag} did not read"
+        )
+
+        :ok
     end
   end
 
@@ -32,12 +40,27 @@ defmodule Bob.Job.DockerManifest do
     "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
   end
 
-  def get_archs(kind, tag) do
+  @doc """
+  The archs to publish the manifest from.
+
+  A tag Docker Hub reports as gone is absent, and the manifest is published from
+  whatever else is there — that is how a tag gets a manifest while its second
+  arch is still building. A response that carries no usable image data says
+  nothing about the tag, and publishing on it would rewrite a multi-arch
+  manifest as whatever happened to be legible.
+  """
+  def get_archs(kind, tag, fetch \\ &Bob.DockerHub.fetch_tag/2) do
     ["amd64", "arm64"]
-    |> Enum.map(&{&1, Bob.DockerHub.fetch_tag("hexpm/#{kind}-#{&1}", tag)})
-    |> Enum.flat_map(fn
-      {_arch, nil} -> []
-      {arch, _} -> [arch]
+    |> Enum.reduce_while([], fn arch, acc ->
+      case fetch.("hexpm/#{kind}-#{arch}", tag) do
+        {:ok, _tag} -> {:cont, [arch | acc]}
+        :not_found -> {:cont, acc}
+        :unreadable -> {:halt, {:unreadable, arch}}
+      end
     end)
+    |> case do
+      {:unreadable, arch} -> {:unreadable, arch}
+      archs -> {:ok, Enum.reverse(archs)}
+    end
   end
 end
