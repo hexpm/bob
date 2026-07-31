@@ -217,12 +217,12 @@ defmodule Bob.ArtifactsTest do
       assert [%DockerTag{built_at: @docker_built_at}] = Repo.all(DockerTag)
     end
 
-    test "unions archs on conflicting (repo, tag)" do
+    test "takes the archs from the report, so a manifest that loses one shows it" do
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
       Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
-      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["arm64"])
 
       assert Artifacts.docker_tags("hexpm/erlang") ==
-               [{"27.0-ubuntu-noble-20250101", ["amd64", "arm64"]}]
+               [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
     end
 
     test "is idempotent for a repeated single-arch report" do

@@ -38,11 +38,11 @@ defmodule Bob.Artifacts do
       INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $6)
       ON CONFLICT (repo, tag)
+      -- archs is taken from the caller, so a manifest that loses one is visible
+      -- here. manifest_mismatches/3 reads this row to decide whether the
+      -- manifest still spans everything that was built.
       DO UPDATE SET
-        archs = (
-          SELECT array_agg(DISTINCT a ORDER BY a)
-          FROM unnest(docker_tags.archs || EXCLUDED.archs) AS a
-        ),
+        archs = EXCLUDED.archs,
         search = EXCLUDED.search,
         built_at = EXCLUDED.built_at,
         updated_at = EXCLUDED.updated_at
