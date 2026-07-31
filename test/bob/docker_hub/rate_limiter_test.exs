@@ -3,17 +3,34 @@ defmodule Bob.DockerHub.RateLimiterTest do
 
   alias Bob.DockerHub.RateLimiter
 
-  defp start_limiter(opts) do
-    {:ok, pid} = start_supervised({RateLimiter, [name: nil] ++ opts})
+  defp new_clock() do
+    {:ok, clock} = Agent.start_link(fn -> 0 end)
+    clock
+  end
+
+  defp advance(clock, ms), do: Agent.update(clock, &(&1 + ms))
+
+  defp start_limiter(clock, opts \\ []) do
+    opts = [name: nil, clock: fn -> Agent.get(clock, & &1) end, window_ms: 60_000] ++ opts
+    {:ok, pid} = start_supervised({RateLimiter, opts})
     pid
   end
 
-  defp headers(limit, remaining, reset) do
+  defp headers(limit, remaining) do
     [
       {"x-ratelimit-limit", Integer.to_string(limit)},
       {"x-ratelimit-remaining", Integer.to_string(remaining)},
-      {"x-ratelimit-reset", Integer.to_string(reset)}
+      {"x-ratelimit-reset", "1780736952"}
     ]
+  end
+
+  # observe/2 is a cast, so let it land before asserting on what follows.
+  defp sync(limiter), do: :sys.get_state(limiter)
+
+  defp take(limiter, headers) do
+    assert RateLimiter.acquire(limiter) == :ok
+    RateLimiter.observe(headers, limiter)
+    sync(limiter)
   end
 
   defp blocks?(limiter) do
@@ -24,19 +41,17 @@ defmodule Bob.DockerHub.RateLimiterTest do
   end
 
   describe "parse_rate/1" do
-    test "extracts the limit, remaining budget, and reset time" do
-      assert RateLimiter.parse_rate(headers(600, 396, 1_780_736_952)) ==
-               %{limit: 600, remaining: 396, reset: 1_780_736_952}
+    test "extracts the limit and the remaining budget" do
+      assert RateLimiter.parse_rate(headers(600, 396)) == %{limit: 600, remaining: 396}
     end
 
     test "matches header names case-insensitively" do
-      raw = [
-        {"X-RateLimit-Limit", "600"},
-        {"X-RateLimit-Remaining", "10"},
-        {"X-RateLimit-Reset", "1780736952"}
-      ]
+      raw = [{"X-RateLimit-Limit", "600"}, {"X-RateLimit-Remaining", "10"}]
+      assert RateLimiter.parse_rate(raw) == %{limit: 600, remaining: 10}
+    end
 
-      assert RateLimiter.parse_rate(raw) == %{limit: 600, remaining: 10, reset: 1_780_736_952}
+    test "keeps a negative remaining, which is how an overshoot is reported" do
+      assert RateLimiter.parse_rate(headers(600, -534)) == %{limit: 600, remaining: -534}
     end
 
     test "returns nil when the rate-limit headers are absent" do
@@ -44,166 +59,233 @@ defmodule Bob.DockerHub.RateLimiterTest do
     end
 
     test "returns nil when a value is not an integer" do
-      assert RateLimiter.parse_rate(headers(600, 600, 0) ++ [{"x-ratelimit-remaining", "lots"}]) ==
+      assert RateLimiter.parse_rate(headers(600, 600) ++ [{"x-ratelimit-remaining", "lots"}]) ==
                nil
     end
   end
 
-  describe "acquire/1 + observe/2" do
-    test "bursts the whole window immediately, then blocks" do
-      limiter = start_limiter(offset_ms: 0)
-      reset = System.os_time(:second) + 3600
+  describe "the account budget" do
+    test "admits while the budget lasts, then blocks" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
 
-      RateLimiter.observe(headers(5, 5, reset), limiter)
-
-      for _ <- 1..5, do: assert(RateLimiter.acquire(limiter) == :ok)
-      assert blocks?(limiter)
-    end
-
-    test "allows a single calibration probe, then blocks until a response anchors the window" do
-      limiter = start_limiter(offset_ms: 0)
-      assert RateLimiter.acquire(limiter) == :ok
-      assert blocks?(limiter)
-    end
-
-    test "seeds the count from the server's reported usage" do
-      limiter = start_limiter(offset_ms: 0)
-      reset = System.os_time(:second) + 3600
-
-      # remaining 2 of 5 means 3 are already spent, so only 2 more are allowed.
-      RateLimiter.observe(headers(5, 2, reset), limiter)
-
-      assert RateLimiter.acquire(limiter) == :ok
-      assert RateLimiter.acquire(limiter) == :ok
-      assert blocks?(limiter)
-    end
-
-    test "ratchets the count up when external usage outruns ours" do
-      limiter = start_limiter(offset_ms: 0)
-      reset = System.os_time(:second) + 3600
-
-      RateLimiter.observe(headers(5, 5, reset), limiter)
-      assert RateLimiter.acquire(limiter) == :ok
-
-      # Same window now reports only 1 left (something else spent budget): the
-      # count jumps to 4, so just one more grant remains.
-      RateLimiter.observe(headers(5, 1, reset), limiter)
-      assert RateLimiter.acquire(limiter) == :ok
-      assert blocks?(limiter)
-    end
-
-    test "rolls to a fresh window once the reset has passed" do
-      limiter = start_limiter(offset_ms: 0)
-
-      # Window fully spent, but its reset is already in the past.
-      RateLimiter.observe(headers(5, 0, System.os_time(:second) - 1), limiter)
-
-      assert RateLimiter.acquire(limiter) == :ok
-    end
-
-    test "the offset holds the window past the server's stated reset" do
-      limiter = start_limiter(offset_ms: 60_000)
-
-      # Server says the window resets now, but the offset keeps us waiting.
-      RateLimiter.observe(headers(5, 0, System.os_time(:second)), limiter)
+      for remaining <- [4, 3, 2, 1, 0], do: take(limiter, headers(600, remaining))
 
       assert blocks?(limiter)
     end
 
-    test "releases a blocked caller when the window rolls" do
-      limiter = start_limiter(offset_ms: 100)
+    test "a budget spent by another node closes the gate on this one" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
 
-      RateLimiter.observe(headers(5, 0, System.os_time(:second)), limiter)
+      take(limiter, headers(600, 600))
+      take(limiter, headers(600, 1))
 
-      task = Task.async(fn -> RateLimiter.acquire(limiter) end)
-      assert Task.yield(task, 30) == nil
-      assert Task.await(task, 2000) == :ok
-    end
-
-    test "reclaims the probe slot when the probe dies without anchoring the window" do
-      limiter = start_limiter(offset_ms: 0)
-
-      # A caller takes the single calibration probe, then exits without ever
-      # reporting server headers (a non-2xx/429 response or a crash).
-      {pid, ref} = spawn_monitor(fn -> RateLimiter.acquire(limiter) end)
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
-
-      # Without reclaiming the dead probe's slot, the gate would stay shut
-      # forever: window unanchored, count stuck at one, nothing left to roll it.
-      assert RateLimiter.acquire(limiter) == :ok
-    end
-
-    test "reclaims the probe slot when the probe reports a response without rate headers" do
-      limiter = start_limiter(offset_ms: 0)
-
-      assert RateLimiter.acquire(limiter) == :ok
-
-      # The probe's request completed but carried no usable rate headers (a 401,
-      # a 5xx, or a transport error). Its slot is reclaimed even though the
-      # probe process lives on, so a long-lived caller can't wedge the gate.
-      RateLimiter.observe([], limiter)
-
-      refute blocks?(limiter)
-    end
-
-    test "ignores a headerless response from a caller that is not the probe" do
-      limiter = start_limiter(offset_ms: 0)
-      test_pid = self()
-
-      probe =
-        spawn_link(fn ->
-          RateLimiter.acquire(limiter)
-          send(test_pid, :granted)
-
-          receive do
-            :stop -> :ok
-          end
-        end)
-
-      assert_receive :granted
-
-      # A straggler that never held the probe slot reports a header-less
-      # response: the in-flight probe's slot must not be reclaimed on its behalf.
-      RateLimiter.observe([], limiter)
-      assert blocks?(limiter)
-
-      send(probe, :stop)
-    end
-
-    test "keeps the probe's slot when it anchored the window before exiting" do
-      limiter = start_limiter(offset_ms: 0)
-      reset = System.os_time(:second) + 3600
-
-      {pid, ref} =
-        spawn_monitor(fn ->
-          RateLimiter.acquire(limiter)
-          RateLimiter.observe(headers(2, 1, reset), limiter)
-        end)
-
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
-
-      # limit 2 with one already spent by the probe: exactly one grant remains.
       assert RateLimiter.acquire(limiter) == :ok
       assert blocks?(limiter)
+    end
+
+    test "the budget is admitted against headroom for the requests in flight" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 3))
+
+      # Three left on the reading, but each grant also has to clear the set the
+      # server has not answered yet, so the last one is held back.
+      for _ <- 1..2, do: assert(RateLimiter.acquire(limiter) == :ok)
+
+      assert blocks?(limiter)
+    end
+
+    test "a spent budget reopens once the reading has aged out of the window" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 0))
+      assert blocks?(limiter)
+
+      advance(clock, 59_999)
+      assert blocks?(limiter)
+
+      advance(clock, 1)
+      assert RateLimiter.acquire(limiter) == :ok
+    end
+
+    test "a recovered budget is seen as recovered" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 0))
+      assert blocks?(limiter)
+
+      advance(clock, 30_000)
+      RateLimiter.observe(headers(600, 500), limiter)
+      sync(limiter)
+
+      assert RateLimiter.acquire(limiter) == :ok
+    end
+  end
+
+  describe "the unmeasured path" do
+    test "only one request goes until the budget has been measured" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      assert RateLimiter.acquire(limiter) == :ok
+      assert blocks?(limiter)
+
+      RateLimiter.observe(headers(5, 5), limiter)
+      sync(limiter)
+
+      assert RateLimiter.acquire(limiter) == :ok
+    end
+
+    test "responses without rate headers stay bounded by the trailing window" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(2, 2))
+      advance(clock, 60_000)
+
+      # Every response now comes back without usable rate headers, so no reading
+      # is ever established and `limit` plus the trailing sends are the only
+      # thing holding this down.
+      take(limiter, [])
+      take(limiter, [])
+
+      assert blocks?(limiter)
+    end
+
+    test "a reading older than the window is dropped and one request re-establishes it" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 600))
+      advance(clock, 60_000)
+
+      assert RateLimiter.acquire(limiter) == :ok
+      assert blocks?(limiter)
+    end
+
+    test "a response without rate headers releases the slot without changing the budget" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 600))
+      take(limiter, [])
+
+      assert %{remaining: 600, in_flight: 0} = sync(limiter)
     end
   end
 
   describe "throttle/2" do
-    test "a 429 with rate headers holds the gate shut until the window resets" do
-      limiter = start_limiter(offset_ms: 0)
-      reset = System.os_time(:second) + 3600
+    test "a 429 without rate headers is read as a spent budget" do
+      clock = new_clock()
+      limiter = start_limiter(clock, park_ms: 5_000)
 
-      RateLimiter.throttle(headers(600, 0, reset), limiter)
+      take(limiter, headers(600, 600))
 
+      RateLimiter.throttle([], limiter)
+      sync(limiter)
+
+      assert blocks?(limiter)
+
+      # The park alone would have released a burst against the pre-429 reading.
+      advance(clock, 5_000)
       assert blocks?(limiter)
     end
 
-    test "a 429 without rate headers holds the gate shut on the fallback window" do
-      limiter = start_limiter(offset_ms: 0)
+    test "a 429 carrying a budget holds the gate past the park" do
+      clock = new_clock()
+      limiter = start_limiter(clock, park_ms: 5_000)
 
-      RateLimiter.throttle([{"retry-after", "30"}], limiter)
+      take(limiter, headers(600, 600))
 
+      RateLimiter.throttle(headers(600, -534), limiter)
+      sync(limiter)
+
+      advance(clock, 5_000)
       assert blocks?(limiter)
+    end
+  end
+
+  describe "slots" do
+    test "a caller that dies without reporting does not keep its slot" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 3))
+
+      task = Task.async(fn -> RateLimiter.acquire(limiter) end)
+      assert Task.await(task) == :ok
+
+      assert eventually(fn -> sync(limiter).in_flight == 0 end)
+    end
+
+    test "a slot held past the deadline is taken back" do
+      clock = new_clock()
+      limiter = start_limiter(clock, max_hold_ms: 120_000)
+
+      take(limiter, headers(600, 2))
+
+      # A caller that never reports would otherwise hold this for good, and the
+      # gate is a singleton.
+      holder = spawn(fn -> Process.sleep(:infinity) end)
+      send(limiter, :wake)
+      assert RateLimiter.acquire(limiter) == :ok
+      assert sync(limiter).in_flight == 1
+
+      advance(clock, 120_000)
+      send(limiter, :wake)
+      assert sync(limiter).in_flight == 0
+
+      Process.exit(holder, :kill)
+    end
+
+    test "a waiter killed while queued is not handed a slot" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 0))
+
+      task = Task.async(fn -> RateLimiter.acquire(limiter) end)
+      assert Task.yield(task, 50) == nil
+      Task.shutdown(task, :brutal_kill)
+
+      before = :queue.len(sync(limiter).sends)
+
+      # The budget recovers; the corpse must not be handed one of the slots.
+      RateLimiter.observe(headers(600, 600), limiter)
+      sync(limiter)
+
+      assert :queue.len(sync(limiter).sends) == before
+    end
+
+    test "a caller arriving as the gate reopens does not jump the queue" do
+      clock = new_clock()
+      limiter = start_limiter(clock)
+
+      take(limiter, headers(600, 0))
+
+      parent = self()
+      waiter = spawn(fn -> send(parent, {:admitted, RateLimiter.acquire(limiter)}) end)
+      assert eventually(fn -> :queue.len(sync(limiter).waiters) == 1 end)
+
+      advance(clock, 60_000)
+
+      assert RateLimiter.acquire(limiter) == :ok
+      assert_receive {:admitted, :ok}, 500
+
+      Process.exit(waiter, :kill)
+    end
+  end
+
+  defp eventually(fun, attempts \\ 50) do
+    cond do
+      fun.() -> true
+      attempts == 0 -> false
+      true -> Process.sleep(10) && eventually(fun, attempts - 1)
     end
   end
 end

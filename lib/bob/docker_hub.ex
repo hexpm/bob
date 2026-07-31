@@ -3,9 +3,11 @@ defmodule Bob.DockerHub do
 
   @dockerhub_url "https://hub.docker.com/"
 
-  # Caps re-attempts after a 429 so a permanently throttled IP can't loop forever;
-  # each attempt first feeds the limiter, which blocks until the window resets.
-  @max_rate_limit_retries 20
+  # Caps re-attempts after a 429 so a throttled account can't loop forever. Each
+  # attempt takes a slot, which the limiter holds until the budget recovers, and
+  # Bob.HTTP.retry multiplies its own attempts on top, so a small number here
+  # already covers a window's worth of waiting.
+  @max_rate_limit_retries 5
 
   def auth(username, password) do
     url = @dockerhub_url <> "v2/users/login/"
@@ -74,40 +76,42 @@ defmodule Bob.DockerHub do
   end
 
   @doc """
-  Sends `method` to `url` paced by the shared rate limiter: acquires a slot
-  (blocking until the window has budget), feeds the response back so the gate
-  tracks the limit, and waits out 429s up to the retry cap. Returns the final
-  non-429 result for the caller to match on. Every outcome reports to the
-  limiter — a response without usable rate headers, or a transport error,
-  releases the calibration probe's slot — so a failed request can't leave the
-  gate shut for every later caller.
+  Sends `method` to `url` paced by the shared rate limiter, and waits out 429s
+  up to the retry cap. Returns the final non-429 result for the caller to match
+  on.
+
+  A slot is taken per attempt rather than per call, so the retries `Bob.HTTP`
+  makes for a transport error or a 5xx are counted against the budget like any
+  other request. Every attempt reports back, so a failed one can't leave the
+  gate holding a slot that is never returned.
   """
   def paced_request(method, url), do: paced_request(method, url, 0)
 
   defp paced_request(method, url, attempts) do
-    RateLimiter.acquire()
-
     result =
       Bob.HTTP.retry(
         "DockerHub #{url}",
-        fn -> Bob.HTTP.request(method, url, headers(), "", recv_timeout: 20_000) end,
+        fn ->
+          RateLimiter.acquire()
+          result = Bob.HTTP.request(method, url, headers(), "", recv_timeout: 20_000)
+          report(result)
+          result
+        end,
         retry_rate_limit?: false
       )
 
     case result do
-      {:ok, 429, response_headers, _body} when attempts < @max_rate_limit_retries ->
-        RateLimiter.throttle(response_headers)
+      {:ok, 429, _response_headers, _body} when attempts < @max_rate_limit_retries ->
         paced_request(method, url, attempts + 1)
 
-      {:ok, _status, response_headers, _body} ->
-        RateLimiter.observe(response_headers)
-        result
-
-      {:error, _reason} ->
-        RateLimiter.observe([])
+      _other ->
         result
     end
   end
+
+  defp report({:ok, 429, response_headers, _body}), do: RateLimiter.throttle(response_headers)
+  defp report({:ok, _status, response_headers, _body}), do: RateLimiter.observe(response_headers)
+  defp report({:error, _reason}), do: RateLimiter.observe([])
 
   def headers() do
     if token = Application.get_env(:bob, :dockerhub_token) do
