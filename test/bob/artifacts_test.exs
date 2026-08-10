@@ -277,6 +277,27 @@ defmodule Bob.ArtifactsTest do
              ] = Repo.all(DockerTag)
     end
 
+    test "raises work_mem for the swap transaction" do
+      test = self()
+      ref = make_ref()
+
+      :telemetry.attach(
+        ref,
+        Repo.config()[:telemetry_prefix] ++ [:query],
+        fn _event, _measurements, %{query: query}, _config ->
+          # Handlers are global, so only this process's queries count.
+          if self() == test and query =~ "work_mem", do: send(test, {ref, query})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(ref) end)
+
+      replace("hexpm/erlang-amd64", [docker_tag("27.0-ubuntu-noble-20250101", ["amd64"])])
+
+      assert_received {^ref, "SET LOCAL work_mem = '256MB'"}
+    end
+
     test "swaps the staged Docker Hub timestamp into built_at" do
       replace("hexpm/erlang-amd64", [
         docker_tag("27.0-ubuntu-noble-20250101", ["amd64"], @docker_built_at)

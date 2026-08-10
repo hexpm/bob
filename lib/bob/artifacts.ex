@@ -99,6 +99,11 @@ defmodule Bob.Artifacts do
 
     Repo.transaction(
       fn ->
+        # Scoped to this transaction. The insert sorts the whole staged set and
+        # the delete hashes it, up to ~1M rows for hexpm/elixir, which spills at
+        # the 4MB default: a 229MB sort file and 63 hash batches per swap.
+        Repo.query!("SET LOCAL work_mem = '256MB'")
+
         Repo.query!(
           """
           INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
