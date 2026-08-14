@@ -2,6 +2,10 @@
 
 Bob performs automated tasks for the Elixir and Hex projects.
 
+## Public API
+
+Bob provides an unauthenticated JSON API for searching build artifacts and Docker tags. See the [API documentation](docs/api.md).
+
 ## Erlang builds
 
 Erlang builds compiled on Ubuntu LTS versions are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
