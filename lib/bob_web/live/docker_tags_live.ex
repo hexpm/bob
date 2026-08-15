@@ -195,7 +195,24 @@ defmodule BobWeb.DockerTagsLive do
                 title="Copy tag"
               >
                 <code class="dk-tag-code" title={d.tag}><%= d.tag %></code>
-                <.icon name="copy" size={14} class="dk-tag-copy__icon" />
+                <.icon
+                  name="copy"
+                  size={14}
+                  class="dk-tag-copy__icon dk-tag-copy__icon--copy"
+                />
+                <.icon
+                  name="check"
+                  size={14}
+                  class="dk-tag-copy__icon dk-tag-copy__icon--copied"
+                />
+                <.icon name="x" size={14} class="dk-tag-copy__icon dk-tag-copy__icon--error" />
+                <span
+                  class="dk-tag-copy__status"
+                  data-copy-status
+                  role="status"
+                  aria-live="polite"
+                >
+                </span>
               </button>
               <span
                 :if={MapSet.member?(@reserved, d.id)}

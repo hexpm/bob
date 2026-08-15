@@ -72,6 +72,32 @@ defmodule Bob.Repo.Migrations.IndexDockerTagsByVersion do
       id DESC
     )
     """)
+
+    execute("""
+    DO $$
+    DECLARE
+      invalid_indexes text;
+    BEGIN
+      SELECT string_agg(index_class.relname, ', ' ORDER BY index_class.relname)
+      INTO invalid_indexes
+      FROM pg_index AS index_metadata
+      JOIN pg_class AS index_class ON index_class.oid = index_metadata.indexrelid
+      JOIN pg_namespace AS namespace ON namespace.oid = index_class.relnamespace
+      WHERE namespace.nspname = current_schema()
+        AND index_class.relname IN (
+          'docker_tags_elixir_version_desc_index',
+          'docker_tags_erlang_version_desc_index',
+          'docker_tags_os_version_desc_index',
+          'docker_tags_os_desc_index'
+        )
+        AND NOT index_metadata.indisvalid;
+
+      IF invalid_indexes IS NOT NULL THEN
+        RAISE EXCEPTION 'invalid Docker tag sort indexes: %', invalid_indexes;
+      END IF;
+    END
+    $$
+    """)
   end
 
   def down do

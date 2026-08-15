@@ -724,6 +724,10 @@ pre,
   color: var(--color-blue-700);
 }
 
+.tbl-sort:disabled {
+  cursor: default;
+}
+
 .tbl-sort:focus-visible {
   border-radius: 3px;
   outline: 2px solid var(--color-blue-400);
@@ -1097,6 +1101,7 @@ pre,
 }
 
 .dk-tag-copy {
+  position: relative;
   display: flex;
   flex: 1;
   align-items: center;
@@ -1117,6 +1122,31 @@ pre,
 .dk-tag-copy__icon {
   flex: none;
   color: var(--color-grey-400);
+}
+
+.dk-tag-copy__icon--copied,
+.dk-tag-copy__icon--error {
+  display: none;
+}
+
+.dk-tag-copy[data-copy-state="copied"] .dk-tag-copy__icon--copy,
+.dk-tag-copy[data-copy-state="error"] .dk-tag-copy__icon--copy {
+  display: none;
+}
+
+.dk-tag-copy[data-copy-state="copied"] .dk-tag-copy__icon--copied,
+.dk-tag-copy[data-copy-state="error"] .dk-tag-copy__icon--error {
+  display: block;
+}
+
+.dk-tag-copy__status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .dk-tag-copy:hover .dk-tag-code,

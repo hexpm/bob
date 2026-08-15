@@ -149,6 +149,13 @@ defmodule BobWeb.DockerTagsLiveTest do
     assert_patch(view, ~p"/docker?repo=hexpm%2Felixir&elixir_version=1.20&sort=erlang_version")
   end
 
+  test "defaults malformed sort params to build time", %{conn: conn} do
+    {:ok, view, html} = live(conn, "/docker?sort[]=os")
+
+    assert html =~ ~s(aria-label="built sort, descending, priority 1")
+    assert has_element?(view, "#docker-sort-built_at[disabled]")
+  end
+
   test "filters by structured inputs", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/docker")
 
@@ -214,7 +221,8 @@ defmodule BobWeb.DockerTagsLiveTest do
     assert html =~ ~s(id="docker-sort-os")
     assert html =~ ~s(id="docker-sort-os_version")
     assert html =~ ~s(id="docker-sort-built_at")
-    assert html =~ ~s(aria-label="Remove built sort, priority 1")
+    assert html =~ ~s(aria-label="built sort, descending, priority 1")
+    assert html =~ ~r/id="docker-sort-built_at"[^>]*disabled/
   end
 
   test "renders parsed tag components in separate columns", %{conn: conn} do
@@ -237,6 +245,10 @@ defmodule BobWeb.DockerTagsLiveTest do
              ~r/<button[^>]*phx-hook="CopyToClipboard"[^>]*data-copy-text="1\.18\.0-erlang-27\.0-ubuntu-noble-20250101"/
 
     assert html =~ ~s(aria-label="Copy 1.18.0-erlang-27.0-ubuntu-noble-20250101")
+    assert html =~ ~s(class="dk-tag-copy__icon dk-tag-copy__icon--copy")
+    assert html =~ ~s(class="dk-tag-copy__icon dk-tag-copy__icon--copied")
+    assert html =~ ~s(class="dk-tag-copy__icon dk-tag-copy__icon--error")
+    assert html =~ ~r/<span[^>]*data-copy-status[^>]*role="status"[^>]*aria-live="polite"/
 
     assert html =~
              ~s(title="1.18.0-erlang-27.0-ubuntu-noble-20250101">1.18.0-erlang-27.0-ubuntu-noble-20250101</code>)

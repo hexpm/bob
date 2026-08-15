@@ -10,6 +10,7 @@ Hooks.CopyToClipboard = {
   mounted() {
     this.originalLabel = this.el.getAttribute("aria-label")
     this.originalTitle = this.el.getAttribute("title")
+    this.status = this.el.querySelector("[data-copy-status]")
 
     this.copy = async () => {
       try {
@@ -17,6 +18,7 @@ Hooks.CopyToClipboard = {
         this.el.dataset.copyState = "copied"
         this.el.setAttribute("aria-label", `Copied ${this.el.dataset.copyText}`)
         this.el.setAttribute("title", "Copied tag")
+        this.status.textContent = "Copied tag"
 
         window.clearTimeout(this.resetTimer)
         this.resetTimer = window.setTimeout(() => this.reset(), 1500)
@@ -24,6 +26,10 @@ Hooks.CopyToClipboard = {
         this.el.dataset.copyState = "error"
         this.el.setAttribute("aria-label", `Couldn't copy ${this.el.dataset.copyText}`)
         this.el.setAttribute("title", "Couldn't copy tag")
+        this.status.textContent = "Couldn't copy tag"
+
+        window.clearTimeout(this.resetTimer)
+        this.resetTimer = window.setTimeout(() => this.reset(), 1500)
       }
     }
 
@@ -39,6 +45,7 @@ Hooks.CopyToClipboard = {
     delete this.el.dataset.copyState
     this.el.setAttribute("aria-label", this.originalLabel)
     this.el.setAttribute("title", this.originalTitle)
+    this.status.textContent = ""
   }
 }
 

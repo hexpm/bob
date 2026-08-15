@@ -89,7 +89,8 @@ defmodule BobWeb.CoreComponents do
                 class={["tbl-sort", sort_position(@sort, col[:sort_field]) && "tbl-sort--active"]}
                 phx-click={@sort_event}
                 phx-value-field={col[:sort_field]}
-                aria-label={sort_label(col[:label], sort_position(@sort, col[:sort_field]))}
+                disabled={default_sort?(@sort, col[:sort_field])}
+                aria-label={sort_label(col[:label], @sort, col[:sort_field])}
               >
                 <span><%= col[:label] %></span>
                 <span
@@ -284,8 +285,18 @@ defmodule BobWeb.CoreComponents do
   defp sort_aria([field | _rest], field), do: "descending"
   defp sort_aria(_sort, _field), do: nil
 
-  defp sort_label(label, nil), do: "Sort by #{label}, descending"
-  defp sort_label(label, position), do: "Remove #{label} sort, priority #{position}"
+  defp default_sort?(["built_at"], "built_at"), do: true
+  defp default_sort?(_sort, _field), do: false
+
+  defp sort_label(label, ["built_at"], "built_at"),
+    do: "#{label} sort, descending, priority 1"
+
+  defp sort_label(label, sort, field) do
+    case sort_position(sort, field) do
+      nil -> "Sort by #{label}, descending"
+      position -> "Remove #{label} sort, priority #{position}"
+    end
+  end
 
   attr(:name, :string, required: true)
   attr(:value, :string, default: "")

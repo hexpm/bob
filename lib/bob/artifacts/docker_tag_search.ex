@@ -41,14 +41,15 @@ defmodule Bob.Artifacts.DockerTagSearch do
     end
   end
 
-  def parse_sort(params) do
-    params
-    |> Map.get("sort", "")
+  def parse_sort(%{"sort" => sort}) when is_binary(sort) do
+    sort
     |> String.split(",", trim: true)
     |> Enum.filter(&(&1 in @sortable_fields))
     |> Enum.uniq()
     |> default_sort()
   end
+
+  def parse_sort(_params), do: ["built_at"]
 
   def encode_sort(sort), do: Enum.join(sort, ",")
 

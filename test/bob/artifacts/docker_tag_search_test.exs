@@ -33,6 +33,8 @@ defmodule Bob.Artifacts.DockerTagSearchTest do
 
     assert DockerTagSearch.parse_sort(%{"sort" => "unknown,os,os"}) == ["os"]
     assert DockerTagSearch.parse_sort(%{"sort" => "unknown"}) == ["built_at"]
+    assert DockerTagSearch.parse_sort(%{"sort" => ["os"]}) == ["built_at"]
+    assert DockerTagSearch.parse_sort(%{"sort" => %{"field" => "os"}}) == ["built_at"]
     assert DockerTagSearch.parse_sort(%{}) == ["built_at"]
   end
 

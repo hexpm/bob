@@ -139,6 +139,12 @@ defmodule BobWeb.PublicApiTest do
                "1.20.1-erlang-30.0-debian-trixie-20260610-slim"
     end
 
+    test "defaults malformed sort params to build time", %{conn: conn} do
+      body = conn |> get("/api/docker?sort[]=os") |> json_response(200)
+
+      assert body["total"] == 3
+    end
+
     test "a tag prefix drops the structured filters, matching the form", %{conn: conn} do
       body =
         conn
