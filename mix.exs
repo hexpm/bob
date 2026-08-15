@@ -27,7 +27,10 @@ defmodule Bob.Mixfile do
 
   defp deps() do
     [
-      {:tidewave, "~> 0.5", only: [:dev]},
+      {:tidewave,
+       github: "tidewave-ai/tidewave_phoenix",
+       ref: "0a5b104313ea090c71b2ca4dba3a461c27a684bb",
+       only: [:dev]},
       {:ecto_sql, "~> 3.12"},
       {:ex_aws_s3, "~> 2.0"},
       {:finch, "~> 0.19"},

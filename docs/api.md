@@ -12,7 +12,7 @@ Every response includes:
 | `offset` | Offset used for the current page. |
 | `page_size` | Maximum number of records returned per page. This is always `100`. |
 
-Results are ordered by build time, newest first.
+Results are ordered by build time, newest first, unless an endpoint documents another sort option.
 
 ## Build artifacts
 
@@ -87,6 +87,7 @@ Example response, with all but the first matching artifact omitted:
 | `erlang_version` | Prefix match against the Erlang version parsed from the tag. |
 | `os` | Prefix match against the operating system parsed from the tag. |
 | `os_version` | Prefix match against the operating system version parsed from the tag. |
+| `sort` | Comma-separated descending sort keys in precedence order: `elixir_version`, `erlang_version`, `os`, `os_version`, or `built_at`. Defaults to `built_at`. Version keys use numeric-aware ordering, with a stable release before prereleases of the same release. Build time and ID break remaining ties. |
 | `offset` | Number of matching records to skip. Defaults to `0`. |
 
 When multiple filters are present, a result must match all of them. If `tag` is present, the API ignores `elixir_version`, `erlang_version`, `os`, and `os_version`. The `repo` and `arch` filters still apply.

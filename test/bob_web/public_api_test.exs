@@ -115,6 +115,30 @@ defmodule BobWeb.PublicApiTest do
       assert Enum.map(body["tags"], & &1["tag"]) == ["1.18.0-erlang-27.0-ubuntu-noble-20250101"]
     end
 
+    test "sorts by multiple parsed fields", %{conn: conn} do
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.20.1-erlang-29.0.2-debian-trixie-20260610-slim",
+        ["amd64", "arm64"],
+        ~U[2025-01-01 00:00:00Z]
+      )
+
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.20.1-erlang-30.0-debian-trixie-20260610-slim",
+        ["amd64", "arm64"],
+        ~U[2025-01-01 00:00:00Z]
+      )
+
+      body =
+        conn
+        |> get("/api/docker?repo=hexpm%2Felixir&sort=elixir_version%2Cerlang_version")
+        |> json_response(200)
+
+      assert hd(body["tags"])["tag"] ==
+               "1.20.1-erlang-30.0-debian-trixie-20260610-slim"
+    end
+
     test "a tag prefix drops the structured filters, matching the form", %{conn: conn} do
       body =
         conn

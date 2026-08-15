@@ -62,10 +62,13 @@ defmodule BobWeb.CoreComponents do
 
   attr(:rows, :list, required: true)
   attr(:class, :string, default: nil)
+  attr(:sort, :list, default: [])
+  attr(:sort_event, :string, default: nil)
 
   slot :col, required: true do
     attr(:label, :string)
     attr(:class, :string)
+    attr(:sort_field, :string)
   end
 
   def table(assigns) do
@@ -74,7 +77,32 @@ defmodule BobWeb.CoreComponents do
       <table class={["jt", @class]}>
         <thead>
           <tr>
-            <th :for={col <- @col} class={col[:class]}><%= col[:label] %></th>
+            <th
+              :for={col <- @col}
+              class={col[:class]}
+              aria-sort={sort_aria(@sort, col[:sort_field])}
+            >
+              <button
+                :if={@sort_event && col[:sort_field]}
+                id={"docker-sort-#{col[:sort_field]}"}
+                type="button"
+                class={["tbl-sort", sort_position(@sort, col[:sort_field]) && "tbl-sort--active"]}
+                phx-click={@sort_event}
+                phx-value-field={col[:sort_field]}
+                aria-label={sort_label(col[:label], sort_position(@sort, col[:sort_field]))}
+              >
+                <span><%= col[:label] %></span>
+                <span
+                  :if={position = sort_position(@sort, col[:sort_field])}
+                  class="tbl-sort__position"
+                  aria-hidden="true"
+                >
+                  <.icon name="chevD" size={12} />
+                  <%= position %>
+                </span>
+              </button>
+              <%= if !@sort_event || !col[:sort_field], do: col[:label] %>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -246,6 +274,19 @@ defmodule BobWeb.CoreComponents do
     """
   end
 
+  defp sort_position(sort, field) do
+    case Enum.find_index(sort, &(&1 == field)) do
+      nil -> nil
+      index -> index + 1
+    end
+  end
+
+  defp sort_aria([field | _rest], field), do: "descending"
+  defp sort_aria(_sort, _field), do: nil
+
+  defp sort_label(label, nil), do: "Sort by #{label}, descending"
+  defp sort_label(label, position), do: "Remove #{label} sort, priority #{position}"
+
   attr(:name, :string, required: true)
   attr(:value, :string, default: "")
   attr(:placeholder, :string, required: true)
@@ -267,6 +308,12 @@ defmodule BobWeb.CoreComponents do
 
   defp icon_paths("search"), do: ["M21 21l-4.34-4.34M19 11a8 8 0 11-16 0 8 8 0 0116 0z"]
   defp icon_paths("check"), do: ["M4.5 12.75l6 6 9-13.5"]
+
+  defp icon_paths("copy"),
+    do: [
+      "M8.25 7.5V5.25A2.25 2.25 0 0110.5 3h8.25A2.25 2.25 0 0121 5.25v8.25a2.25 2.25 0 01-2.25 2.25H16.5M5.25 8.25h8.25a2.25 2.25 0 012.25 2.25v8.25A2.25 2.25 0 0113.5 21H5.25A2.25 2.25 0 013 18.75V10.5a2.25 2.25 0 012.25-2.25z"
+    ]
+
   defp icon_paths("x"), do: ["M6 18L18 6M6 6l12 12"]
   defp icon_paths("bolt"), do: ["M3.75 13.5l10.5-11.25-1.5 9h6.75L9 22.5l1.5-9h-6.75z"]
   defp icon_paths("clock"), do: ["M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"]

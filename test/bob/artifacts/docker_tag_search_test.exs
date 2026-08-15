@@ -15,6 +15,45 @@ defmodule Bob.Artifacts.DockerTagSearchTest do
 
     assert DockerTagSearch.arches() == ["amd64", "arm64"]
     assert DockerTagSearch.oses() == ["alpine", "debian", "ubuntu"]
+
+    assert DockerTagSearch.sortable_fields() == [
+             "elixir_version",
+             "erlang_version",
+             "os",
+             "os_version",
+             "built_at"
+           ]
+  end
+
+  test "parses ordered sort fields and defaults invalid values to build date" do
+    assert DockerTagSearch.parse_sort(%{"sort" => "elixir_version,erlang_version"}) == [
+             "elixir_version",
+             "erlang_version"
+           ]
+
+    assert DockerTagSearch.parse_sort(%{"sort" => "unknown,os,os"}) == ["os"]
+    assert DockerTagSearch.parse_sort(%{"sort" => "unknown"}) == ["built_at"]
+    assert DockerTagSearch.parse_sort(%{}) == ["built_at"]
+  end
+
+  test "encodes and toggles multi-column sorts" do
+    assert DockerTagSearch.encode_sort(["elixir_version", "erlang_version"]) ==
+             "elixir_version,erlang_version"
+
+    assert DockerTagSearch.toggle_sort(["built_at"], "elixir_version") == ["elixir_version"]
+
+    assert DockerTagSearch.toggle_sort(["elixir_version"], "erlang_version") == [
+             "elixir_version",
+             "erlang_version"
+           ]
+
+    assert DockerTagSearch.toggle_sort(
+             ["elixir_version", "erlang_version"],
+             "elixir_version"
+           ) == ["erlang_version"]
+
+    assert DockerTagSearch.toggle_sort(["elixir_version"], "elixir_version") == ["built_at"]
+    assert DockerTagSearch.toggle_sort(["built_at"], "unknown") == ["built_at"]
   end
 
   test "parses per-arch Erlang tags" do
