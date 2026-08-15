@@ -145,6 +145,32 @@ defmodule BobWeb.PublicApiTest do
       assert body["total"] == 3
     end
 
+    test "treats build time as an exclusive sort", %{conn: conn} do
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "99.0.0-erlang-99.0-alpine-3.22.0",
+        ["amd64", "arm64"],
+        ~U[2025-01-01 00:00:00Z]
+      )
+
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.0.0-erlang-1.0-alpine-3.22.1",
+        ["amd64", "arm64"],
+        ~U[2026-01-01 00:00:00Z]
+      )
+
+      body =
+        conn
+        |> get("/api/docker?os=alpine&sort=elixir_version%2Cbuilt_at")
+        |> json_response(200)
+
+      assert Enum.map(body["tags"], & &1["tag"]) == [
+               "1.0.0-erlang-1.0-alpine-3.22.1",
+               "99.0.0-erlang-99.0-alpine-3.22.0"
+             ]
+    end
+
     test "a tag prefix drops the structured filters, matching the form", %{conn: conn} do
       body =
         conn

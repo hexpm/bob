@@ -156,6 +156,23 @@ defmodule BobWeb.DockerTagsLiveTest do
     assert has_element?(view, "#docker-sort-built_at[disabled]")
   end
 
+  test "treats build time as an exclusive sort", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/docker?sort=elixir_version%2Cerlang_version")
+
+    view
+    |> element("#docker-sort-built_at")
+    |> render_click()
+
+    assert_patch(view, ~p"/docker")
+    assert has_element?(view, "#docker-sort-built_at[disabled]")
+
+    view
+    |> element("#docker-sort-elixir_version")
+    |> render_click()
+
+    assert_patch(view, ~p"/docker?sort=elixir_version")
+  end
+
   test "filters by structured inputs", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/docker")
 

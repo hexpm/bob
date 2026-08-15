@@ -33,6 +33,8 @@ defmodule Bob.Artifacts.DockerTagSearchTest do
 
     assert DockerTagSearch.parse_sort(%{"sort" => "unknown,os,os"}) == ["os"]
     assert DockerTagSearch.parse_sort(%{"sort" => "unknown"}) == ["built_at"]
+    assert DockerTagSearch.parse_sort(%{"sort" => "built_at,elixir_version"}) == ["built_at"]
+    assert DockerTagSearch.parse_sort(%{"sort" => "elixir_version,built_at"}) == ["built_at"]
     assert DockerTagSearch.parse_sort(%{"sort" => ["os"]}) == ["built_at"]
     assert DockerTagSearch.parse_sort(%{"sort" => %{"field" => "os"}}) == ["built_at"]
     assert DockerTagSearch.parse_sort(%{}) == ["built_at"]
@@ -55,6 +57,11 @@ defmodule Bob.Artifacts.DockerTagSearchTest do
            ) == ["erlang_version"]
 
     assert DockerTagSearch.toggle_sort(["elixir_version"], "elixir_version") == ["built_at"]
+
+    assert DockerTagSearch.toggle_sort(["elixir_version", "erlang_version"], "built_at") == [
+             "built_at"
+           ]
+
     assert DockerTagSearch.toggle_sort(["built_at"], "unknown") == ["built_at"]
   end
 

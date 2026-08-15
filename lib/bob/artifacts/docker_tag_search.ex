@@ -46,12 +46,14 @@ defmodule Bob.Artifacts.DockerTagSearch do
     |> String.split(",", trim: true)
     |> Enum.filter(&(&1 in @sortable_fields))
     |> Enum.uniq()
-    |> default_sort()
+    |> normalize_sort()
   end
 
   def parse_sort(_params), do: ["built_at"]
 
   def encode_sort(sort), do: Enum.join(sort, ",")
+
+  def toggle_sort(_sort, "built_at"), do: ["built_at"]
 
   def toggle_sort(["built_at"], field) when field != "built_at" and field in @sortable_fields,
     do: [field]
@@ -60,7 +62,7 @@ defmodule Bob.Artifacts.DockerTagSearch do
     if field in sort do
       sort
       |> List.delete(field)
-      |> default_sort()
+      |> normalize_sort()
     else
       sort ++ [field]
     end
@@ -68,8 +70,8 @@ defmodule Bob.Artifacts.DockerTagSearch do
 
   def toggle_sort(sort, _field), do: sort
 
-  defp default_sort([]), do: ["built_at"]
-  defp default_sort(sort), do: sort
+  defp normalize_sort([]), do: ["built_at"]
+  defp normalize_sort(sort), do: if("built_at" in sort, do: ["built_at"], else: sort)
 
   defp structured_param(_params, _key, tag) when tag != "", do: ""
   defp structured_param(params, key, _tag), do: params[key] || ""
