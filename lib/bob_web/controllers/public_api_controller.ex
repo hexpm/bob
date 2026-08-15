@@ -21,7 +21,8 @@ defmodule BobWeb.PublicApiController do
   def docker_tags(conn, params) do
     offset = DockerTagSearch.parse_offset(params)
     filters = DockerTagSearch.parse_filters(params)
-    page = Artifacts.docker_tag_page(filters, DockerTagSearch.page_size(), offset)
+    sort = DockerTagSearch.parse_sort(params)
+    page = Artifacts.docker_tag_page(filters, DockerTagSearch.page_size(), offset, sort)
 
     json(conn, envelope(page, :tags, offset, DockerTagSearch.page_size(), &docker_tag/1))
   end

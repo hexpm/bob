@@ -10,6 +10,7 @@ defmodule Bob.Artifacts.DockerTagSearch do
 
   @page 100
   @filter_keys ~w(repo tag arch elixir_version erlang_version os os_version)a
+  @sortable_fields ~w(elixir_version erlang_version os os_version built_at)
 
   def repos(), do: Enum.sort(@erlang_repos ++ @elixir_repos)
   def arches(), do: @archs
@@ -17,6 +18,7 @@ defmodule Bob.Artifacts.DockerTagSearch do
 
   def page_size(), do: @page
   def filter_keys(), do: @filter_keys
+  def sortable_fields(), do: @sortable_fields
 
   def parse_filters(params) do
     tag = params["tag"] || ""
@@ -38,6 +40,38 @@ defmodule Bob.Artifacts.DockerTagSearch do
       _ -> 0
     end
   end
+
+  def parse_sort(%{"sort" => sort}) when is_binary(sort) do
+    sort
+    |> String.split(",", trim: true)
+    |> Enum.filter(&(&1 in @sortable_fields))
+    |> Enum.uniq()
+    |> normalize_sort()
+  end
+
+  def parse_sort(_params), do: ["built_at"]
+
+  def encode_sort(sort), do: Enum.join(sort, ",")
+
+  def toggle_sort(_sort, "built_at"), do: ["built_at"]
+
+  def toggle_sort(["built_at"], field) when field != "built_at" and field in @sortable_fields,
+    do: [field]
+
+  def toggle_sort(sort, field) when field in @sortable_fields do
+    if field in sort do
+      sort
+      |> List.delete(field)
+      |> normalize_sort()
+    else
+      sort ++ [field]
+    end
+  end
+
+  def toggle_sort(sort, _field), do: sort
+
+  defp normalize_sort([]), do: ["built_at"]
+  defp normalize_sort(sort), do: if("built_at" in sort, do: ["built_at"], else: sort)
 
   defp structured_param(_params, _key, tag) when tag != "", do: ""
   defp structured_param(params, key, _tag), do: params[key] || ""

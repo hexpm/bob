@@ -115,6 +115,62 @@ defmodule BobWeb.PublicApiTest do
       assert Enum.map(body["tags"], & &1["tag"]) == ["1.18.0-erlang-27.0-ubuntu-noble-20250101"]
     end
 
+    test "sorts by multiple parsed fields", %{conn: conn} do
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.20.1-erlang-29.0.2-debian-trixie-20260610-slim",
+        ["amd64", "arm64"],
+        ~U[2025-01-01 00:00:00Z]
+      )
+
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.20.1-erlang-30.0-debian-trixie-20260610-slim",
+        ["amd64", "arm64"],
+        ~U[2025-01-01 00:00:00Z]
+      )
+
+      body =
+        conn
+        |> get("/api/docker?repo=hexpm%2Felixir&sort=elixir_version%2Cerlang_version")
+        |> json_response(200)
+
+      assert hd(body["tags"])["tag"] ==
+               "1.20.1-erlang-30.0-debian-trixie-20260610-slim"
+    end
+
+    test "defaults malformed sort params to build time", %{conn: conn} do
+      body = conn |> get("/api/docker?sort[]=os") |> json_response(200)
+
+      assert body["total"] == 3
+    end
+
+    test "treats build time as an exclusive sort", %{conn: conn} do
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "99.0.0-erlang-99.0-alpine-3.22.0",
+        ["amd64", "arm64"],
+        ~U[2025-01-01 00:00:00Z]
+      )
+
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.0.0-erlang-1.0-alpine-3.22.1",
+        ["amd64", "arm64"],
+        ~U[2026-01-01 00:00:00Z]
+      )
+
+      body =
+        conn
+        |> get("/api/docker?os=alpine&sort=elixir_version%2Cbuilt_at")
+        |> json_response(200)
+
+      assert Enum.map(body["tags"], & &1["tag"]) == [
+               "1.0.0-erlang-1.0-alpine-3.22.1",
+               "99.0.0-erlang-99.0-alpine-3.22.0"
+             ]
+    end
+
     test "a tag prefix drops the structured filters, matching the form", %{conn: conn} do
       body =
         conn

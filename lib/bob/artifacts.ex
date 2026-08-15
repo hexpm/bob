@@ -238,10 +238,10 @@ defmodule Bob.Artifacts do
     }
   end
 
-  def search_docker_tags(filters \\ %{}, limit \\ 100, offset \\ 0) do
+  def search_docker_tags(filters \\ %{}, limit \\ 100, offset \\ 0, sort \\ ["built_at"]) do
     filters
     |> docker_tag_search_query()
-    |> order_by([d], desc: d.built_at, desc: d.id)
+    |> docker_tag_order(sort)
     |> limit(^limit)
     |> offset(^offset)
     |> Repo.all()
@@ -260,8 +260,8 @@ defmodule Bob.Artifacts do
   with the page if tags change between them, and the count is skipped entirely
   when the first page comes back empty.
   """
-  def docker_tag_page(filters, limit, offset) do
-    results = search_docker_tags(filters, limit, offset)
+  def docker_tag_page(filters, limit, offset, sort \\ ["built_at"]) do
+    results = search_docker_tags(filters, limit, offset, sort)
 
     total =
       if offset == 0 and results == [] do
@@ -320,6 +320,49 @@ defmodule Bob.Artifacts do
     |> search_metadata_prefix_filter(:os, Map.get(filters, :os))
     |> search_metadata_prefix_filter(:os_version, Map.get(filters, :os_version))
   end
+
+  defp docker_tag_order(query, sort) do
+    query = Enum.reduce(sort, query, &docker_tag_order_field/2)
+    query = if "built_at" in sort, do: query, else: docker_tag_order_field("built_at", query)
+    order_by(query, [d], desc: d.id)
+  end
+
+  defp docker_tag_order_field("elixir_version", query) do
+    order_by(query, [d],
+      desc_nulls_last:
+        fragment(
+          "docker_tag_natural_sort_key(split_part(?->>'elixir_version', '-', 1))",
+          d.search
+        ),
+      desc_nulls_last: fragment("strpos(?->>'elixir_version', '-') = 0", d.search),
+      desc_nulls_last: fragment("docker_tag_natural_sort_key(?->>'elixir_version')", d.search)
+    )
+  end
+
+  defp docker_tag_order_field("erlang_version", query) do
+    order_by(query, [d],
+      desc_nulls_last:
+        fragment(
+          "docker_tag_natural_sort_key(split_part(?->>'erlang_version', '-', 1))",
+          d.search
+        ),
+      desc_nulls_last: fragment("strpos(?->>'erlang_version', '-') = 0", d.search),
+      desc_nulls_last: fragment("docker_tag_natural_sort_key(?->>'erlang_version')", d.search)
+    )
+  end
+
+  defp docker_tag_order_field("os", query) do
+    order_by(query, [d], desc_nulls_last: fragment("?->>'os'", d.search))
+  end
+
+  defp docker_tag_order_field("os_version", query) do
+    order_by(query, [d],
+      desc_nulls_last: fragment("docker_tag_natural_sort_key(?->>'os_version')", d.search)
+    )
+  end
+
+  defp docker_tag_order_field("built_at", query), do: order_by(query, [d], desc: d.built_at)
+  defp docker_tag_order_field(_sort, query), do: query
 
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil

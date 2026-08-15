@@ -756,6 +756,113 @@ defmodule Bob.ArtifactsTest do
                Bob.Artifacts.search_docker_tags(%{})
     end
 
+    test "search_docker_tags/4 sorts language releases numerically and stable before matching prereleases" do
+      older = ~U[2025-01-01 00:00:00Z]
+      newer = ~U[2026-01-01 00:00:00Z]
+
+      for {elixir, erlang, built_at} <- [
+            {"1.9.0", "9.3", newer},
+            {"1.19.0", "28.3", newer},
+            {"1.20.1", "29.0.2", older},
+            {"1.21.0-rc.1", "30.0-rc1", newer},
+            {"1.21.0-rc.2", "30.0-rc2", newer},
+            {"1.21.0-rc.10", "30.0-rc10", newer},
+            {"1.21.0", "30.0", older}
+          ] do
+        Artifacts.add_docker_tag(
+          "hexpm/elixir",
+          "#{elixir}-erlang-#{erlang}-debian-trixie-20260610-slim",
+          ["amd64", "arm64"],
+          built_at
+        )
+      end
+
+      elixir_versions =
+        Artifacts.search_docker_tags(%{repo: "hexpm/elixir"}, 100, 0, ["elixir_version"])
+        |> Enum.map(& &1.search["elixir_version"])
+
+      assert elixir_versions == [
+               "1.21.0",
+               "1.21.0-rc.10",
+               "1.21.0-rc.2",
+               "1.21.0-rc.1",
+               "1.20.1",
+               "1.19.0",
+               "1.9.0"
+             ]
+
+      erlang_versions =
+        Artifacts.search_docker_tags(%{repo: "hexpm/elixir"}, 100, 0, ["erlang_version"])
+        |> Enum.map(& &1.search["erlang_version"])
+
+      assert erlang_versions == [
+               "30.0",
+               "30.0-rc10",
+               "30.0-rc2",
+               "30.0-rc1",
+               "29.0.2",
+               "28.3",
+               "9.3"
+             ]
+    end
+
+    test "search_docker_tags/4 sorts OS versions by numeric components" do
+      for os_version <- [
+            "trixie-20260609-slim",
+            "trixie-20260610-slim",
+            "trixie-99999999999999999999-slim"
+          ] do
+        Artifacts.add_docker_tag(
+          "hexpm/elixir",
+          "1.20.1-erlang-29.0.2-debian-#{os_version}",
+          ["amd64", "arm64"],
+          ~U[2025-01-01 00:00:00Z]
+        )
+      end
+
+      os_versions =
+        Artifacts.search_docker_tags(%{repo: "hexpm/elixir"}, 100, 0, ["os_version"])
+        |> Enum.map(& &1.search["os_version"])
+
+      assert os_versions == [
+               "trixie-99999999999999999999-slim",
+               "trixie-20260610-slim",
+               "trixie-20260609-slim"
+             ]
+    end
+
+    test "search_docker_tags/4 applies sort fields in order" do
+      for {elixir, erlang} <- [
+            {"1.20.0", "28.3"},
+            {"1.20.0", "29.0"},
+            {"1.19.0", "30.0"}
+          ] do
+        Artifacts.add_docker_tag(
+          "hexpm/elixir",
+          "#{elixir}-erlang-#{erlang}-alpine-3.22.1",
+          ["amd64", "arm64"],
+          ~U[2025-01-01 00:00:00Z]
+        )
+      end
+
+      versions = fn sort ->
+        Artifacts.search_docker_tags(%{repo: "hexpm/elixir"}, 100, 0, sort)
+        |> Enum.map(&{&1.search["elixir_version"], &1.search["erlang_version"]})
+      end
+
+      assert versions.(["elixir_version", "erlang_version"]) == [
+               {"1.20.0", "29.0"},
+               {"1.20.0", "28.3"},
+               {"1.19.0", "30.0"}
+             ]
+
+      assert versions.(["erlang_version", "elixir_version"]) == [
+               {"1.19.0", "30.0"},
+               {"1.20.0", "29.0"},
+               {"1.20.0", "28.3"}
+             ]
+    end
+
     test "search_artifacts/1 filters by free-text on name" do
       assert [%{name: "OTP-27.0"}] = Bob.Artifacts.search_artifacts(%{query: "27.0"})
     end

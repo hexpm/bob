@@ -27,7 +27,7 @@ defmodule Bob.Mixfile do
 
   defp deps() do
     [
-      {:tidewave, "~> 0.5", only: [:dev]},
+      {:tidewave, "~> 0.8.4", only: [:dev]},
       {:ecto_sql, "~> 3.12"},
       {:ex_aws_s3, "~> 2.0"},
       {:finch, "~> 0.19"},
