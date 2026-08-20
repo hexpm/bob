@@ -16,11 +16,14 @@ defmodule BobWeb.Endpoint do
   plug(Bob.Plug.Forwarded)
   plug(Bob.Plug.Status)
 
+  # only_matching also serves the digested /favicon-<hash>.ico that
+  # ~p"/favicon.ico" resolves to when the static manifest is loaded.
   plug(Plug.Static,
     at: "/",
     from: :bob,
     gzip: Mix.env() != :dev,
-    only: BobWeb.static_paths()
+    only: BobWeb.static_paths(),
+    only_matching: ~w(favicon)
   )
 
   if Mix.env() == :dev do

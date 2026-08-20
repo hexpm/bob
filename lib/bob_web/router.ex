@@ -43,7 +43,8 @@ defmodule BobWeb.Router do
     get("/oauth/callback", OAuthController, :callback)
     post("/oauth/logout", OAuthController, :logout)
 
-    live_session :default, on_mount: [{BobWeb.UserAuth, :mount_current_user}] do
+    live_session :default,
+      on_mount: [{BobWeb.UserAuth, :mount_current_user}, BobWeb.StaticReload] do
       live("/", JobsLive)
       live("/artifacts", ArtifactsLive)
       live("/docker", DockerTagsLive)
@@ -53,7 +54,8 @@ defmodule BobWeb.Router do
   scope "/", BobWeb do
     pipe_through([:browser, :require_authenticated_user])
 
-    live_session :authenticated, on_mount: [{BobWeb.UserAuth, :ensure_authenticated}] do
+    live_session :authenticated,
+      on_mount: [{BobWeb.UserAuth, :ensure_authenticated}, BobWeb.StaticReload] do
       live("/request", RequestLive)
     end
   end
