@@ -4,6 +4,8 @@ config :bob,
   tmp_dir: "/tmp",
   persist_dir: "/persist"
 
+config :bob, BobWeb.Endpoint, cache_static_manifest: "priv/static/cache_manifest.json"
+
 config :logger, level: :info
 
 config :sentry,
