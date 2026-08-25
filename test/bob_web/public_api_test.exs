@@ -61,10 +61,11 @@ defmodule BobWeb.PublicApiTest do
 
   describe "/docker" do
     setup %{conn: conn} do
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
-        "amd64",
-        "arm64"
-      ])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"]
+      )
 
       Bob.Artifacts.add_docker_tag(
         "hexpm/elixir",
@@ -75,7 +76,7 @@ defmodule BobWeb.PublicApiTest do
       Bob.Artifacts.add_docker_tag(
         "hexpm/elixir",
         "1.17.3-erlang-26.2-debian-bookworm-20250113-slim",
-        ["amd64"]
+        ["amd64", "arm64"]
       )
 
       {:ok, conn: put_req_header(conn, "accept", "application/json")}
@@ -104,6 +105,24 @@ defmodule BobWeb.PublicApiTest do
 
       assert body["total"] == 1
       assert Enum.map(body["tags"], & &1["tag"]) == ["1.18.0-erlang-27.0-ubuntu-noble-20250101"]
+    end
+
+    test "filters by arch", %{conn: conn} do
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang-amd64",
+        "27.1-ubuntu-noble-20250101",
+        ["amd64"]
+      )
+
+      body = conn |> get(~p"/api/docker?arch=arm64") |> json_response(200)
+
+      assert body["total"] == 3
+      refute "27.1-ubuntu-noble-20250101" in Enum.map(body["tags"], & &1["tag"])
+
+      body = conn |> get(~p"/api/docker?arch=amd64") |> json_response(200)
+
+      assert body["total"] == 4
+      assert "27.1-ubuntu-noble-20250101" in Enum.map(body["tags"], & &1["tag"])
     end
 
     test "filters by structured params", %{conn: conn} do
