@@ -4,16 +4,12 @@ defmodule Bob.RemoteQueueTest do
   alias Bob.RemoteQueue
 
   defmodule SharedTestJob do
-    require Logger
-
     def priority(), do: 2
     def weight(), do: 4
     def concurrency(), do: :shared
   end
 
   defmodule UnsharedTestJob do
-    require Logger
-
     def priority(), do: 2
     def weight(), do: 4
     def concurrency(), do: __MODULE__

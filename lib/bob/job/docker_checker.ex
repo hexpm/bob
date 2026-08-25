@@ -108,14 +108,8 @@ defmodule Bob.Job.DockerChecker do
         if build_erlang_ref?(os, ref) do
           Stream.flat_map(os_versions, fn os_version ->
             if build_erlang_ref?(os, os_version, ref) do
-              Stream.flat_map(@archs, fn arch ->
-                if build_erlang_ref?(arch, os, os_version, ref) do
-                  "OTP-" <> erlang = ref
-                  [{erlang, os, os_version, arch}]
-                else
-                  []
-                end
-              end)
+              "OTP-" <> erlang = ref
+              Enum.map(@archs, fn arch -> {erlang, os, os_version, arch} end)
             else
               []
             end
@@ -137,8 +131,7 @@ defmodule Bob.Job.DockerChecker do
   def valid_erlang_build?(erlang, os, os_version) do
     ref = "OTP-" <> erlang
 
-    build_erlang_ref?(os, ref) and build_erlang_ref?(os, os_version, ref) and
-      Enum.all?(@archs, &build_erlang_ref?(&1, os, os_version, ref))
+    build_erlang_ref?(os, ref) and build_erlang_ref?(os, os_version, ref)
   end
 
   defp build_erlang_ref?(_os, "OTP-18.0-rc2"), do: false
@@ -171,8 +164,6 @@ defmodule Bob.Job.DockerChecker do
     do: build_ubuntu_26?(version)
 
   defp build_erlang_ref?(_os, _os_version, _ref), do: true
-
-  defp build_erlang_ref?(_arch, _os, _os_version, _ref), do: true
 
   defp build_alpine?(version) do
     version = parse_otp_ref(version)

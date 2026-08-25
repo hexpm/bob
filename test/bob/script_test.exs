@@ -15,7 +15,7 @@ defmodule Bob.ScriptTest do
                script_dir,
                "\n",
                "COMPLETED " <> _
-             ] = Enum.to_list(File.stream!(Path.join(directory, "out.txt"), [], :line))
+             ] = Enum.to_list(File.stream!(Path.join(directory, "out.txt")))
 
       assert String.trim(script_dir) == Application.app_dir(:bob, "priv/scripts")
     end
