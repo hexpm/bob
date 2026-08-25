@@ -74,13 +74,16 @@ Example response, with all but the first matching artifact omitted:
 
 ## Docker tags
 
-`GET /api/docker` searches tags in the Hex Docker repositories. Each filter uses a case-sensitive prefix match.
+`GET /api/docker` searches tags in the Hex Docker repositories. The `repo` filter uses an exact match; all other filters use a case-sensitive prefix match.
+
+> [!NOTE]
+> An earlier version of the API used prefix matching on `repo` (e.g. `repo=hexpm/elixir` matching `hexpm/elixir-amd64` and `hexpm/elixir-arm64`). To fetch tags across multiple repositories, omit the `repo` filter or make separate queries for each repository.
 
 ### Query parameters
 
 | Parameter | Matching behavior |
 | --- | --- |
-| `repo` | Prefix match against the repository name. For example, `hexpm/elixir` also matches `hexpm/elixir-amd64` and `hexpm/elixir-arm64`. |
+| `repo` | Exact match against the repository name. For example, `hexpm/elixir` matches only `hexpm/elixir`, excluding per-arch repositories like `hexpm/elixir-amd64`. |
 | `tag` | Prefix match against the full Docker tag. |
 | `arch` | Prefix match against any architecture provided by the tag. |
 | `elixir_version` | Prefix match against the Elixir version parsed from the tag. |

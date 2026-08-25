@@ -312,7 +312,7 @@ defmodule Bob.Artifacts do
 
   defp docker_tag_search_query(filters) do
     DockerTag
-    |> prefix_filter(:repo, Map.get(filters, :repo))
+    |> eq_filter(:repo, Map.get(filters, :repo))
     |> prefix_filter(:tag, Map.get(filters, :tag))
     |> arch_prefix_filter(Map.get(filters, :arch))
     |> search_metadata_prefix_filter(:elixir_version, Map.get(filters, :elixir_version))

@@ -28,6 +28,12 @@ defmodule BobWeb.DockerTagsLiveTest do
       ["amd64", "arm64"]
     )
 
+    Bob.Artifacts.add_docker_tag(
+      "hexpm/elixir-amd64",
+      "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+      ["amd64"]
+    )
+
     :ok
   end
 
@@ -35,8 +41,8 @@ defmodule BobWeb.DockerTagsLiveTest do
     {:ok, view, html} = live(conn, ~p"/docker")
     assert html =~ "27.0-ubuntu-noble-20250101"
     assert html =~ "1.18.0-erlang-27.0-ubuntu-noble-20250101"
-    assert html =~ "4 tags"
-    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>4<\/b>\s*tags\s*of\s*4 tags/
+    assert html =~ "5 tags"
+    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>5<\/b>\s*tags\s*of\s*5 tags/
 
     html =
       render_change(view, "search", %{
@@ -53,6 +59,27 @@ defmodule BobWeb.DockerTagsLiveTest do
     assert docker_tag?(html, "1.18.1-erlang-27.0-ubuntu-noble-20250101")
     refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
     refute docker_tag?(html, "1.17.3-erlang-26.2-debian-bookworm-20250113-slim")
+  end
+
+  test "filters by exact repo match", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/docker")
+
+    html =
+      render_change(view, "search", %{
+        "repo" => "hexpm/elixir",
+        "tag" => "",
+        "arch" => "",
+        "elixir_version" => "",
+        "erlang_version" => "",
+        "os" => "",
+        "os_version" => ""
+      })
+
+    assert html =~ "2 tags"
+    assert docker_tag?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
+    assert docker_tag?(html, "1.17.3-erlang-26.2-debian-bookworm-20250113-slim")
+    refute docker_tag?(html, "1.18.1-erlang-27.0-ubuntu-noble-20250101")
+    refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
   end
 
   test "flags tags reserved by a build request", %{conn: conn} do
