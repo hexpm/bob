@@ -47,7 +47,7 @@ jobs:
 
       - name: Run tests
         run: |
-          mix test
+          mix test --warnings-as-errors
 
   docker:
     name: Docker
