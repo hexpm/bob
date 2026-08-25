@@ -57,4 +57,4 @@ docker push docker.io/hexpm/erlang-${arch}:${tag} ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
-  (exit 0)
+  (exit 1)
