@@ -4,10 +4,11 @@ defmodule BobWeb.DockerTagsLiveTest do
   import Phoenix.LiveViewTest
 
   setup do
-    Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
-      "amd64",
-      "arm64"
-    ])
+    Bob.Artifacts.add_docker_tag(
+      "hexpm/erlang",
+      "27.0-ubuntu-noble-20250101",
+      ["amd64", "arm64"]
+    )
 
     Bob.Artifacts.add_docker_tag(
       "hexpm/elixir",
@@ -16,7 +17,7 @@ defmodule BobWeb.DockerTagsLiveTest do
     )
 
     Bob.Artifacts.add_docker_tag(
-      "hexpm/elixir",
+      "hexpm/elixir-arm64",
       "1.18.1-erlang-27.0-ubuntu-noble-20250101",
       ["arm64"]
     )
@@ -24,7 +25,7 @@ defmodule BobWeb.DockerTagsLiveTest do
     Bob.Artifacts.add_docker_tag(
       "hexpm/elixir",
       "1.17.3-erlang-26.2-debian-bookworm-20250113-slim",
-      ["amd64"]
+      ["amd64", "arm64"]
     )
 
     :ok
@@ -49,7 +50,9 @@ defmodule BobWeb.DockerTagsLiveTest do
       })
 
     assert docker_tag?(html, "1.18.0-erlang-27.0-ubuntu-noble-20250101")
+    assert docker_tag?(html, "1.18.1-erlang-27.0-ubuntu-noble-20250101")
     refute docker_tag?(html, "27.0-ubuntu-noble-20250101")
+    refute docker_tag?(html, "1.17.3-erlang-26.2-debian-bookworm-20250113-slim")
   end
 
   test "flags tags reserved by a build request", %{conn: conn} do

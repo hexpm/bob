@@ -741,14 +741,14 @@ defmodule Bob.ArtifactsTest do
       Bob.Artifacts.add_docker_tag(
         "hexpm/erlang",
         "old-ubuntu-noble-20250101",
-        ["amd64"],
+        ["amd64", "arm64"],
         ~U[2025-01-01 00:00:00Z]
       )
 
       Bob.Artifacts.add_docker_tag(
         "hexpm/erlang",
         "new-ubuntu-noble-20250101",
-        ["amd64"],
+        ["amd64", "arm64"],
         ~U[2025-02-01 00:00:00Z]
       )
 
@@ -890,33 +890,39 @@ defmodule Bob.ArtifactsTest do
     end
 
     test "distinct Docker repositories" do
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
-        "amd64",
-        "arm64"
-      ])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"]
+      )
 
       Bob.Artifacts.add_docker_tag(
         "hexpm/elixir",
         "1.17.3-erlang-26.2-debian-bookworm-20250113-slim",
-        ["amd64"]
+        ["amd64", "arm64"]
       )
 
       assert Bob.Artifacts.distinct_repos() == ["hexpm/elixir", "hexpm/erlang"]
     end
 
     test "search_docker_tags/1 filters by structured prefixes" do
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
-        "amd64",
-        "arm64"
-      ])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"]
+      )
 
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.1-ubuntu-noble-20250101", [
-        "amd64"
-      ])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang-amd64",
+        "27.1-ubuntu-noble-20250101",
+        ["amd64"]
+      )
 
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "26.2-debian-bookworm-20250113-slim", [
-        "amd64"
-      ])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "26.2-debian-bookworm-20250113-slim",
+        ["amd64", "arm64"]
+      )
 
       Bob.Artifacts.add_docker_tag(
         "hexpm/elixir",
@@ -927,7 +933,7 @@ defmodule Bob.ArtifactsTest do
       Bob.Artifacts.add_docker_tag(
         "hexpm/elixir",
         "1.17.3-erlang-26.2-debian-bookworm-20250113-slim",
-        ["amd64"]
+        ["amd64", "arm64"]
       )
 
       assert [%{tag: "27.0-ubuntu-noble-20250101"}] =
@@ -990,12 +996,19 @@ defmodule Bob.ArtifactsTest do
     end
 
     test "count_docker_tags/1 counts exact matching tags" do
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
-        "amd64",
-        "arm64"
-      ])
+      # 27.0 is a complete dual-arch manifest, while 27.1 is intentionally
+      # single-arch to test arch count filtering with partial manifests.
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"]
+      )
 
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.1-ubuntu-noble-20250101", ["arm64"])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.1-ubuntu-noble-20250101",
+        ["arm64"]
+      )
 
       count =
         Bob.Artifacts.count_docker_tags(%{
@@ -1018,7 +1031,11 @@ defmodule Bob.ArtifactsTest do
     end
 
     test "search_docker_tags/1 does not treat % or _ as LIKE wildcards" do
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"]
+      )
 
       assert Bob.Artifacts.search_docker_tags(%{tag: "%"}) == []
       assert Bob.Artifacts.search_docker_tags(%{repo: "hexpm/_"}) == []
