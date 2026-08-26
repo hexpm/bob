@@ -931,6 +931,12 @@ defmodule Bob.ArtifactsTest do
       )
 
       Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"]
+      )
+
+      Bob.Artifacts.add_docker_tag(
         "hexpm/elixir",
         "1.17.3-erlang-26.2-debian-bookworm-20250113-slim",
         ["amd64", "arm64"]
@@ -938,7 +944,7 @@ defmodule Bob.ArtifactsTest do
 
       assert [%{tag: "27.0-ubuntu-noble-20250101"}] =
                Bob.Artifacts.search_docker_tags(%{
-                 repo: "hexpm/erl",
+                 repo: "hexpm/erlang",
                  tag: "27",
                  arch: "arm",
                  erlang_version: "27",
@@ -948,15 +954,18 @@ defmodule Bob.ArtifactsTest do
 
       assert [%{tag: "27.0-ubuntu-noble-20250101"}] =
                Bob.Artifacts.search_docker_tags(%{
-                 repo: "hexpm/erl",
+                 repo: "hexpm/erlang",
                  tag: "27",
                  arch: "arm",
                  os: "ub",
                  os_version: "noble"
                })
 
+      assert [] = Bob.Artifacts.search_docker_tags(%{repo: "hexpm/erl"})
+
       assert [
                "1.17.3-erlang-26.2-debian-bookworm-20250113-slim",
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101",
                "1.18.0-erlang-27.0-ubuntu-noble-20250101"
              ] =
                Bob.Artifacts.search_docker_tags(%{elixir_version: "1"})
@@ -965,6 +974,7 @@ defmodule Bob.ArtifactsTest do
 
       assert [
                "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101",
                "27.0-ubuntu-noble-20250101",
                "27.1-ubuntu-noble-20250101"
              ] =
@@ -972,11 +982,16 @@ defmodule Bob.ArtifactsTest do
                |> Enum.map(& &1.tag)
                |> Enum.sort()
 
-      assert [%{tag: "1.18.0-erlang-27.0-ubuntu-noble-20250101"}] =
+      assert [
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101"
+             ] =
                Bob.Artifacts.search_docker_tags(%{
                  elixir_version: "1",
                  os: "ub"
                })
+               |> Enum.map(& &1.tag)
+               |> Enum.sort()
 
       assert [%{tag: "1.18.0-erlang-27.0-ubuntu-noble-20250101"}] =
                Bob.Artifacts.search_docker_tags(%{
@@ -993,6 +1008,11 @@ defmodule Bob.ArtifactsTest do
                  os: "deb",
                  os_version: "bookworm"
                })
+
+      elixir_results = Bob.Artifacts.search_docker_tags(%{repo: "hexpm/elixir"})
+      assert length(elixir_results) == 2
+      assert Enum.all?(elixir_results, &(&1.repo == "hexpm/elixir"))
+      refute Enum.any?(elixir_results, &(&1.repo == "hexpm/elixir-amd64"))
     end
 
     test "count_docker_tags/1 counts exact matching tags" do
@@ -1012,7 +1032,7 @@ defmodule Bob.ArtifactsTest do
 
       count =
         Bob.Artifacts.count_docker_tags(%{
-          repo: "hexpm/erl",
+          repo: "hexpm/erlang",
           tag: "27",
           arch: "arm",
           erlang_version: "27",
@@ -1021,6 +1041,7 @@ defmodule Bob.ArtifactsTest do
         })
 
       assert count == 2
+      assert Bob.Artifacts.count_docker_tags(%{repo: "hexpm/erl"}) == 0
       assert Bob.Artifacts.count_docker_tags(%{arch: "amd64"}) == 1
       assert Bob.Artifacts.count_docker_tags(%{arch: "arm64"}) == 2
       assert Bob.Artifacts.count_docker_tags(%{tag: "missing"}) == 0

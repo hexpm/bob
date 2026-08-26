@@ -79,13 +79,19 @@ defmodule BobWeb.PublicApiTest do
         ["amd64", "arm64"]
       )
 
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"]
+      )
+
       {:ok, conn: put_req_header(conn, "accept", "application/json")}
     end
 
     test "returns all tags as JSON", %{conn: conn} do
       body = conn |> get(~p"/api/docker") |> json_response(200)
 
-      assert body["total"] == 3
+      assert body["total"] == 4
       assert body["offset"] == 0
       assert body["page_size"] == 100
 
@@ -103,8 +109,12 @@ defmodule BobWeb.PublicApiTest do
     test "filters by tag prefix like the LiveView", %{conn: conn} do
       body = conn |> get(~p"/api/docker?tag=1.18") |> json_response(200)
 
-      assert body["total"] == 1
-      assert Enum.map(body["tags"], & &1["tag"]) == ["1.18.0-erlang-27.0-ubuntu-noble-20250101"]
+      assert body["total"] == 2
+
+      assert Enum.map(body["tags"], & &1["tag"]) == [
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101"
+             ]
     end
 
     test "filters by arch", %{conn: conn} do
@@ -121,7 +131,7 @@ defmodule BobWeb.PublicApiTest do
 
       body = conn |> get(~p"/api/docker?arch=amd64") |> json_response(200)
 
-      assert body["total"] == 4
+      assert body["total"] == 5
       assert "27.1-ubuntu-noble-20250101" in Enum.map(body["tags"], & &1["tag"])
     end
 
@@ -132,6 +142,25 @@ defmodule BobWeb.PublicApiTest do
         |> json_response(200)
 
       assert Enum.map(body["tags"], & &1["tag"]) == ["1.18.0-erlang-27.0-ubuntu-noble-20250101"]
+    end
+
+    test "filters by exact repo match, excluding other repos sharing prefix", %{conn: conn} do
+      body =
+        conn
+        |> get(~p"/api/docker?repo=hexpm/elixir")
+        |> json_response(200)
+
+      assert body["total"] == 2
+      assert Enum.all?(body["tags"], &(&1["repo"] == "hexpm/elixir"))
+      refute Enum.any?(body["tags"], &(&1["repo"] == "hexpm/elixir-amd64"))
+
+      prefix_body =
+        conn
+        |> get(~p"/api/docker?repo=hexpm/elix")
+        |> json_response(200)
+
+      assert prefix_body["total"] == 0
+      assert prefix_body["tags"] == []
     end
 
     test "sorts by multiple parsed fields", %{conn: conn} do
@@ -161,7 +190,7 @@ defmodule BobWeb.PublicApiTest do
     test "defaults malformed sort params to build time", %{conn: conn} do
       body = conn |> get("/api/docker?sort[]=os") |> json_response(200)
 
-      assert body["total"] == 3
+      assert body["total"] == 4
     end
 
     test "treats build time as an exclusive sort", %{conn: conn} do
@@ -196,7 +225,7 @@ defmodule BobWeb.PublicApiTest do
         |> get(~p"/api/docker?tag=1&erlang_version=26&os=debian")
         |> json_response(200)
 
-      assert body["total"] == 2
+      assert body["total"] == 3
     end
   end
 end
