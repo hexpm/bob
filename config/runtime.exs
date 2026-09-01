@@ -34,9 +34,19 @@ if config_env() == :prod do
     access_key_id: System.fetch_env!("BOB_S3_ACCESS_KEY"),
     secret_access_key: System.fetch_env!("BOB_S3_SECRET_KEY")
 
+  # GIT_SHA is baked into the image and matches the release CI creates in
+  # Sentry, so issues resolved via commits auto-resolve when the deploy
+  # carrying the fix is registered.
+  sentry_release =
+    case System.get_env("GIT_SHA") do
+      sha when sha in [nil, "", "unknown"] -> nil
+      sha -> sha
+    end
+
   config :sentry,
     dsn: System.fetch_env!("BOB_SENTRY_DSN"),
     environment_name: System.fetch_env!("BOB_ENV"),
+    release: sentry_release,
     tags: %{
       bob_who: System.fetch_env!("BOB_WHO"),
       bob_hostname: System.fetch_env!("BOB_HOSTNAME")
