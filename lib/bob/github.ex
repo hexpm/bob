@@ -52,10 +52,18 @@ defmodule Bob.GitHub do
 
     opts = if user && token, do: [basic_auth: {user, token}], else: []
 
-    {:ok, 200, headers, body} =
-      Bob.HTTP.retry("GitHub #{url}", fn -> Bob.HTTP.request(:get, url, [], "", opts) end)
+    result = Bob.HTTP.retry("GitHub #{url}", fn -> Bob.HTTP.request(:get, url, [], "", opts) end)
 
-    {JSON.decode!(body), headers}
+    case result do
+      {:ok, 200, headers, body} ->
+        {JSON.decode!(body), headers}
+
+      {:ok, status, _headers, _body} ->
+        raise "GitHub #{url} returned status #{status} after retries"
+
+      {:error, reason} ->
+        raise "GitHub #{url} failed after retries: #{inspect(reason)}"
+    end
   end
 
   defp next_link(headers) do
