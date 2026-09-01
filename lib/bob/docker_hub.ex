@@ -68,6 +68,12 @@ defmodule Bob.DockerHub do
 
       {:ok, 404, _headers, _body} ->
         :not_found
+
+      {:ok, status, _headers, _body} ->
+        raise "DockerHub #{url} returned status #{status} after retries"
+
+      {:error, reason} ->
+        raise "DockerHub #{url} failed after retries: #{inspect(reason)}"
     end
   end
 
