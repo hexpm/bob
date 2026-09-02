@@ -27,17 +27,17 @@ defmodule Bob.Mixfile do
 
   defp deps() do
     [
-      {:tidewave, "~> 0.8.4", only: [:dev]},
+      {:tidewave, "~> 0.9.0", only: [:dev]},
       {:ecto_sql, "~> 3.12"},
       {:ex_aws_s3, "~> 2.0"},
       {:finch, "~> 0.19"},
       {:req, "~> 0.5"},
       {:porcelain, "~> 2.0"},
       {:postgrex, "~> 0.19"},
-      {:sentry, "~> 10.2"},
+      {:sentry, "~> 13.5"},
       {:sweet_xml, "~> 0.5"},
       {:logster, "~> 1.0"},
-      {:observer_cli, "~> 1.7"},
+      {:observer_cli, "~> 2.0"},
       {:phoenix_pubsub, "~> 2.1"},
       {:phoenix, "~> 1.7"},
       {:phoenix_html, "~> 4.1"},
