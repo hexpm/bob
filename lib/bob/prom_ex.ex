@@ -17,7 +17,7 @@ defmodule Bob.PromEx do
   # Agents run without Bob.Repo, so the Ecto plugin would crash them
   defp master_plugins() do
     if Application.get_env(:bob, :master?) do
-      [{Plugins.Ecto, repos: [Bob.Repo]}]
+      [{Plugins.Ecto, repos: [Bob.Repo]}, Bob.PromEx.Plugins.DbConnection]
     else
       []
     end

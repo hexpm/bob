@@ -41,7 +41,8 @@ defmodule Bob.Application do
 
   defp repo_children() do
     if Application.get_env(:bob, :master?) do
-      [Bob.Repo] ++ maintenance_children()
+      [{DBConnection.TelemetryListener, name: Bob.Repo.TelemetryListener}, Bob.Repo] ++
+        maintenance_children()
     else
       []
     end
