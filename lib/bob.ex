@@ -2,12 +2,13 @@ defmodule Bob do
   require Logger
 
   def log_error(key, args, exception, stacktrace) do
-    Logger.error(
-      "FAILED #{inspect(key)} #{inspect(args)}\n" <>
-        Exception.format(:error, exception, stacktrace),
+    Logger.error(%{
+      message:
+        "FAILED #{inspect(key)} #{inspect(args)}\n" <>
+          Exception.format(:error, exception, stacktrace),
       job: inspect(key),
       job_args: inspect(args)
-    )
+    })
 
     Sentry.capture_exception(exception, stacktrace: stacktrace)
   end

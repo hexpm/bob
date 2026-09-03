@@ -83,31 +83,9 @@ config :logger, :default_formatter, format: "$metadata[$level] $message\n"
 
 config :logger_json, encoder: JSON
 
-# Logger metadata that reaches the log line in production. A key keeps one
-# type: the BigQuery log sink types a column from the first value it sees.
-config :bob, :log_metadata, [
-  :request_id,
-  :method,
-  :path,
-  :status,
-  :duration_us,
-  :controller,
-  :action,
-  :format,
-  :job,
-  :job_args,
-  :reason,
-  :username,
-  :kind,
-  :target,
-  :deleted,
-  :dead_chunks,
-  :repo,
-  :tag,
-  :builds_line,
-  :requeued,
-  :timed_out
-]
+# Logger metadata that reaches the log line in production. A line's own
+# fields go in its message map; this is the key processes carry.
+config :bob, :log_metadata, [:request_id]
 
 config :bob, BobWeb.Endpoint,
   url: [host: "localhost"],

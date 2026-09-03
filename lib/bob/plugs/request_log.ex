@@ -2,7 +2,7 @@ defmodule Bob.Plug.RequestLog do
   @moduledoc """
   Logs one line per request when the response is sent, with the method, path,
   status, duration and, once routed, the controller, action and format as
-  metadata. Client errors log as warnings and server errors as errors.
+  fields. Client errors log as warnings and server errors as errors.
   """
 
   import Plug.Conn
@@ -17,12 +17,7 @@ defmodule Bob.Plug.RequestLog do
       duration_us =
         System.convert_time_unit(System.monotonic_time() - start, :native, :microsecond)
 
-      Logger.log(
-        level(conn.status),
-        "#{conn.method} #{conn.request_path} #{conn.status}",
-        fields(conn, duration_us)
-      )
-
+      Logger.log(level(conn.status), fields(conn, duration_us))
       conn
     end)
   end
@@ -32,8 +27,13 @@ defmodule Bob.Plug.RequestLog do
   defp level(_status), do: :info
 
   defp fields(conn, duration_us) do
-    [method: conn.method, path: conn.request_path, status: conn.status, duration_us: duration_us] ++
-      routed(conn.private)
+    Enum.into(routed(conn.private), %{
+      message: "#{conn.method} #{conn.request_path} #{conn.status}",
+      method: conn.method,
+      path: conn.request_path,
+      status: conn.status,
+      duration_us: duration_us
+    })
   end
 
   defp routed(%{phoenix_controller: controller, phoenix_action: action} = private) do

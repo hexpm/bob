@@ -69,7 +69,7 @@ defmodule Bob.DockerCleanup do
         if batch == 0, do: {:halt, total}, else: {:cont, total + batch}
       end)
 
-    Logger.info("DOCKER CLEANUP deleted #{deleted} tag(s)", deleted: deleted)
+    Logger.info(%{message: "DOCKER CLEANUP deleted #{deleted} tag(s)", deleted: deleted})
     {:live, deleted}
   end
 
@@ -88,12 +88,13 @@ defmodule Bob.DockerCleanup do
       dead_chunks = if failed > 0 and confirmed == [], do: dead_chunks + 1, else: 0
 
       if dead_chunks >= @dead_chunk_ceiling do
-        Logger.error(
-          "DOCKER CLEANUP aborting after #{dead_chunks} chunks with no successful delete, " <>
-            "deleted #{deleted} tag(s) so far",
+        Logger.error(%{
+          message:
+            "DOCKER CLEANUP aborting after #{dead_chunks} chunks with no successful delete, " <>
+              "deleted #{deleted} tag(s) so far",
           dead_chunks: dead_chunks,
           deleted: deleted
-        )
+        })
 
         {:halt, {deleted, dead_chunks}}
       else
@@ -113,11 +114,12 @@ defmodule Bob.DockerCleanup do
             {:ok, {repo, tag}}
 
           {:error, reason} ->
-            Logger.error("DOCKER CLEANUP failed to delete #{repo}:#{tag}: #{inspect(reason)}",
+            Logger.error(%{
+              message: "DOCKER CLEANUP failed to delete #{repo}:#{tag}: #{inspect(reason)}",
               repo: repo,
               tag: tag,
               reason: inspect(reason)
-            )
+            })
 
             :error
         end

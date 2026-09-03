@@ -39,10 +39,11 @@ defmodule Bob.Queue do
       end)
       |> reject_backed_off(now)
       |> Enum.map(fn candidate ->
-        Logger.info("QUEUED #{inspect(candidate.module_key)} #{inspect(candidate.args)}",
+        Logger.info(%{
+          message: "QUEUED #{inspect(candidate.module_key)} #{inspect(candidate.args)}",
           job: inspect(candidate.module_key),
           job_args: inspect(candidate.args)
-        )
+        })
 
         %{
           module_key: candidate.module_key,
@@ -92,10 +93,11 @@ defmodule Bob.Queue do
       [[id, args_binary]] ->
         args = Term.decode(args_binary)
 
-        Logger.info("STARTING #{inspect(key)} #{inspect(args)}",
+        Logger.info(%{
+          message: "STARTING #{inspect(key)} #{inspect(args)}",
           job: inspect(key),
           job_args: inspect(args)
-        )
+        })
 
         broadcast()
         {:ok, {id, args}}
@@ -109,10 +111,11 @@ defmodule Bob.Queue do
     Repo.transaction(fn ->
       case finish(id, "done") do
         {:ok, module_key, args_digest, args} ->
-          Logger.info("SUCCESS #{inspect(module_key)} #{inspect(args)}",
+          Logger.info(%{
+            message: "SUCCESS #{inspect(module_key)} #{inspect(args)}",
             job: inspect(module_key),
             job_args: inspect(args)
-          )
+          })
 
           Repo.delete_all(
             from(f in Failure,
@@ -133,10 +136,11 @@ defmodule Bob.Queue do
     Repo.transaction(fn ->
       case finish(id, "failed") do
         {:ok, module_key, args_digest, args} ->
-          Logger.info("FAILURE #{inspect(module_key)} #{inspect(args)}",
+          Logger.info(%{
+            message: "FAILURE #{inspect(module_key)} #{inspect(args)}",
             job: inspect(module_key),
             job_args: inspect(args)
-          )
+          })
 
           if backoff?(module_key), do: record_failure(module_key, args_digest)
 
@@ -170,10 +174,11 @@ defmodule Bob.Queue do
 
     case rows do
       [{module_key, args}] ->
-        Logger.info("REQUEUED #{inspect(module_key)} #{inspect(args)}",
+        Logger.info(%{
+          message: "REQUEUED #{inspect(module_key)} #{inspect(args)}",
           job: inspect(module_key),
           job_args: inspect(args)
-        )
+        })
 
         broadcast()
 
@@ -325,10 +330,11 @@ defmodule Bob.Queue do
           backed_off? = DateTime.diff(now, last_failed_at) < backoff_seconds(count)
 
           if backed_off? do
-            Logger.info("BACKOFF #{inspect(candidate.module_key)} #{inspect(candidate.args)}",
+            Logger.info(%{
+              message: "BACKOFF #{inspect(candidate.module_key)} #{inspect(candidate.args)}",
               job: inspect(candidate.module_key),
               job_args: inspect(candidate.args)
-            )
+            })
           end
 
           backed_off?

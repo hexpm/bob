@@ -98,10 +98,11 @@ defmodule Bob.Queue.Maintenance do
       )
 
     if requeued > 0 or failed > 0 do
-      Logger.info("SWEEP requeued #{requeued} and timed out #{failed} running job(s)",
+      Logger.info(%{
+        message: "SWEEP requeued #{requeued} and timed out #{failed} running job(s)",
         requeued: requeued,
         timed_out: failed
-      )
+      })
     end
   end
 
