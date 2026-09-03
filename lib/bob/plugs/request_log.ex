@@ -1,8 +1,9 @@
 defmodule Bob.Plug.RequestLog do
   @moduledoc """
-  Logs one line per request when the response is sent, with the method, path,
-  status, duration and, once routed, the controller, action and format as
-  fields. Client errors log as warnings and server errors as errors.
+  Logs one `http.request` event per request when the response is sent, with
+  the method, path, status, duration and, once routed, the controller, action
+  and format as fields. Client errors log as warnings and server errors as
+  errors.
   """
 
   import Plug.Conn
@@ -28,7 +29,8 @@ defmodule Bob.Plug.RequestLog do
 
   defp fields(conn, duration_us) do
     Enum.into(routed(conn.private), %{
-      message: "#{conn.method} #{conn.request_path} #{conn.status}",
+      message: "HTTP request",
+      event: "http.request",
       method: conn.method,
       path: conn.request_path,
       status: conn.status,

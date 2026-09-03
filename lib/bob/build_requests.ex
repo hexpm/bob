@@ -37,8 +37,8 @@ defmodule Bob.BuildRequests do
           created = complete(created)
 
           Logger.info(%{
-            message:
-              "BUILD RESERVATION by #{created.username}: #{created.kind} #{request_target(created)}",
+            message: "Build reserved",
+            event: "build.reserved",
             username: created.username,
             kind: to_string(created.kind),
             target: request_target(created)
@@ -101,8 +101,8 @@ defmodule Bob.BuildRequests do
         Bob.Queue.add_many(jobs)
 
         Logger.info(%{
-          message:
-            "BUILD REQUEST by #{created.username}: #{created.kind} #{request_target(created)}",
+          message: "Build requested",
+          event: "build.requested",
           username: created.username,
           kind: to_string(created.kind),
           target: request_target(created)

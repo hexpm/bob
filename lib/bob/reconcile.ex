@@ -90,8 +90,10 @@ defmodule Bob.Reconcile do
         case Artifacts.staged_multi_arch_tags(token, repo, @archs) do
           [] ->
             Logger.warning(%{
-              message: "RECONCILE no multi-arch tags for #{repo}, skipping",
-              repo: repo
+              message: "Reconcile skipped repository",
+              event: "reconcile.skipped",
+              repo: repo,
+              reason: "no multi-arch tags"
             })
 
           tags ->
@@ -106,7 +108,12 @@ defmodule Bob.Reconcile do
       if Artifacts.staged_any?(token, repo) do
         Artifacts.swap_docker_tags(token, repo)
       else
-        Logger.warning(%{message: "RECONCILE empty fetch for #{repo}, skipping", repo: repo})
+        Logger.warning(%{
+          message: "Reconcile skipped repository",
+          event: "reconcile.skipped",
+          repo: repo,
+          reason: "empty fetch"
+        })
       end
     end)
   end
@@ -124,8 +131,8 @@ defmodule Bob.Reconcile do
       rescue
         exception ->
           Logger.error(%{
-            message:
-              "RECONCILE fetch failed for #{repo}, skipping: #{Exception.message(exception)}",
+            message: "Reconcile fetch failed",
+            event: "reconcile.fetch_failed",
             repo: repo,
             reason: Exception.message(exception)
           })
@@ -134,7 +141,8 @@ defmodule Bob.Reconcile do
       catch
         :exit, reason ->
           Logger.error(%{
-            message: "RECONCILE fetch crashed for #{repo}, skipping: #{inspect(reason)}",
+            message: "Reconcile fetch failed",
+            event: "reconcile.fetch_failed",
             repo: repo,
             reason: inspect(reason)
           })
@@ -207,7 +215,8 @@ defmodule Bob.Reconcile do
 
   defp skip_malformed(line) do
     Logger.warning(%{
-      message: "BACKFILL skipping malformed builds.txt line: #{inspect(line)}",
+      message: "Backfill skipped malformed builds.txt line",
+      event: "backfill.malformed_line",
       builds_line: inspect(line)
     })
 

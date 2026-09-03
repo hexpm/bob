@@ -65,8 +65,8 @@ defmodule Bob.RunnerTest do
           :sys.get_state(runner)
         end)
 
-      assert %{"job" => "Bob.RunnerTest.QuietJob", "job_args" => "[]"} =
-               Enum.find(lines, &(&1["message"] == "STARTING Bob.RunnerTest.QuietJob []"))
+      assert %{"message" => "Job started", "job" => "Bob.RunnerTest.QuietJob", "job_args" => "[]"} =
+               Enum.find(lines, &(&1["event"] == "job.started"))
 
       assert Bob.Queue.start(QuietJob) == :error
     end

@@ -12,7 +12,8 @@ defmodule BobWeb.RequestLogTest do
 
     assert %{
              "severity" => "INFO",
-             "message" => "GET /api/artifacts 200",
+             "message" => "HTTP request",
+             "event" => "http.request",
              "method" => "GET",
              "path" => "/api/artifacts",
              "status" => 200,
@@ -33,8 +34,13 @@ defmodule BobWeb.RequestLogTest do
                assert conn |> post(~p"/api/queue/add") |> response(401)
              end)
 
-    assert %{"severity" => "WARNING", "message" => "POST /api/queue/add 401", "status" => 401} =
-             line
+    assert %{
+             "severity" => "WARNING",
+             "event" => "http.request",
+             "method" => "POST",
+             "path" => "/api/queue/add",
+             "status" => 401
+           } = line
 
     refute Map.has_key?(line, "controller")
   end

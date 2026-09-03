@@ -20,7 +20,8 @@ defmodule Bob.QueueTest do
     assert [queued] = capture_json_log(fn -> Queue.add(TestJob, [:a]) end)
 
     assert %{
-             "message" => "QUEUED Bob.QueueTest.TestJob [:a]",
+             "message" => "Job queued",
+             "event" => "job.queued",
              "job" => "Bob.QueueTest.TestJob",
              "job_args" => "[:a]"
            } = queued
@@ -33,8 +34,12 @@ defmodule Bob.QueueTest do
                assert is_integer(id)
              end)
 
-    assert %{"message" => "STARTING Bob.QueueTest.TestJob [:a]", "job" => "Bob.QueueTest.TestJob"} =
-             started
+    assert %{
+             "message" => "Job claimed",
+             "event" => "job.claimed",
+             "job" => "Bob.QueueTest.TestJob",
+             "job_args" => "[:a]"
+           } = started
 
     assert size(TestJob) == 0
   end

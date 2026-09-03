@@ -3,11 +3,11 @@ defmodule Bob do
 
   def log_error(key, args, exception, stacktrace) do
     Logger.error(%{
-      message:
-        "FAILED #{inspect(key)} #{inspect(args)}\n" <>
-          Exception.format(:error, exception, stacktrace),
+      message: "Job crashed",
+      event: "job.crashed",
       job: inspect(key),
-      job_args: inspect(args)
+      job_args: inspect(args),
+      error: Exception.format(:error, exception, stacktrace)
     })
 
     Sentry.capture_exception(exception, stacktrace: stacktrace)

@@ -84,7 +84,8 @@ defmodule Bob.Runner do
         if job_id, do: Bob.RemoteQueue.failure(job_id)
 
         Logger.error(%{
-          message: "FAILED #{inspect(key)} #{inspect(args)} (#{inspect(reason)})",
+          message: "Job crashed",
+          event: "job.crashed",
           job: inspect(key),
           job_args: inspect(args),
           reason: inspect(reason)
@@ -110,7 +111,8 @@ defmodule Bob.Runner do
         if job_id, do: Bob.RemoteQueue.failure(job_id)
 
         Logger.error(%{
-          message: "TIMED OUT #{inspect(key)} #{inspect(args)}",
+          message: "Job timed out",
+          event: "job.timed_out",
           job: inspect(key),
           job_args: inspect(args)
         })
@@ -153,7 +155,8 @@ defmodule Bob.Runner do
       time = System.convert_time_unit(duration, :native, :microsecond)
 
       Logger.info(%{
-        message: "COMPLETED #{inspect(key)} #{inspect(args)} (#{time / 1_000_000}s)",
+        message: "Job completed",
+        event: "job.completed",
         job: inspect(key),
         job_args: inspect(args),
         duration_us: time
@@ -203,7 +206,8 @@ defmodule Bob.Runner do
 
       if job_id do
         Logger.info(%{
-          message: "REQUEUING ON SHUTDOWN #{inspect(key)} #{inspect(args)}",
+          message: "Job requeued on shutdown",
+          event: "job.shutdown_requeue",
           job: inspect(key),
           job_args: inspect(args)
         })
@@ -223,7 +227,8 @@ defmodule Bob.Runner do
 
   defp start_job(id, key, args, state) do
     Logger.info(%{
-      message: "STARTING #{inspect(key)} #{inspect(args)}",
+      message: "Job started",
+      event: "job.started",
       job: inspect(key),
       job_args: inspect(args)
     })

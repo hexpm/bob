@@ -40,7 +40,8 @@ defmodule Bob.Queue do
       |> reject_backed_off(now)
       |> Enum.map(fn candidate ->
         Logger.info(%{
-          message: "QUEUED #{inspect(candidate.module_key)} #{inspect(candidate.args)}",
+          message: "Job queued",
+          event: "job.queued",
           job: inspect(candidate.module_key),
           job_args: inspect(candidate.args)
         })
@@ -94,7 +95,8 @@ defmodule Bob.Queue do
         args = Term.decode(args_binary)
 
         Logger.info(%{
-          message: "STARTING #{inspect(key)} #{inspect(args)}",
+          message: "Job claimed",
+          event: "job.claimed",
           job: inspect(key),
           job_args: inspect(args)
         })
@@ -112,7 +114,8 @@ defmodule Bob.Queue do
       case finish(id, "done") do
         {:ok, module_key, args_digest, args} ->
           Logger.info(%{
-            message: "SUCCESS #{inspect(module_key)} #{inspect(args)}",
+            message: "Job succeeded",
+            event: "job.succeeded",
             job: inspect(module_key),
             job_args: inspect(args)
           })
@@ -137,7 +140,8 @@ defmodule Bob.Queue do
       case finish(id, "failed") do
         {:ok, module_key, args_digest, args} ->
           Logger.info(%{
-            message: "FAILURE #{inspect(module_key)} #{inspect(args)}",
+            message: "Job failed",
+            event: "job.failed",
             job: inspect(module_key),
             job_args: inspect(args)
           })
@@ -175,7 +179,8 @@ defmodule Bob.Queue do
     case rows do
       [{module_key, args}] ->
         Logger.info(%{
-          message: "REQUEUED #{inspect(module_key)} #{inspect(args)}",
+          message: "Job requeued",
+          event: "job.requeued",
           job: inspect(module_key),
           job_args: inspect(args)
         })
@@ -331,7 +336,8 @@ defmodule Bob.Queue do
 
           if backed_off? do
             Logger.info(%{
-              message: "BACKOFF #{inspect(candidate.module_key)} #{inspect(candidate.args)}",
+              message: "Job backed off",
+              event: "job.backoff",
               job: inspect(candidate.module_key),
               job_args: inspect(candidate.args)
             })
