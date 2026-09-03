@@ -16,7 +16,8 @@ config :ex_aws,
   secret_access_key: "test",
   http_client: Bob.FakeHttpClient
 
-config :logger, level: :warning
+config :logger, level: :info
+config :logger, :default_handler, level: :error
 
 config :bob, Bob.Repo,
   username: "postgres",

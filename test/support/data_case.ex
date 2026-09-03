@@ -6,7 +6,7 @@ defmodule Bob.DataCase do
       import Ecto
       import Ecto.Query
       import Bob.DataCase
-      import Bob.LogHelpers
+      import Bob.LogLines, only: [capture_log_lines: 1]
 
       alias Bob.Repo
     end

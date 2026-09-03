@@ -17,29 +17,29 @@ defmodule Bob.QueueTest do
   end
 
   test "queues a job and pops it with start" do
-    assert [queued] = capture_json_log(fn -> Queue.add(TestJob, [:a]) end)
+    assert [{:info, queued}] = capture_log_lines(fn -> Queue.add(TestJob, [:a]) end)
 
     assert %{
-             "message" => "Job queued",
-             "event" => "job.queued",
-             "job" => "Bob.QueueTest.TestJob",
-             "job_args" => "[:a]"
+             message: "Job queued",
+             event: "job.queued",
+             job: "Bob.QueueTest.TestJob",
+             job_args: "[:a]"
            } = queued
 
     assert size(TestJob) == 1
 
-    assert [started] =
-             capture_json_log(fn ->
+    assert [{:info, claimed}] =
+             capture_log_lines(fn ->
                assert {:ok, {id, [:a]}} = Queue.start(TestJob)
                assert is_integer(id)
              end)
 
     assert %{
-             "message" => "Job claimed",
-             "event" => "job.claimed",
-             "job" => "Bob.QueueTest.TestJob",
-             "job_args" => "[:a]"
-           } = started
+             message: "Job claimed",
+             event: "job.claimed",
+             job: "Bob.QueueTest.TestJob",
+             job_args: "[:a]"
+           } = claimed
 
     assert size(TestJob) == 0
   end

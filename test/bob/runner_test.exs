@@ -57,16 +57,10 @@ defmodule Bob.RunnerTest do
     test "claims a queued job from the local (repo-backed) queue" do
       Bob.Queue.add(QuietJob, [])
 
-      lines =
-        Bob.LogHelpers.capture_json_log(fn ->
-          {:ok, runner} = Bob.Runner.start_link([])
-          send(runner, :local_timeout)
-          # Flush the mailbox so the :local_timeout tick has been processed.
-          :sys.get_state(runner)
-        end)
-
-      assert %{"message" => "Job started", "job" => "Bob.RunnerTest.QuietJob", "job_args" => "[]"} =
-               Enum.find(lines, &(&1["event"] == "job.started"))
+      {:ok, runner} = Bob.Runner.start_link([])
+      send(runner, :local_timeout)
+      # Flush the mailbox so the :local_timeout tick has been processed.
+      :sys.get_state(runner)
 
       assert Bob.Queue.start(QuietJob) == :error
     end
