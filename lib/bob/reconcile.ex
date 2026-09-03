@@ -88,7 +88,7 @@ defmodule Bob.Reconcile do
     Enum.each(@base_repos, fn repo ->
       stage(stream, repo, & &1, fn token ->
         case Artifacts.staged_multi_arch_tags(token, repo, @archs) do
-          [] -> Logger.warning("RECONCILE no multi-arch tags for #{repo}, skipping")
+          [] -> Logger.warning("RECONCILE no multi-arch tags for #{repo}, skipping", repo: repo)
           tags -> Artifacts.replace_base_image_tags(repo, tags)
         end
       end)
@@ -100,7 +100,7 @@ defmodule Bob.Reconcile do
       if Artifacts.staged_any?(token, repo) do
         Artifacts.swap_docker_tags(token, repo)
       else
-        Logger.warning("RECONCILE empty fetch for #{repo}, skipping")
+        Logger.warning("RECONCILE empty fetch for #{repo}, skipping", repo: repo)
       end
     end)
   end
@@ -118,13 +118,19 @@ defmodule Bob.Reconcile do
       rescue
         exception ->
           Logger.error(
-            "RECONCILE fetch failed for #{repo}, skipping: #{Exception.message(exception)}"
+            "RECONCILE fetch failed for #{repo}, skipping: #{Exception.message(exception)}",
+            repo: repo,
+            reason: Exception.message(exception)
           )
 
           :error
       catch
         :exit, reason ->
-          Logger.error("RECONCILE fetch crashed for #{repo}, skipping: #{inspect(reason)}")
+          Logger.error("RECONCILE fetch crashed for #{repo}, skipping: #{inspect(reason)}",
+            repo: repo,
+            reason: inspect(reason)
+          )
+
           :error
       end
 
@@ -192,7 +198,10 @@ defmodule Bob.Reconcile do
   end
 
   defp skip_malformed(line) do
-    Logger.warning("BACKFILL skipping malformed builds.txt line: #{inspect(line)}")
+    Logger.warning("BACKFILL skipping malformed builds.txt line: #{inspect(line)}",
+      builds_line: inspect(line)
+    )
+
     []
   end
 end

@@ -37,7 +37,10 @@ defmodule Bob.BuildRequests do
           created = complete(created)
 
           Logger.info(
-            "BUILD RESERVATION by #{created.username}: #{created.kind} #{request_target(created)}"
+            "BUILD RESERVATION by #{created.username}: #{created.kind} #{request_target(created)}",
+            username: created.username,
+            kind: to_string(created.kind),
+            target: request_target(created)
           )
         end
 
@@ -97,7 +100,10 @@ defmodule Bob.BuildRequests do
         Bob.Queue.add_many(jobs)
 
         Logger.info(
-          "BUILD REQUEST by #{created.username}: #{created.kind} #{request_target(created)}"
+          "BUILD REQUEST by #{created.username}: #{created.kind} #{request_target(created)}",
+          username: created.username,
+          kind: to_string(created.kind),
+          target: request_target(created)
         )
 
         {:ok, created}

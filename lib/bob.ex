@@ -1,9 +1,14 @@
 defmodule Bob do
-  def log_error(exception, stacktrace) do
-    formatted_banner = Exception.format_banner(:error, exception, stacktrace)
-    formatted_stacktrace = Exception.format_stacktrace(stacktrace)
+  require Logger
 
-    IO.puts(:stderr, formatted_banner <> "\n" <> formatted_stacktrace)
+  def log_error(key, args, exception, stacktrace) do
+    Logger.error(
+      "FAILED #{inspect(key)} #{inspect(args)}\n" <>
+        Exception.format(:error, exception, stacktrace),
+      job: inspect(key),
+      job_args: inspect(args)
+    )
+
     Sentry.capture_exception(exception, stacktrace: stacktrace)
   end
 
