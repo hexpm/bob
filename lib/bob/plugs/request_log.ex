@@ -37,8 +37,11 @@ defmodule Bob.Plug.RequestLog do
   end
 
   defp routed(%{phoenix_controller: controller, phoenix_action: action} = private) do
-    [controller: inspect(controller), action: action, format: private[:phoenix_format]]
+    [controller: inspect(controller), action: action] ++ format(private)
   end
 
   defp routed(_private), do: []
+
+  defp format(%{phoenix_format: format}), do: [format: format]
+  defp format(_private), do: []
 end
