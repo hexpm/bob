@@ -37,8 +37,8 @@ defmodule BobWeb.Endpoint do
   end
 
   plug(Plug.RequestId)
-  plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
-  plug(Logster.Plugs.Logger, excludes: [:params])
+  plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint], log: false)
+  plug(Bob.Plug.RequestLog)
   plug(BobWeb.Plugs.Secret, api_only: true)
 
   plug(Plug.Parsers,

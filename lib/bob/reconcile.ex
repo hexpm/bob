@@ -88,8 +88,16 @@ defmodule Bob.Reconcile do
     Enum.each(@base_repos, fn repo ->
       stage(stream, repo, & &1, fn token ->
         case Artifacts.staged_multi_arch_tags(token, repo, @archs) do
-          [] -> Logger.warning("RECONCILE no multi-arch tags for #{repo}, skipping")
-          tags -> Artifacts.replace_base_image_tags(repo, tags)
+          [] ->
+            Logger.warning(%{
+              message: "Reconcile skipped repository",
+              event: "reconcile.skipped",
+              repo: repo,
+              reason: "no multi-arch tags"
+            })
+
+          tags ->
+            Artifacts.replace_base_image_tags(repo, tags)
         end
       end)
     end)
@@ -100,7 +108,12 @@ defmodule Bob.Reconcile do
       if Artifacts.staged_any?(token, repo) do
         Artifacts.swap_docker_tags(token, repo)
       else
-        Logger.warning("RECONCILE empty fetch for #{repo}, skipping")
+        Logger.warning(%{
+          message: "Reconcile skipped repository",
+          event: "reconcile.skipped",
+          repo: repo,
+          reason: "empty fetch"
+        })
       end
     end)
   end
@@ -117,14 +130,23 @@ defmodule Bob.Reconcile do
         stream.(repo, fn page -> Artifacts.stage_docker_tags(token, repo, transform.(page)) end)
       rescue
         exception ->
-          Logger.error(
-            "RECONCILE fetch failed for #{repo}, skipping: #{Exception.message(exception)}"
-          )
+          Logger.error(%{
+            message: "Reconcile fetch failed",
+            event: "reconcile.fetch_failed",
+            repo: repo,
+            reason: Exception.message(exception)
+          })
 
           :error
       catch
         :exit, reason ->
-          Logger.error("RECONCILE fetch crashed for #{repo}, skipping: #{inspect(reason)}")
+          Logger.error(%{
+            message: "Reconcile fetch failed",
+            event: "reconcile.fetch_failed",
+            repo: repo,
+            reason: inspect(reason)
+          })
+
           :error
       end
 
@@ -192,7 +214,12 @@ defmodule Bob.Reconcile do
   end
 
   defp skip_malformed(line) do
-    Logger.warning("BACKFILL skipping malformed builds.txt line: #{inspect(line)}")
+    Logger.warning(%{
+      message: "Backfill skipped malformed builds.txt line",
+      event: "backfill.malformed_line",
+      builds_line: inspect(line)
+    })
+
     []
   end
 end

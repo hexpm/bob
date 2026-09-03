@@ -5,5 +5,6 @@ timeout_exclude =
     do: [],
     else: [:timeout_binary]
 
+:logger.add_handler(:log_lines, Bob.LogLines, %{})
 ExUnit.start(exclude: timeout_exclude)
 Ecto.Adapters.SQL.Sandbox.mode(Bob.Repo, :manual)

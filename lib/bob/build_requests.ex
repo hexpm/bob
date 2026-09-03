@@ -36,9 +36,13 @@ defmodule Bob.BuildRequests do
           {:ok, created} = create(Map.put(attrs, :builds_count, 0))
           created = complete(created)
 
-          Logger.info(
-            "BUILD RESERVATION by #{created.username}: #{created.kind} #{request_target(created)}"
-          )
+          Logger.info(%{
+            message: "Build reserved",
+            event: "build.reserved",
+            username: created.username,
+            kind: to_string(created.kind),
+            target: request_target(created)
+          })
         end
 
         :ok
@@ -96,9 +100,13 @@ defmodule Bob.BuildRequests do
         # the checker's reconciliation enqueues the jobs on its next cycle.
         Bob.Queue.add_many(jobs)
 
-        Logger.info(
-          "BUILD REQUEST by #{created.username}: #{created.kind} #{request_target(created)}"
-        )
+        Logger.info(%{
+          message: "Build requested",
+          event: "build.requested",
+          username: created.username,
+          kind: to_string(created.kind),
+          target: request_target(created)
+        })
 
         {:ok, created}
 

@@ -60,8 +60,7 @@ defmodule Bob.Runner do
 
       {:error, exception, stacktrace} ->
         if job_id, do: Bob.RemoteQueue.failure(job_id)
-        Logger.error("FAILED #{inspect(key)} #{inspect(args)}")
-        Bob.log_error(exception, stacktrace)
+        Bob.log_error(key, args, exception, stacktrace)
     end
 
     state = update_in(state.tasks, &Map.delete(&1, ref))
@@ -83,7 +82,15 @@ defmodule Bob.Runner do
       {{key, args, job_id, _pid, timer}, tasks} ->
         Process.cancel_timer(timer)
         if job_id, do: Bob.RemoteQueue.failure(job_id)
-        Logger.error("FAILED #{inspect(key)} #{inspect(args)} (#{inspect(reason)})")
+
+        Logger.error(%{
+          message: "Job crashed",
+          event: "job.crashed",
+          job: inspect(key),
+          job_args: inspect(args),
+          reason: inspect(reason)
+        })
+
         :telemetry.execute([:bob, :job, :crash], %{count: 1}, %{key: key})
         state = start_any_jobs(%{state | tasks: tasks})
         {:noreply, state}
@@ -102,7 +109,14 @@ defmodule Bob.Runner do
       {{key, args, job_id, pid, _timer}, tasks} ->
         Task.Supervisor.terminate_child(Bob.Tasks, pid)
         if job_id, do: Bob.RemoteQueue.failure(job_id)
-        Logger.error("TIMED OUT #{inspect(key)} #{inspect(args)}")
+
+        Logger.error(%{
+          message: "Job timed out",
+          event: "job.timed_out",
+          job: inspect(key),
+          job_args: inspect(args)
+        })
+
         :telemetry.execute([:bob, :job, :timeout], %{count: 1}, %{key: key})
         state = start_any_jobs(%{state | tasks: tasks})
         {:noreply, state}
@@ -139,7 +153,15 @@ defmodule Bob.Runner do
       run_task_fun(key, args)
       duration = System.monotonic_time() - start
       time = System.convert_time_unit(duration, :native, :microsecond)
-      Logger.info("COMPLETED #{inspect(key)} #{inspect(args)} (#{time / 1_000_000}s)")
+
+      Logger.info(%{
+        message: "Job completed",
+        event: "job.completed",
+        job: inspect(key),
+        job_args: inspect(args),
+        duration_us: time
+      })
+
       :telemetry.execute([:bob, :job, :stop], %{duration: duration}, %{key: key, result: "ok"})
       :ok
     rescue
@@ -183,7 +205,13 @@ defmodule Bob.Runner do
       Task.Supervisor.terminate_child(Bob.Tasks, pid)
 
       if job_id do
-        Logger.info("REQUEUING ON SHUTDOWN #{inspect(key)} #{inspect(args)}")
+        Logger.info(%{
+          message: "Job requeued on shutdown",
+          event: "job.shutdown_requeue",
+          job: inspect(key),
+          job_args: inspect(args)
+        })
+
         Bob.RemoteQueue.requeue(job_id)
       end
     end)
@@ -198,7 +226,13 @@ defmodule Bob.Runner do
   end
 
   defp start_job(id, key, args, state) do
-    Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
+    Logger.info(%{
+      message: "Job started",
+      event: "job.started",
+      job: inspect(key),
+      job_args: inspect(args)
+    })
+
     task = Task.Supervisor.async(Bob.Tasks, fn -> run_task(key, args) end)
     timer = Process.send_after(self(), {:job_timeout, task.ref}, Bob.Job.timeout(key))
     put_in(state.tasks[task.ref], {key, args, id, task.pid, timer})
