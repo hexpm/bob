@@ -24,15 +24,7 @@ defmodule Bob.PromEx.Plugins.OutboundHttpTest do
     assert OutboundHttp.request_tags(%{request: request(), result: nil}).status == "unknown"
   end
 
-  test "tags final Docker Hub outcomes without including response bodies or URLs" do
-    assert OutboundHttp.docker_hub_tags(%{method: :get, result: {:ok, 200, [], "body"}}) ==
-             %{method: "GET", status: 200}
-
-    assert OutboundHttp.docker_hub_tags(%{method: :delete, result: {:error, :timeout}}) ==
-             %{method: "DELETE", status: "error"}
-  end
-
-  test "attaches to the Finch events the requests actually emit" do
+  test "attaches to attempt and final outcome events" do
     events =
       [otp_app: :bob]
       |> OutboundHttp.event_metrics()
@@ -41,7 +33,7 @@ defmodule Bob.PromEx.Plugins.OutboundHttpTest do
       |> Enum.map(& &1.event_name)
       |> Enum.uniq()
 
-    assert [:bob, :docker_hub, :request, :stop] in events
+    assert [:bob, :http, :request, :stop] in events
     assert [:finch, :request, :stop] in events
     assert [:finch, :request, :exception] in events
     assert [:finch, :queue, :stop] in events

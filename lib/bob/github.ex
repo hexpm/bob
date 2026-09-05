@@ -52,7 +52,10 @@ defmodule Bob.GitHub do
 
     opts = if user && token, do: [basic_auth: {user, token}], else: []
 
-    result = Bob.HTTP.retry("GitHub #{url}", fn -> Bob.HTTP.request(:get, url, [], "", opts) end)
+    result =
+      Bob.HTTP.track_request(:get, url, fn ->
+        Bob.HTTP.retry("GitHub #{url}", fn -> Bob.HTTP.request(:get, url, [], "", opts) end)
+      end)
 
     case result do
       {:ok, 200, headers, body} ->

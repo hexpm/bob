@@ -39,6 +39,28 @@ defmodule Bob.HTTP do
     {:error, reason}
   end
 
+  @doc """
+  Records one final HTTP outcome from `fun`, tagged by host and method.
+  Wrap the complete request operation, including any caller-managed retries.
+  """
+  def track_request(method, url, fun) do
+    result = fun.()
+
+    status =
+      case result do
+        {:ok, status, _headers, _body} -> status
+        {:error, _reason} -> "error"
+      end
+
+    :telemetry.execute([:bob, :http, :request, :stop], %{}, %{
+      host: URI.parse(url).host,
+      method: method |> to_string() |> String.upcase(),
+      status: status
+    })
+
+    result
+  end
+
   def retry(name, fun, opts \\ []) do
     retry(name, fun, 0, opts)
   end

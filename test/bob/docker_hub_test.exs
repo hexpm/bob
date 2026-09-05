@@ -54,7 +54,7 @@ defmodule Bob.DockerHubTest do
 
       :telemetry.attach(
         handler,
-        [:bob, :docker_hub, :request, :stop],
+        [:bob, :http, :request, :stop],
         &__MODULE__.request_event/4,
         self()
       )
@@ -68,7 +68,7 @@ defmodule Bob.DockerHubTest do
         [otp_app: :bob]
         |> Bob.PromEx.Plugins.OutboundHttp.event_metrics()
         |> Map.fetch!(:metrics)
-        |> Enum.find(&(&1.name == [:bob, :docker_hub, :request, :total]))
+        |> Enum.find(&(&1.name == [:bob, :prom_ex, :outbound_http, :request, :final, :total]))
 
       start_supervised!(
         {TelemetryMetricsPrometheus.Core,
@@ -96,24 +96,31 @@ defmodule Bob.DockerHubTest do
       end
 
       assert :sys.get_state(opts[:rate_limiter]).sent_total == 3
-      assert_receive {:request_result, %{method: :get, result: ^success}}
+      assert_receive {:request_result, %{host: "hub.docker.com", method: "GET", status: 200}}
       refute_receive {:request_result, _}
       refute_receive {:attempt, _, _, _, _}
 
       metrics = TelemetryMetricsPrometheus.Core.scrape(__MODULE__.Metrics)
-      assert metrics =~ ~s(bob_docker_hub_request_total{method="GET",status="200"} 1)
+
+      assert metrics =~
+               ~s(bob_prom_ex_outbound_http_request_final_total{host="hub.docker.com",method="GET",status="200"} 1)
+
       refute metrics =~ ~s(status="503")
       refute metrics =~ ~s(status="error")
     end
 
-    for failure <- [{:ok, 503, [], ""}, {:error, :timeout}] do
+    for {failure, status} <- [{{:ok, 503, [], ""}, 503}, {{:error, :timeout}, "error"}] do
       test "returns unreadable and records one result after exhausting #{inspect(failure)}" do
         failure = unquote(Macro.escape(failure))
         opts = request_opts(List.duplicate(failure, 10))
 
         assert DockerHub.fetch_tag("hexpm/erlang", "27.0", opts) == :unreadable
         for _ <- 1..10, do: assert_receive({:attempt, :get, _, _, _})
-        assert_receive {:request_result, %{method: :get, result: ^failure}}
+        status = unquote(status)
+
+        assert_receive {:request_result,
+                        %{host: "hub.docker.com", method: "GET", status: ^status}}
+
         refute_receive {:request_result, _}
         refute_receive {:attempt, _, _, _, _}
       end
@@ -124,7 +131,7 @@ defmodule Bob.DockerHubTest do
       opts = request_opts([{:ok, 429, [], ""}, success])
 
       assert DockerHub.paced_request(:delete, "https://hub.docker.com/tag", opts) == success
-      assert_receive {:request_result, %{method: :delete, result: ^success}}
+      assert_receive {:request_result, %{host: "hub.docker.com", method: "DELETE", status: 204}}
       assert :sys.get_state(opts[:rate_limiter]).sent_total == 2
       refute_receive {:request_result, _}
     end
@@ -135,21 +142,21 @@ defmodule Bob.DockerHubTest do
 
       assert DockerHub.fetch_tag("hexpm/erlang", "27.0", opts) == :unreadable
       assert :sys.get_state(opts[:rate_limiter]).sent_total == 6
-      assert_receive {:request_result, %{result: ^failure}}
+      assert_receive {:request_result, %{host: "hub.docker.com", status: 429}}
       refute_receive {:request_result, _}
     end
 
     test "a missing tag remains distinct from a failed request" do
       opts = request_opts([{:ok, 404, [], ""}])
       assert DockerHub.fetch_tag("hexpm/erlang", "27.0", opts) == :not_found
-      assert_receive {:request_result, %{result: {:ok, 404, [], ""}}}
+      assert_receive {:request_result, %{status: 404}}
     end
 
     test "does not retry an authentication failure or treat it as a missing tag" do
       opts = request_opts([{:ok, 401, [], ""}])
       assert DockerHub.fetch_tag("hexpm/erlang", "27.0", opts) == :unreadable
       assert :sys.get_state(opts[:rate_limiter]).sent_total == 1
-      assert_receive {:request_result, %{result: {:ok, 401, [], ""}}}
+      assert_receive {:request_result, %{status: 401}}
     end
 
     for body <- ["invalid json", "null", "[]", "{}"] do

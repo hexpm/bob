@@ -16,7 +16,7 @@ defmodule Bob.DockerHub do
     opts = [recv_timeout: 10_000]
 
     {:ok, 200, _headers, body} =
-      track_request(:post, fn ->
+      Bob.HTTP.track_request(:post, url, fn ->
         Bob.HTTP.retry("DockerHub #{url}", fn ->
           Bob.HTTP.request(:post, url, headers, JSON.encode!(body), opts)
         end)
@@ -96,7 +96,7 @@ defmodule Bob.DockerHub do
   gate holding a slot that is never returned.
   """
   def paced_request(method, url, opts \\ []) do
-    track_request(method, fn -> paced_request(method, url, 0, opts) end)
+    Bob.HTTP.track_request(method, url, fn -> paced_request(method, url, 0, opts) end)
   end
 
   defp paced_request(method, url, attempts, opts) do
@@ -122,17 +122,6 @@ defmodule Bob.DockerHub do
       _other ->
         result
     end
-  end
-
-  defp track_request(method, fun) do
-    result = fun.()
-
-    :telemetry.execute([:bob, :docker_hub, :request, :stop], %{}, %{
-      method: method,
-      result: result
-    })
-
-    result
   end
 
   defp report({:ok, 429, response_headers, _body}, limiter),
