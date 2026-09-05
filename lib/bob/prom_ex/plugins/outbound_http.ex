@@ -20,6 +20,12 @@ defmodule Bob.PromEx.Plugins.OutboundHttp do
       Keyword.get(opts, :metric_prefix, PromEx.metric_prefix(otp_app, :outbound_http))
 
     Event.build(:bob_outbound_http_event_metrics, [
+      counter("bob.docker_hub.request.total",
+        event_name: [:bob, :docker_hub, :request, :stop],
+        description: "Docker Hub requests after all transport, server and rate-limit retries.",
+        tags: [:method, :status],
+        tag_values: &__MODULE__.docker_hub_tags/1
+      ),
       distribution(
         metric_prefix ++ [:request, :duration, :milliseconds],
         event_name: [:finch, :request, :stop],
@@ -75,6 +81,17 @@ defmodule Bob.PromEx.Plugins.OutboundHttp do
       method: request.method,
       status: status(Map.get(metadata, :result))
     }
+  end
+
+  @doc false
+  def docker_hub_tags(%{method: method, result: result}) do
+    status =
+      case result do
+        {:ok, status, _headers, _body} -> status
+        {:error, _reason} -> "error"
+      end
+
+    %{method: method |> to_string() |> String.upcase(), status: status}
   end
 
   @doc false

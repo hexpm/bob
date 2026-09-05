@@ -548,6 +548,22 @@ defmodule Bob.Job.DockerCheckerTest do
   end
 
   describe "manifest/0" do
+    test "re-enqueues a manifest left unpublished by an unreadable tag" do
+      tag = "27.0-ubuntu-noble-20250101"
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", tag, ["amd64"])
+      DockerChecker.manifest()
+      assert {:ok, {id, args}} = Bob.Queue.start(Bob.Job.DockerManifest)
+
+      assert Bob.Job.DockerManifest.get_archs("erlang", tag, fn _, _ -> :unreadable end) ==
+               {:unreadable, "amd64"}
+
+      Bob.Queue.success(id)
+
+      DockerChecker.manifest()
+      assert {:ok, {next_id, ^args}} = Bob.Queue.start(Bob.Job.DockerManifest)
+      refute next_id == id
+    end
+
     test "enqueues manifest jobs for per-arch tags missing from the manifest repo" do
       Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
       Artifacts.add_docker_tag("hexpm/erlang-arm64", "27.0-ubuntu-noble-20250101", ["arm64"])

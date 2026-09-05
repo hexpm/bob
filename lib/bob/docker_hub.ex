@@ -16,8 +16,10 @@ defmodule Bob.DockerHub do
     opts = [recv_timeout: 10_000]
 
     {:ok, 200, _headers, body} =
-      Bob.HTTP.retry("DockerHub #{url}", fn ->
-        Bob.HTTP.request(:post, url, headers, JSON.encode!(body), opts)
+      track_request(:post, fn ->
+        Bob.HTTP.retry("DockerHub #{url}", fn ->
+          Bob.HTTP.request(:post, url, headers, JSON.encode!(body), opts)
+        end)
       end)
 
     result = JSON.decode!(body)
@@ -44,36 +46,27 @@ defmodule Bob.DockerHub do
   @doc """
   Fetches a tag as `{:ok, {name, archs, built_at}}`.
 
-  `:not_found` is Docker Hub saying the tag is gone. `:unreadable` is a response
-  that carried no usable image data, which says nothing about the tag either
-  way — callers deciding what an image should contain have to tell the two
-  apart.
+  `:not_found` means Docker Hub returned 404. `:unreadable` means the request
+  failed after retries or returned no usable image data. Callers must preserve
+  existing manifests when a tag is unreadable.
   """
-  def fetch_tag(repo, tag) do
+  def fetch_tag(repo, tag, opts \\ []) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
-    headers = headers()
-    opts = [recv_timeout: 20_000]
 
-    result =
-      Bob.HTTP.retry("DockerHub #{url}", fn ->
-        Bob.HTTP.request(:get, url, headers, "", opts)
-      end)
-
-    case result do
+    case paced_request(:get, url, opts) do
       {:ok, 200, _headers, body} ->
-        case parse(JSON.decode!(body)) do
-          nil -> :unreadable
-          parsed -> {:ok, parsed}
+        with {:ok, decoded} when is_map(decoded) <- JSON.decode(body),
+             parsed when not is_nil(parsed) <- parse(decoded) do
+          {:ok, parsed}
+        else
+          _ -> :unreadable
         end
 
       {:ok, 404, _headers, _body} ->
         :not_found
 
-      {:ok, status, _headers, _body} ->
-        raise "DockerHub #{url} returned status #{status} after retries"
-
-      {:error, reason} ->
-        raise "DockerHub #{url} failed after retries: #{inspect(reason)}"
+      _other ->
+        :unreadable
     end
   end
 
@@ -102,33 +95,53 @@ defmodule Bob.DockerHub do
   other request. Every attempt reports back, so a failed one can't leave the
   gate holding a slot that is never returned.
   """
-  def paced_request(method, url), do: paced_request(method, url, 0)
+  def paced_request(method, url, opts \\ []) do
+    track_request(method, fn -> paced_request(method, url, 0, opts) end)
+  end
 
-  defp paced_request(method, url, attempts) do
+  defp paced_request(method, url, attempts, opts) do
+    request = Keyword.get(opts, :request, &Bob.HTTP.request/5)
+    limiter = Keyword.get(opts, :rate_limiter, RateLimiter)
+
     result =
       Bob.HTTP.retry(
         "DockerHub #{url}",
         fn ->
-          RateLimiter.acquire()
-          result = Bob.HTTP.request(method, url, headers(), "", recv_timeout: 20_000)
-          report(result)
+          RateLimiter.acquire(limiter)
+          result = request.(method, url, headers(), "", recv_timeout: 20_000)
+          report(result, limiter)
           result
         end,
-        retry_rate_limit?: false
+        Keyword.put(opts, :retry_rate_limit?, false)
       )
 
     case result do
       {:ok, 429, _response_headers, _body} when attempts < @max_rate_limit_retries ->
-        paced_request(method, url, attempts + 1)
+        paced_request(method, url, attempts + 1, opts)
 
       _other ->
         result
     end
   end
 
-  defp report({:ok, 429, response_headers, _body}), do: RateLimiter.throttle(response_headers)
-  defp report({:ok, _status, response_headers, _body}), do: RateLimiter.observe(response_headers)
-  defp report({:error, _reason}), do: RateLimiter.observe([])
+  defp track_request(method, fun) do
+    result = fun.()
+
+    :telemetry.execute([:bob, :docker_hub, :request, :stop], %{}, %{
+      method: method,
+      result: result
+    })
+
+    result
+  end
+
+  defp report({:ok, 429, response_headers, _body}, limiter),
+    do: RateLimiter.throttle(response_headers, limiter)
+
+  defp report({:ok, _status, response_headers, _body}, limiter),
+    do: RateLimiter.observe(response_headers, limiter)
+
+  defp report({:error, _reason}, limiter), do: RateLimiter.observe([], limiter)
 
   def headers() do
     if token = Application.get_env(:bob, :dockerhub_token) do

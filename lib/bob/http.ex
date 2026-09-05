@@ -49,7 +49,7 @@ defmodule Bob.HTTP do
         Logger.warning("#{name} ERROR: #{inspect(reason)}")
 
         if times + 1 < @max_retry_times do
-          Process.sleep(backoff(@error_sleep_time, times))
+          sleep(opts, backoff(@error_sleep_time, times))
           retry(name, fun, times + 1, opts)
         else
           {:error, reason}
@@ -63,7 +63,7 @@ defmodule Bob.HTTP do
           Logger.warning("#{name} RATE LIMIT")
 
           if times + 1 < @max_retry_times do
-            Process.sleep(backoff(@rate_limit_sleep_time, times))
+            sleep(opts, backoff(@rate_limit_sleep_time, times))
             retry(name, fun, times + 1, opts)
           else
             result
@@ -76,7 +76,7 @@ defmodule Bob.HTTP do
         Logger.warning("#{name} SERVER ERROR: #{status}")
 
         if times + 1 < @max_retry_times do
-          Process.sleep(backoff(@error_sleep_time, times))
+          sleep(opts, backoff(@error_sleep_time, times))
           retry(name, fun, times + 1, opts)
         else
           result
@@ -85,6 +85,11 @@ defmodule Bob.HTTP do
       result ->
         result
     end
+  end
+
+  defp sleep(opts, duration) do
+    sleep = Keyword.get(opts, :sleep, &Process.sleep/1)
+    sleep.(duration)
   end
 
   @doc false
