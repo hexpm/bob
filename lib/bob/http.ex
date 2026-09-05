@@ -39,6 +39,28 @@ defmodule Bob.HTTP do
     {:error, reason}
   end
 
+  @doc """
+  Records one final HTTP outcome from `fun`, tagged by host and method.
+  Wrap the complete request operation, including any caller-managed retries.
+  """
+  def track_request(method, url, fun) do
+    result = fun.()
+
+    status =
+      case result do
+        {:ok, status, _headers, _body} -> status
+        {:error, _reason} -> "error"
+      end
+
+    :telemetry.execute([:bob, :http, :request, :stop], %{}, %{
+      host: URI.parse(url).host,
+      method: method |> to_string() |> String.upcase(),
+      status: status
+    })
+
+    result
+  end
+
   def retry(name, fun, opts \\ []) do
     retry(name, fun, 0, opts)
   end
@@ -49,7 +71,7 @@ defmodule Bob.HTTP do
         Logger.warning("#{name} ERROR: #{inspect(reason)}")
 
         if times + 1 < @max_retry_times do
-          Process.sleep(backoff(@error_sleep_time, times))
+          sleep(opts, backoff(@error_sleep_time, times))
           retry(name, fun, times + 1, opts)
         else
           {:error, reason}
@@ -63,7 +85,7 @@ defmodule Bob.HTTP do
           Logger.warning("#{name} RATE LIMIT")
 
           if times + 1 < @max_retry_times do
-            Process.sleep(backoff(@rate_limit_sleep_time, times))
+            sleep(opts, backoff(@rate_limit_sleep_time, times))
             retry(name, fun, times + 1, opts)
           else
             result
@@ -76,7 +98,7 @@ defmodule Bob.HTTP do
         Logger.warning("#{name} SERVER ERROR: #{status}")
 
         if times + 1 < @max_retry_times do
-          Process.sleep(backoff(@error_sleep_time, times))
+          sleep(opts, backoff(@error_sleep_time, times))
           retry(name, fun, times + 1, opts)
         else
           result
@@ -85,6 +107,11 @@ defmodule Bob.HTTP do
       result ->
         result
     end
+  end
+
+  defp sleep(opts, duration) do
+    sleep = Keyword.get(opts, :sleep, &Process.sleep/1)
+    sleep.(duration)
   end
 
   @doc false

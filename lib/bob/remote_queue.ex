@@ -111,7 +111,12 @@ defmodule Bob.RemoteQueue do
     headers = [{"authorization", secret}, {"content-type", "application/vnd.bob+erlang"}]
     body = Bob.Plug.ErlangFormat.encode_to_iodata!(body)
 
-    case Bob.HTTP.retry("BobMaster", fn -> Bob.HTTP.request(:post, url, headers, body) end) do
+    result =
+      Bob.HTTP.track_request(:post, url, fn ->
+        Bob.HTTP.retry("BobMaster", fn -> Bob.HTTP.request(:post, url, headers, body) end)
+      end)
+
+    case result do
       {:ok, 200, _headers, body} ->
         {:ok, body} = Bob.Plug.ErlangFormat.decode(body)
         {:ok, body}
