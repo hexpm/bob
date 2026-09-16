@@ -172,20 +172,20 @@ defmodule Bob.Job.DockerCheckerTest do
     test "rejects elixir versions below 1.10" do
       refute DockerChecker.valid_elixir_build?(
                "1.9.4",
-               "22",
-               "22.3",
+               "26",
+               "26.1",
                "debian",
-               "bullseye-20250101"
+               "bookworm-20250101"
              )
     end
 
     test "rejects prereleases below 1.12" do
       refute DockerChecker.valid_elixir_build?(
                "1.11.0-rc.0",
-               "23",
-               "23.3",
+               "26",
+               "26.1",
                "debian",
-               "bullseye-20250101"
+               "bookworm-20250101"
              )
     end
 
@@ -205,6 +205,26 @@ defmodule Bob.Job.DockerCheckerTest do
 
     test "yields no versions when base_image_tags is empty" do
       assert DockerChecker.builds()["alpine"] == []
+    end
+
+    test "skips debian releases that are out of support" do
+      for tag <- [
+            "trixie-20250101",
+            "trixie-20250101-slim",
+            "bookworm-20250101",
+            "bookworm-20250101-slim",
+            "bullseye-20250101",
+            "bullseye-20250101-slim"
+          ] do
+        Repo.insert!(%BaseImageTag{repo: "library/debian", tag: tag})
+      end
+
+      assert DockerChecker.builds()["debian"] == [
+               "trixie-20250101",
+               "trixie-20250101-slim",
+               "bookworm-20250101",
+               "bookworm-20250101-slim"
+             ]
     end
   end
 

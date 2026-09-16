@@ -33,10 +33,7 @@ defmodule Bob.Job.DockerChecker do
          ~r/^trixie-\d{8}-slim$/,
          # 12
          ~r/^bookworm-\d{8}$/,
-         ~r/^bookworm-\d{8}-slim$/,
-         # 11
-         ~r/^bullseye-\d{8}$/,
-         ~r/^bullseye-\d{8}-slim$/
+         ~r/^bookworm-\d{8}-slim$/
        ]}
     ]
     |> Map.new(fn {repo, regexes} -> {repo, tags(repo, regexes)} end)
@@ -146,7 +143,6 @@ defmodule Bob.Job.DockerChecker do
 
   defp build_erlang_ref?("alpine", os_ver, "OTP-" <> ver), do: build_alpine?(os_ver, ver)
   defp build_erlang_ref?("debian", "buster-" <> _, "OTP-1" <> _), do: false
-  defp build_erlang_ref?("debian", "bullseye-" <> _, "OTP-1" <> _), do: false
 
   defp build_erlang_ref?("debian", "trixie-" <> _, "OTP-" <> version),
     do: build_openssl_3?(version)
