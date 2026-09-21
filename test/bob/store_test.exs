@@ -106,20 +106,28 @@ defmodule Bob.StoreTest do
       pem_path = generate_test_key()
       pub_path = pem_path <> ".pub"
 
-      # Export the public key once
       {pub_pem, 0} = System.cmd("openssl", ["rsa", "-pubout", "-in", pem_path])
       File.write!(pub_path, pub_pem)
 
       content = "OTP-27.0 abc123 2026-01-01T00:00:00Z hash\n"
+      content_path = pem_path <> ".content"
+      File.write!(content_path, content)
+
       b64_sig = Store.sign_content(pem_path, content)
       sig_bytes = Base.decode64!(b64_sig)
 
-      # Write sig bytes to a temp file for verification
+      [pub_entry] = :public_key.pem_decode(pub_pem)
+      public_key = :public_key.pem_entry_decode(pub_entry)
+      assert :public_key.verify(content, :sha512, sig_bytes, public_key)
+      refute :public_key.verify(content <> "x", :sha512, sig_bytes, public_key)
+
+      {openssl_sig, 0} =
+        System.cmd("openssl", ["dgst", "-sha512", "-sign", pem_path, content_path])
+
+      assert sig_bytes == openssl_sig
+
       sig_path = pem_path <> ".sig"
       File.write!(sig_path, sig_bytes)
-
-      content_path = pem_path <> ".content"
-      File.write!(content_path, content)
 
       {_output, exit_code} =
         System.cmd(

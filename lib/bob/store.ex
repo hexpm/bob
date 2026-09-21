@@ -3,28 +3,18 @@ defmodule Bob.Store do
 
   @doc """
   Signs `content` with the PEM private key at `pem_path` using
-  `openssl dgst -sha512 -sign` and returns the base64-encoded signature, or
+  `:public_key.sign/3` with SHA-512 and returns the base64-encoded signature, or
   `nil` when `pem_path` is `nil` (key not configured).
   """
   def sign_content(nil, _content), do: nil
 
   def sign_content(pem_path, content) do
-    # Write content to a temp file so openssl can read from stdin cleanly for
-    # arbitrary binary/text payloads.
-    tmp = Path.join(System.tmp_dir!(), "bob_sign_#{System.unique_integer([:positive])}.tmp")
+    [entry] = pem_path |> File.read!() |> :public_key.pem_decode()
+    private_key = :public_key.pem_entry_decode(entry)
 
-    try do
-      File.write!(tmp, content)
-
-      case System.cmd("openssl", ["dgst", "-sha512", "-sign", pem_path, tmp],
-             stderr_to_stdout: false
-           ) do
-        {sig_binary, 0} -> Base.encode64(sig_binary)
-        {_output, code} -> raise "openssl dgst exited with #{code}"
-      end
-    after
-      File.rm(tmp)
-    end
+    content
+    |> :public_key.sign(:sha512, private_key)
+    |> Base.encode64()
   end
 
   # TODO: Use S3 object metadata
