@@ -154,6 +154,17 @@ defmodule Bob.QueueTest do
     end
   end
 
+  test "a failed builds purge does not back off the next purge of the same keys" do
+    keys = "builds/otp/amd64/ubuntu-24.04/txt builds/otp/amd64/ubuntu-24.04/master"
+
+    Queue.add(Bob.Job.PurgeBuilds, [keys])
+    {:ok, {id, [^keys]}} = Queue.start(Bob.Job.PurgeBuilds)
+    Queue.failure(id)
+    Queue.add(Bob.Job.PurgeBuilds, [keys])
+
+    assert size(Bob.Job.PurgeBuilds) == 1
+  end
+
   test "success clears any existing backoff for the job" do
     # Set up a previously-failed job that is now running again, by inserting
     # the rows directly (a backed-off job will not re-enter the queue on its own).

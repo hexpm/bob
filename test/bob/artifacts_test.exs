@@ -163,7 +163,7 @@ defmodule Bob.ArtifactsTest do
   end
 
   describe "add/1" do
-    test "upserts and regenerates builds.txt" do
+    test "upserts, regenerates builds.txt and queues the CDN purge" do
       Bob.FakeHttpClient.reset()
 
       Bob.FakeHttpClient.stub(
@@ -175,6 +175,13 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.add(attrs()) == :ok
       assert [%Artifact{name: "OTP-27.0"}] = Repo.all(Artifact)
+
+      assert Bob.Queue.queued() == [
+               {Bob.Job.PurgeBuilds,
+                [
+                  "builds/otp/amd64/ubuntu-24.04/txt builds/otp/amd64/ubuntu-24.04/OTP-27.0"
+                ]}
+             ]
     end
   end
 
