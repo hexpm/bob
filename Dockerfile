@@ -1,6 +1,6 @@
 ARG ELIXIR_VERSION=1.20.4
 ARG ERLANG_VERSION=29.1.1
-ARG DEBIAN_VERSION=bookworm-20260918-slim
+ARG DEBIAN_VERSION=trixie-20260918-slim
 
 FROM hexpm/elixir:${ELIXIR_VERSION}-erlang-${ERLANG_VERSION}-debian-${DEBIAN_VERSION} AS build
 
@@ -44,7 +44,7 @@ RUN mix do sentry.package_source_code, release
 FROM debian:${DEBIAN_VERSION} AS app
 
 RUN apt update -y && \
-    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker.io gnupg gzip libffi-dev libssl-dev openssl python3-dev tar zip
+    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker-cli gnupg gzip libffi-dev libssl-dev openssl python3-dev tar zip
 
 ARG BUILDX_VERSION=0.17.1
 RUN mkdir -p /usr/libexec/docker/cli-plugins && \
