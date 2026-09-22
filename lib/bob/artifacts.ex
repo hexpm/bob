@@ -21,11 +21,12 @@ defmodule Bob.Artifacts do
   @erlang_arch_repos ~w(hexpm/erlang-amd64 hexpm/erlang-arm64)
   @docker_cleanup_per_arch_repos ~w(hexpm/elixir-amd64 hexpm/elixir-arm64) ++ @erlang_arch_repos
 
+  # The CDN purge sleeps 4 seconds between each of its three requests, so it is
+  # queued rather than run in the agent's POST /api/artifacts/add.
   def add(attrs) do
     upsert(attrs)
     generate_builds_txt(attrs.arch, attrs.os)
-    Bob.Fastly.purge_builds(purge_keys(attrs.arch, attrs.os, attrs.name))
-    :ok
+    Bob.Queue.add(Bob.Job.PurgeBuilds, [purge_keys(attrs.arch, attrs.os, attrs.name)])
   end
 
   def add_docker_tag(repo, tag, archs, built_at \\ DateTime.utc_now()) do

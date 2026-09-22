@@ -10,12 +10,16 @@ defmodule Bob.Queue do
 
   # Periodic scheduler jobs re-run every interval and must not be suppressed by
   # backoff after a transient failure; only the build jobs they enqueue back off.
+  # A builds purge is queued once per uploaded artifact and nothing re-queues it,
+  # so backing off after a failed purge would skip the next build's purge of the
+  # same keys.
   @no_backoff [
     Bob.Job.OTPChecker,
     Bob.Job.DockerChecker,
     Bob.Job.Reconcile,
     Bob.Job.ReconcileBaseImages,
-    Bob.Job.DockerCleanup
+    Bob.Job.DockerCleanup,
+    Bob.Job.PurgeBuilds
   ]
 
   @dedup_conflict_target {:unsafe_fragment,
