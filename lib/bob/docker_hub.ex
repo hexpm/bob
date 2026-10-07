@@ -141,10 +141,11 @@ defmodule Bob.DockerHub do
   end
 
   def parse(result) do
-    # Reject corrupt images
+    # Reject corrupt images, and the attestation manifest BuildKit pushes next
+    # to each image, which Docker Hub lists with an "unknown" architecture
     images =
       Enum.reject(result["images"] || [], fn image ->
-        image["digest"] in [nil, ""] or image["architecture"] in [nil, ""]
+        image["digest"] in [nil, ""] or image["architecture"] in [nil, "", "unknown"]
       end)
 
     built_at = docker_hub_timestamp(result, images)

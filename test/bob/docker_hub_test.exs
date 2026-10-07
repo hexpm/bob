@@ -30,6 +30,27 @@ defmodule Bob.DockerHubTest do
              ) == {"27.0", ["amd64", "arm64"], @image_pushed_at}
     end
 
+    test "leaves attestation manifests out of the archs" do
+      assert DockerHub.parse(
+               tag_payload(%{
+                 "last_updated" => "2025-01-02T03:04:05.123456Z",
+                 "images" => [
+                   image("amd64", "sha256:amd64", "2025-02-03T04:05:06Z"),
+                   image("unknown", "sha256:attestation", "2025-02-03T04:05:06Z")
+                 ]
+               })
+             ) == {"27.0", ["amd64"], @built_at}
+    end
+
+    test "rejects a tag holding only an attestation manifest" do
+      assert DockerHub.parse(
+               tag_payload(%{
+                 "last_updated" => "2025-01-02T03:04:05.123456Z",
+                 "images" => [image("unknown", "sha256:attestation", "2025-02-03T04:05:06Z")]
+               })
+             ) == nil
+    end
+
     test "rejects images without a digest" do
       assert DockerHub.parse(
                tag_payload(%{
@@ -171,6 +192,25 @@ defmodule Bob.DockerHubTest do
       fetch = fn repo, tag -> DockerHub.fetch_tag(repo, tag, opts) end
 
       refute Bob.Job.DockerManifest.publish?("erlang", "27.0", [{"amd64", @built_at}], fetch)
+    end
+
+    test "adds an arch to a manifest that carries an attestation manifest" do
+      body =
+        JSON.encode!(
+          tag_payload(%{
+            "last_updated" => "2025-01-02T03:04:05.123456Z",
+            "images" => [
+              image("amd64", "sha256:amd64", "2025-01-02T03:04:05Z"),
+              image("unknown", "sha256:attestation", "2025-01-02T03:04:05Z")
+            ]
+          })
+        )
+
+      opts = request_opts([{:ok, 200, [], body}])
+      fetch = fn repo, tag -> DockerHub.fetch_tag(repo, tag, opts) end
+      sources = [{"amd64", @built_at}, {"arm64", @image_pushed_at}]
+
+      assert Bob.Job.DockerManifest.publish?("erlang", "27.0", sources, fetch)
     end
 
     test "does not publish a partial manifest when a source lookup fails" do
