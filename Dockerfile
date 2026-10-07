@@ -52,6 +52,8 @@ RUN mkdir -p /usr/libexec/docker/cli-plugins && \
       -o /usr/libexec/docker/cli-plugins/docker-buildx && \
     chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
 
+COPY --from=ghcr.io/sigstore/cosign/cosign:v3.1.3@sha256:9e5c2f2edc34351160407ca3416c61855bdf9403c3c5936e0f0be7fc261611b8 /ko-app/cosign /usr/local/bin/cosign
+
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
     apt update -y && apt install --no-install-recommends -y google-cloud-cli

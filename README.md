@@ -80,3 +80,20 @@ Requesting an image also reserves it from cleanup, permanently. If the image alr
 Cleanup only touches `hexpm/elixir-amd64` and `hexpm/elixir-arm64`, which hold the single-arch images the multi-arch manifests are assembled from rather than images meant to be pulled directly. They keep the last 30 days of builds; older single-arch tags are removed, and the multi-arch image they back stays available.
 
 Tags reserved by a build request are never removed and are flagged as `reserved`. To pin a single-arch tag indefinitely, request it at https://bob.hex.pm/request.
+
+### Verifying images
+
+Images are signed with [cosign](https://github.com/sigstore/cosign) using a key held in Google Cloud KMS, and every signature is recorded in the public [Rekor](https://docs.sigstore.dev/logging/overview/) transparency log. The public key is [`cosign.pub`](cosign.pub). Verify an image with:
+
+```
+curl -fsSLO https://raw.githubusercontent.com/hexpm/bob/main/cosign.pub
+cosign verify --key cosign.pub hexpm/elixir:<tag>
+```
+
+Tags built before signing was added have no signature.
+
+Each image also carries a [SLSA provenance](https://docs.docker.com/build/metadata/attestations/slsa-provenance/) attestation recording the build arguments, the Dockerfile and the digests of the base images it was built from:
+
+```
+docker buildx imagetools inspect hexpm/elixir:<tag> --format '{{json .Provenance}}'
+```
