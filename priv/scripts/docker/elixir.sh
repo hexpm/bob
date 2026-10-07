@@ -11,7 +11,7 @@ arch=$5
 tag=${elixir}-erlang-${erlang}-${os}-${os_version}
 erlang_major=$(echo "${erlang}" | awk 'match($0, /^[0-9][0-9]/) { print substr( $0, RSTART, RLENGTH )}')
 
-docker build --ulimit nofile=1024:1024 -t hexpm/elixir-${arch}:${tag} --build-arg ELIXIR=${elixir} --build-arg ERLANG=${erlang} --build-arg ERLANG_MAJOR=${erlang_major} --build-arg OS_VERSION=${os_version} --build-arg ARCH=${arch} -f ${SCRIPT_DIR}/docker/elixir-${os}.dockerfile ${SCRIPT_DIR}/docker
+docker build --ulimit nofile=1024:1024 --provenance=mode=max -t hexpm/elixir-${arch}:${tag} --build-arg ELIXIR=${elixir} --build-arg ERLANG=${erlang} --build-arg ERLANG_MAJOR=${erlang_major} --build-arg OS_VERSION=${os_version} --build-arg ARCH=${arch} -f ${SCRIPT_DIR}/docker/elixir-${os}.dockerfile ${SCRIPT_DIR}/docker
 
 # Smoke test
 docker run --rm hexpm/elixir-${arch}:${tag} elixir -v
@@ -23,3 +23,5 @@ docker push docker.io/hexpm/elixir-${arch}:${tag} ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/elixir-${arch}:${tag}) ||
   (exit 1)
+
+${SCRIPT_DIR}/docker/sign.sh hexpm/elixir-${arch} ${tag}
