@@ -14,25 +14,33 @@ if config_env() == :prod do
     end
   end
 
+  master? = System.fetch_env!("BOB_WHO") == "master"
+
   config :bob,
-    github_user: System.fetch_env!("BOB_GITHUB_USER"),
-    github_token: System.fetch_env!("BOB_GITHUB_TOKEN"),
     dockerhub_username: System.get_env("BOB_DOCKERHUB_USERNAME"),
     dockerhub_password: System.get_env("BOB_DOCKERHUB_PASSWORD"),
     agent_secret: System.fetch_env!("BOB_AGENT_SECRET"),
     master_url: System.fetch_env!("BOB_MASTER_URL"),
-    master?: System.fetch_env!("BOB_WHO") == "master",
+    master?: master?,
     parallel_jobs: String.to_integer(System.fetch_env!("BOB_PARALLEL_JOBS")),
     local_jobs: jobs_fun.("BOB_LOCAL_JOBS"),
     remote_jobs: jobs_fun.("BOB_REMOTE_JOBS"),
     hexpm_url: System.get_env("BOB_HEXPM_URL", "https://hex.pm"),
-    oauth_client_id: System.fetch_env!("BOB_OAUTH_CLIENT_ID"),
-    oauth_client_secret: System.fetch_env!("BOB_OAUTH_CLIENT_SECRET"),
     docker_cleanup_mode: cleanup_mode.()
 
-  config :ex_aws,
-    access_key_id: System.fetch_env!("BOB_S3_ACCESS_KEY"),
-    secret_access_key: System.fetch_env!("BOB_S3_SECRET_KEY")
+  # Agents only run build jobs, which upload with the aws CLI and its AWS_*
+  # variables. The checkers, the S3 store and the web login run on the master.
+  if master? do
+    config :bob,
+      github_user: System.fetch_env!("BOB_GITHUB_USER"),
+      github_token: System.fetch_env!("BOB_GITHUB_TOKEN"),
+      oauth_client_id: System.fetch_env!("BOB_OAUTH_CLIENT_ID"),
+      oauth_client_secret: System.fetch_env!("BOB_OAUTH_CLIENT_SECRET")
+
+    config :ex_aws,
+      access_key_id: System.fetch_env!("BOB_S3_ACCESS_KEY"),
+      secret_access_key: System.fetch_env!("BOB_S3_SECRET_KEY")
+  end
 
   # GIT_SHA is baked into the image and matches the release CI creates in
   # Sentry, so issues resolved via commits auto-resolve when the deploy
