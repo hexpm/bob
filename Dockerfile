@@ -25,8 +25,11 @@ ENV MIX_ENV=prod
 
 # install mix dependencies
 COPY mix.exs mix.lock ./
-COPY config config
 RUN mix deps.get
+# The config the dependencies compile with. runtime.exs is only read by the
+# release, so it's copied in right before it, and a change to it doesn't
+# recompile the dependencies.
+COPY config/config.exs config/prod.exs config/
 RUN mix deps.compile
 
 # build project
@@ -37,6 +40,7 @@ RUN mix assets.deploy
 RUN mix compile
 
 # build release
+COPY config/runtime.exs config/
 COPY rel rel
 RUN mix do sentry.package_source_code, release
 
@@ -58,13 +62,17 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
     apt update -y && apt install --no-install-recommends -y google-cloud-cli
 
-COPY etc/boto /app/.boto
+# The release creates /app/tmp when it starts and writes its runtime config
+# there, so /app is nobody's.
+RUN mkdir /app /boto /persist && chown nobody:nogroup /app /boto /persist
+COPY --chown=65534:65534 etc/boto /app/.boto
 
 WORKDIR /app
 
-COPY --from=build /app/_build/prod/rel/bob ./
-RUN mkdir /boto /persist
-RUN chown -R nobody: /app /boto /persist
+# A --link copy doesn't depend on the layers before it, so a build that has
+# them in its cache doesn't have to download them. --link can't look up user
+# names, so the owner is nobody:nogroup by ID.
+COPY --link --from=build --chown=65534:65534 /app/_build/prod/rel/bob ./
 USER nobody
 
 ENV HOME=/app
