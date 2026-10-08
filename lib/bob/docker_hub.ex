@@ -22,8 +22,9 @@ defmodule Bob.DockerHub do
         end)
       end)
 
-    result = JSON.decode!(body)
-    Application.put_env(:bob, :dockerhub_token, result["token"])
+    token = JSON.decode!(body)["token"]
+    Application.put_env(:bob, :dockerhub_token, token)
+    token
   end
 
   @doc """
