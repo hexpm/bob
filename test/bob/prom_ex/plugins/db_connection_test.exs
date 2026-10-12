@@ -27,6 +27,31 @@ defmodule Bob.PromEx.Plugins.DbConnectionTest do
     assert [:db_connection, :disconnected] in events
   end
 
+  test "starts the counters at zero" do
+    events = [
+      [:db_connection, :connection_error],
+      [:db_connection, :connected],
+      [:db_connection, :disconnected]
+    ]
+
+    ref = :telemetry_test.attach_event_handlers(self(), events)
+    on_exit(fn -> :telemetry.detach(ref) end)
+
+    assert DbConnection.initialize_counters() == :ignore
+
+    assert_received {[:db_connection, :connection_error], ^ref, %{count: 0}, %{error: error}}
+    assert DbConnection.error_tags(%{error: error}) == %{reason: :queue_timeout}
+
+    assert_received {[:db_connection, :connection_error], ^ref, %{count: 0}, %{error: error}}
+    assert DbConnection.error_tags(%{error: error}) == %{reason: :error}
+
+    assert_received {[:db_connection, :connected], ^ref, %{count: 0}, %{}}
+    assert_received {[:db_connection, :disconnected], ^ref, %{count: 0}, %{}}
+
+    assert DbConnection.count(%{count: 0}) == 0
+    assert DbConnection.count(%{count: 1}) == 1
+  end
+
   test "the repo notifies the listener the application started" do
     assert Bob.Repo.config()[:connection_listeners] ==
              {[Bob.Repo.TelemetryListener], Bob.Repo}

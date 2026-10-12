@@ -4,6 +4,12 @@ defmodule Bob.PromEx.Plugins.Bob do
 
   Event metrics are emitted by `Bob.Runner` on every node. Queue depth is
   polled from Postgres, so that polling group only runs on the master.
+
+  A counter series is created by its first event, and Prometheus' `increase()`
+  needs two samples, so it never counts that first event. The job counters are
+  sums of each event's `:count` measurement, 1 when absent, and
+  `initialize_counters/0` creates the series of every job the node runs at zero
+  when the application starts.
   """
 
   use PromEx.Plugin
@@ -32,14 +38,16 @@ defmodule Bob.PromEx.Plugins.Bob do
         tags: [:job_type, :result],
         tag_values: &job_stop_tag_values/1
       ),
-      counter("bob.job.timeout.total",
+      sum("bob.job.timeout.total",
         event_name: [:bob, :job, :timeout],
+        measurement: &__MODULE__.count/1,
         description: "Build jobs killed after exceeding the job timeout.",
         tags: [:job_type],
         tag_values: &job_tag_values/1
       ),
-      counter("bob.job.crash.total",
+      sum("bob.job.crash.total",
         event_name: [:bob, :job, :crash],
+        measurement: &__MODULE__.count/1,
         description: "Build jobs that died from an uncaught throw or exit.",
         tags: [:job_type],
         tag_values: &job_tag_values/1
@@ -89,6 +97,40 @@ defmodule Bob.PromEx.Plugins.Bob do
         )
       ]
     )
+  end
+
+  @doc false
+  def count(measurements), do: Map.get(measurements, :count, 1)
+
+  @doc """
+  Reports a zero timeout and crash for every job this node runs, so the first
+  real one is an increase Prometheus can see. Started as a child right after
+  `Bob.PromEx`, before the runner.
+  """
+  def initialize_counters() do
+    for key <- node_jobs() do
+      :telemetry.execute([:bob, :job, :timeout], %{count: 0}, %{key: key})
+      :telemetry.execute([:bob, :job, :crash], %{count: 0}, %{key: key})
+    end
+
+    :ignore
+  end
+
+  # The runner takes queued jobs from the local jobs on the master and from the
+  # remote jobs on an agent, and runs the node's scheduled jobs that aren't
+  # queued itself.
+  defp node_jobs() do
+    {queued, schedule} =
+      if Application.get_env(:bob, :master?) do
+        {Application.get_env(:bob, :local_jobs, []),
+         Application.get_env(:bob, :master_schedule, [])}
+      else
+        {Application.get_env(:bob, :remote_jobs, []),
+         Application.get_env(:bob, :agent_schedule, [])}
+      end
+
+    scheduled = for opts <- schedule, !Keyword.get(opts, :queue, false), do: opts[:module]
+    Enum.uniq(queued ++ scheduled)
   end
 
   @doc false
