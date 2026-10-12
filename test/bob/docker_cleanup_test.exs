@@ -1,6 +1,8 @@
 defmodule Bob.DockerCleanupTest do
   use Bob.DataCase
 
+  import ExUnit.CaptureLog
+
   alias Bob.{Artifacts, BuildRequests, DockerCleanup}
 
   # Mirrors Bob.DockerCleanup's own chunk size so these exercise real boundaries.
@@ -102,12 +104,10 @@ defmodule Bob.DockerCleanupTest do
 
       # Reserve every tag while the first chunk is being deleted. That chunk was
       # already re-checked so it goes, but the next one must find them pinned.
-      deleter = fn _repo, _tag ->
-        unless Process.get(:reserved) do
-          Process.put(:reserved, true)
-          reserve_targets(tags)
-        end
+      first? = once()
 
+      deleter = fn _repo, _tag ->
+        if first?.(), do: reserve_targets(tags)
         :ok
       end
 
@@ -125,7 +125,12 @@ defmodule Bob.DockerCleanupTest do
         old()
       )
 
-      assert {:live, 0} = DockerCleanup.run(mode: :live, deleter: deleter)
+      {result, log} = with_log(fn -> DockerCleanup.run(mode: :live, deleter: deleter) end)
+
+      assert {:live, 0} = result
+      assert log =~ "Docker cleanup delete failed"
+      assert log =~ ~s(tag: "1.26.0-erlang-27.0-ubuntu-noble-20250101")
+      assert log =~ ~s(reason: ":boom")
 
       assert Artifacts.docker_tags("hexpm/elixir-amd64") ==
                [{"1.26.0-erlang-27.0-ubuntu-noble-20250101", ["amd64"]}]
@@ -186,9 +191,10 @@ defmodule Bob.DockerCleanupTest do
       tags = add_stale_tags("hexpm/elixir-amd64", @chunk + 50)
 
       # Reconcile bumping built_at while the first chunk is being deleted.
+      first? = once()
+
       deleter = fn repo, _tag ->
-        unless Process.get(:repushed) do
-          Process.put(:repushed, true)
+        if first?.() do
           for tag <- tags, do: Artifacts.add_docker_tag(repo, tag, ["amd64"], DateTime.utc_now())
         end
 
@@ -208,10 +214,15 @@ defmodule Bob.DockerCleanupTest do
         {:error, :unauthorized}
       end
 
-      assert {:live, 0} = DockerCleanup.run(mode: :live, deleter: deleter)
+      {result, log} = with_log(fn -> DockerCleanup.run(mode: :live, deleter: deleter) end)
+
+      assert {:live, 0} = result
 
       # Stops after @dead_chunk_ceiling chunks rather than walking all five.
       assert count_received(:attempted) == @chunk * 3
+      assert length(Regex.scan(~r/Docker cleanup delete failed/, log)) == @chunk * 3
+      assert log =~ "Docker cleanup aborted"
+      assert log =~ "dead_chunks: 3"
       assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == @chunk * 5
     end
   end
@@ -243,7 +254,11 @@ defmodule Bob.DockerCleanupTest do
         old()
       )
 
-      assert {:live, 0} = DockerCleanup.run(mode: :live, deleter: deleter)
+      {result, log} = with_log(fn -> DockerCleanup.run(mode: :live, deleter: deleter) end)
+
+      assert {:live, 0} = result
+      assert length(Regex.scan(~r/Docker cleanup delete failed/, log)) == 1
+      assert log =~ ~s(reason: ":nope")
       assert length(Artifacts.docker_tags("hexpm/elixir-amd64")) == 1
     end
 
@@ -327,6 +342,13 @@ defmodule Bob.DockerCleanupTest do
       end
 
     Repo.insert_all(Bob.BuildRequests.BuildRequest, rows)
+  end
+
+  # DockerCleanup calls the deleter from a Task.async_stream worker per tag, so
+  # a side effect meant to happen once is guarded across processes.
+  defp once() do
+    ref = :atomics.new(1, [])
+    fn -> :atomics.compare_exchange(ref, 1, 0, 1) == :ok end
   end
 
   defp received_remaining() do

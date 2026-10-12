@@ -282,7 +282,12 @@ defmodule BobWeb.RequestLive do
           cleaned up, after 30 days.
         </p>
 
-        <form phx-change="validate" phx-submit="request" class="filter-bar filter-bar--wrap">
+        <form
+          id="build-request"
+          phx-change="validate"
+          phx-submit="request"
+          class="filter-bar filter-bar--wrap"
+        >
           <.filter_select
             name="kind"
             label="image"

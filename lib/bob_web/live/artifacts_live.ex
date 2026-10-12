@@ -96,7 +96,12 @@ defmodule BobWeb.ArtifactsLive do
       </div>
 
       <section class="sec">
-        <form phx-change="search" phx-submit="search" class="filter-bar filter-bar--wrap">
+        <form
+          id="artifact-filters"
+          phx-change="search"
+          phx-submit="search"
+          class="filter-bar filter-bar--wrap"
+        >
           <.search_box name="query" value={@query} placeholder="Search name or ref..." />
           <.filter_select name="kind" label="kind" value={@kind} options={@kinds} />
           <.filter_select name="arch" label="arch" value={@arch} options={@arches} />

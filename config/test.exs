@@ -19,6 +19,8 @@ config :ex_aws,
 config :logger, level: :info
 config :logger, :default_handler, level: :error
 
+config :phoenix_live_view, :test_warnings, missing_form_id: :raise
+
 config :bob, Bob.Repo,
   username: "postgres",
   password: "postgres",
