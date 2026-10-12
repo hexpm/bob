@@ -23,4 +23,14 @@ defmodule Bob.PromExTest do
       refute PromEx.Plugins.Phoenix in plugin_modules()
     end
   end
+
+  test "reports Ecto metrics with the finer buckets only on the master" do
+    Application.put_env(:bob, :master?, true)
+    assert {Bob.PromEx.Plugins.Ecto, repos: [Bob.Repo]} in Bob.PromEx.plugins()
+    refute PromEx.Plugins.Ecto in plugin_modules()
+
+    Application.put_env(:bob, :master?, false)
+    refute Bob.PromEx.Plugins.Ecto in plugin_modules()
+    refute PromEx.Plugins.Ecto in plugin_modules()
+  end
 end
