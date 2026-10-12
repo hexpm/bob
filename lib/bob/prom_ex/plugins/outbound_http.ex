@@ -92,10 +92,11 @@ defmodule Bob.PromEx.Plugins.OutboundHttp do
     }
   end
 
+  # A pool wait is reported with the request that waited, a connect with the
+  # host it connected to.
   @doc false
-  def pool_tags(metadata) do
-    %{host: Map.get(metadata, :host, "unknown")}
-  end
+  def pool_tags(%{request: %Finch.Request{host: host}}), do: %{host: host}
+  def pool_tags(%{host: host}), do: %{host: host}
 
   # A request that never got a response is still worth counting, so failures are
   # labelled rather than dropped.
