@@ -21,7 +21,7 @@ defmodule Bob.Application do
   # starts, and the Ecto dashboard reads its repo dropdown from those.
   def children() do
     children =
-      [Bob.PromEx] ++
+      [Bob.PromEx, initialize_counters(Bob.PromEx.Plugins.Bob)] ++
         repo_children() ++
         [
           {Finch, name: Bob.Finch},
@@ -41,11 +41,18 @@ defmodule Bob.Application do
 
   defp repo_children() do
     if Application.get_env(:bob, :master?) do
-      [{DBConnection.TelemetryListener, name: Bob.Repo.TelemetryListener}, Bob.Repo] ++
-        maintenance_children()
+      [
+        initialize_counters(Bob.PromEx.Plugins.DbConnection),
+        {DBConnection.TelemetryListener, name: Bob.Repo.TelemetryListener},
+        Bob.Repo
+      ] ++ maintenance_children()
     else
       []
     end
+  end
+
+  defp initialize_counters(plugin) do
+    %{id: {plugin, :initialize_counters}, start: {plugin, :initialize_counters, []}}
   end
 
   # Serves Prometheus metrics on a port separate from the main endpoint
