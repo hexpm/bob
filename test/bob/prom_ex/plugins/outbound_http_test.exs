@@ -27,7 +27,11 @@ defmodule Bob.PromEx.Plugins.OutboundHttpTest do
 
   describe "a request through Finch" do
     setup do
-      plug = fn conn, _opts -> Plug.Conn.send_resp(conn, 204, "") end
+      # Answers with the status in the first path segment, 204 without one.
+      plug = fn conn, _opts ->
+        status = conn.path_info |> List.first("204") |> String.to_integer()
+        Plug.Conn.send_resp(conn, status, "")
+      end
 
       server =
         start_supervised!({Bandit, plug: plug, ip: :loopback, port: 0, startup_log: false},
@@ -49,7 +53,7 @@ defmodule Bob.PromEx.Plugins.OutboundHttpTest do
 
       start_supervised!(PromEx.Storage.Core.child_spec(name, metrics))
 
-      %{url: "http://127.0.0.1:#{port}/", finch: finch, metrics: name}
+      %{url: "http://127.0.0.1:#{port}/", port: port, finch: finch, metrics: name}
     end
 
     test "tags the request, the pool wait and the connect by host", context do
@@ -87,6 +91,30 @@ defmodule Bob.PromEx.Plugins.OutboundHttpTest do
                ~s(bob_prom_ex_outbound_http_connect_duration_milliseconds_count{host="127.0.0.1"} 1\n)
     end
 
+    test "tags an S3 request sent through Req by its response status", context do
+      operation = ExAws.S3.list_objects("403")
+
+      assert {:error, {:http_error, 403, _response}} =
+               ExAws.request(operation, s3_config(context))
+
+      scrape = PromEx.Storage.Core.scrape(context.metrics)
+
+      assert scrape =~
+               ~s(bob_prom_ex_outbound_http_request_total{host="127.0.0.1",method="GET",status="403"} 1\n)
+    end
+
+    test "tags an S3 request sent through Req that failed by its error", context do
+      stop_supervised!(:server)
+      operation = ExAws.S3.list_objects("bucket")
+
+      assert {:error, _reason} = ExAws.request(operation, s3_config(context))
+
+      scrape = PromEx.Storage.Core.scrape(context.metrics)
+
+      assert scrape =~
+               ~s(bob_prom_ex_outbound_http_request_total{host="127.0.0.1",method="GET",status="Finch.TransportError"} 1\n)
+    end
+
     test "tags a request that raised by host, method and kind", context do
       request = Finch.build(:post, context.url)
 
@@ -99,5 +127,17 @@ defmodule Bob.PromEx.Plugins.OutboundHttpTest do
       assert scrape =~
                ~s(bob_prom_ex_outbound_http_request_exception_total{host="127.0.0.1",kind="error",method="POST"} 1\n)
     end
+  end
+
+  # Production sends ExAws through ExAws.Request.Req, and the tests through a
+  # fake client.
+  defp s3_config(context) do
+    [
+      http_client: ExAws.Request.Req,
+      scheme: "http://",
+      host: "127.0.0.1",
+      port: context.port,
+      retries: [max_attempts: 1]
+    ]
   end
 end
