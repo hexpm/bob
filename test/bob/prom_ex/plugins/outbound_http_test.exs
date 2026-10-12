@@ -1,5 +1,7 @@
 defmodule Bob.PromEx.Plugins.OutboundHttpTest do
-  use ExUnit.Case, async: true
+  # The request tests collect every Finch request the VM makes, so they run
+  # apart from the async tests that make requests.
+  use ExUnit.Case, async: false
 
   alias Bob.PromEx.Plugins.OutboundHttp
 

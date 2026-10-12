@@ -18,6 +18,7 @@ defmodule Bob.ApplicationTest do
 
     assert prom_ex < jobs
     assert jobs < index.(&match?(%{id: :runner}, &1))
+    assert jobs < index.(&(&1 == BobWeb.Endpoint))
     assert prom_ex < pool
     assert pool < index.(&match?({DBConnection.TelemetryListener, _opts}, &1))
     assert pool < index.(&(&1 == Bob.Repo))

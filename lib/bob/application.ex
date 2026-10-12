@@ -3,6 +3,7 @@ defmodule Bob.Application do
 
   def start(_type, _args) do
     :logger.add_handler(:sentry_handler, Sentry.LoggerHandler, %{})
+    BobWeb.BanditTelemetry.attach()
 
     setup_docker()
     setup_gsutil()
