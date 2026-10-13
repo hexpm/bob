@@ -92,16 +92,29 @@ defmodule Bob.PromEx.Plugins.OutboundHttp do
     }
   end
 
+  # A pool wait is reported with the request that waited, a connect with the
+  # host it connected to.
   @doc false
-  def pool_tags(metadata) do
-    %{host: Map.get(metadata, :host, "unknown")}
-  end
+  def pool_tags(%{request: %Finch.Request{host: host}}), do: %{host: host}
+  def pool_tags(%{host: host}), do: %{host: host}
 
+  # The result is what the Finch call returned: a response from Finch.request/3,
+  # and the reducer's accumulator from Finch.stream/5 and Finch.stream_while/5,
+  # which carry an error as {:error, exception, acc}. Req, which ExAws sends
+  # through, streams into {request, {status, headers, body, trailers}}.
+  #
   # A request that never got a response is still worth counting, so failures are
   # labelled rather than dropped.
   defp status({:ok, %{status: status}}), do: status
+
+  defp status({:ok, {%Req.Request{}, {status, _headers, _body, _trailers}}})
+       when is_integer(status),
+       do: status
+
   defp status({:ok, _other}), do: "ok"
   defp status({:error, %{__struct__: module}}), do: inspect(module)
+  defp status({:error, %{__struct__: module}, _acc}), do: inspect(module)
   defp status({:error, _other}), do: "error"
+  defp status({:error, _other, _acc}), do: "error"
   defp status(_), do: "unknown"
 end

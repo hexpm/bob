@@ -72,6 +72,21 @@ defmodule Bob.PromEx.Plugins.BobTest do
              zeros([{Bob.Job.BuildOTP, "amd64"}, Bob.Job.DockerManifest, Bob.Job.Clean])
   end
 
+  test "starts every response status class at zero on the master and the agents" do
+    for master? <- [true, false] do
+      Application.put_env(:bob, :master?, master?)
+      ref = :telemetry_test.attach_event_handlers(self(), [[:bob, :http, :response]])
+
+      assert BobPlugin.initialize_counters() == :ignore
+      :telemetry.detach(ref)
+
+      for status_class <- ~w(1xx 2xx 3xx 4xx 5xx) do
+        assert_received {[:bob, :http, :response], ^ref, %{count: 0},
+                         %{status_class: ^status_class}}
+      end
+    end
+  end
+
   test "a zero creates the series without counting an event" do
     Application.put_env(:bob, :master?, false)
     name = :"#{__MODULE__}.Metrics"
@@ -89,6 +104,7 @@ defmodule Bob.PromEx.Plugins.BobTest do
 
     assert scrape =~ ~s(bob_job_timeout_total{job_type="BuildOTP-amd64"} 0\n)
     assert scrape =~ ~s(bob_job_crash_total{job_type="Clean"} 0\n)
+    assert scrape =~ ~s(bob_http_response_total{status_class="5xx"} 0\n)
     refute scrape =~ "bob_job_run_duration_milliseconds"
 
     :telemetry.execute([:bob, :job, :timeout], %{count: 1}, %{key: {Bob.Job.BuildOTP, "amd64"}})
@@ -96,6 +112,12 @@ defmodule Bob.PromEx.Plugins.BobTest do
 
     assert scrape =~ ~s(bob_job_timeout_total{job_type="BuildOTP-amd64"} 1\n)
     assert scrape =~ ~s(bob_job_crash_total{job_type="BuildOTP-amd64"} 0\n)
+
+    :telemetry.execute([:bob, :http, :response], %{count: 1}, %{status_class: "5xx"})
+    scrape = PromEx.Storage.Core.scrape(name)
+
+    assert scrape =~ ~s(bob_http_response_total{status_class="5xx"} 1\n)
+    assert scrape =~ ~s(bob_http_response_total{status_class="2xx"} 0\n)
 
     assert BobPlugin.count(%{count: 0}) == 0
     assert BobPlugin.count(%{duration: 10}) == 1

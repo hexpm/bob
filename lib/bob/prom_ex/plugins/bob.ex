@@ -1,21 +1,28 @@
 defmodule Bob.PromEx.Plugins.Bob do
   @moduledoc """
-  PromEx plugin for Bob's build queue and runner.
+  PromEx plugin for Bob's build queue and runner, and the responses Bandit
+  sends for the endpoint (`BobWeb.BanditTelemetry`).
 
-  Event metrics are emitted by `Bob.Runner` on every node. Queue depth is
-  polled from Postgres, so that polling group only runs on the master.
+  Job events are emitted by `Bob.Runner` on every node. Queue depth is polled
+  from Postgres, so that polling group only runs on the master.
 
   A counter series is created by its first event, and Prometheus' `increase()`
-  needs two samples, so it never counts that first event. The job counters are
+  needs two samples, so it never counts that first event. The counters are
   sums of each event's `:count` measurement, 1 when absent, and
-  `initialize_counters/0` creates the series of every job the node runs at zero
-  when the application starts.
+  `initialize_counters/0` creates the series of every job the node runs and
+  of every response status class at zero when the application starts.
   """
 
   use PromEx.Plugin
 
+  @http_status_classes ~w(1xx 2xx 3xx 4xx 5xx)
+
   @impl true
   def event_metrics(_opts) do
+    [job_event_metrics(), http_event_metrics()]
+  end
+
+  defp job_event_metrics() do
     Event.build(:bob_job_event_metrics, [
       distribution("bob.job.run.duration.milliseconds",
         event_name: [:bob, :job, :stop],
@@ -51,6 +58,18 @@ defmodule Bob.PromEx.Plugins.Bob do
         description: "Build jobs that died from an uncaught throw or exit.",
         tags: [:job_type],
         tag_values: &job_tag_values/1
+      )
+    ])
+  end
+
+  defp http_event_metrics() do
+    Event.build(:bob_http_event_metrics, [
+      sum("bob.http.response.total",
+        event_name: [:bob, :http, :response],
+        measurement: :count,
+        description:
+          "Responses Bandit sent for the endpoint by status class, the ones it sends itself when a plug raises or sends nothing included.",
+        tags: [:status_class]
       )
     ])
   end
@@ -103,14 +122,19 @@ defmodule Bob.PromEx.Plugins.Bob do
   def count(measurements), do: Map.get(measurements, :count, 1)
 
   @doc """
-  Reports a zero timeout and crash for every job this node runs, so the first
-  real one is an increase Prometheus can see. Started as a child right after
-  `Bob.PromEx`, before the runner.
+  Reports a zero timeout and crash for every job this node runs, and a zero
+  response for every status class, so the first real one is an increase
+  Prometheus can see. Started as a child right after `Bob.PromEx`, before the
+  runner and the endpoint.
   """
   def initialize_counters() do
     for key <- node_jobs() do
       :telemetry.execute([:bob, :job, :timeout], %{count: 0}, %{key: key})
       :telemetry.execute([:bob, :job, :crash], %{count: 0}, %{key: key})
+    end
+
+    for status_class <- @http_status_classes do
+      :telemetry.execute([:bob, :http, :response], %{count: 0}, %{status_class: status_class})
     end
 
     :ignore

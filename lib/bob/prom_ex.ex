@@ -8,7 +8,7 @@ defmodule Bob.PromEx do
     [
       Plugins.Application,
       Plugins.Beam,
-      {Plugins.Phoenix, router: BobWeb.Router, endpoint: BobWeb.Endpoint},
+      {Bob.PromEx.Plugins.Phoenix, router: BobWeb.Router, endpoint: BobWeb.Endpoint},
       Bob.PromEx.Plugins.Bob,
       Bob.PromEx.Plugins.OutboundHttp
     ] ++ master_plugins()
@@ -17,7 +17,7 @@ defmodule Bob.PromEx do
   # Agents run without Bob.Repo, so the Ecto plugin would crash them
   defp master_plugins() do
     if Application.get_env(:bob, :master?) do
-      [{Plugins.Ecto, repos: [Bob.Repo]}, Bob.PromEx.Plugins.DbConnection]
+      [{Bob.PromEx.Plugins.Ecto, repos: [Bob.Repo]}, Bob.PromEx.Plugins.DbConnection]
     else
       []
     end
