@@ -133,7 +133,12 @@ defmodule BobWeb.DockerTagsLive do
       </div>
 
       <section class="sec">
-        <form phx-change="search" phx-submit="search" class="filter-bar filter-bar--wrap dk-filters">
+        <form
+          id="docker-tag-filters"
+          phx-change="search"
+          phx-submit="search"
+          class="filter-bar filter-bar--wrap dk-filters"
+        >
           <.filter_select name="repo" label="repo" value={@repo} options={@repos} />
           <.filter_text name="tag" value={@tag} placeholder="tag prefix..." />
           <span class={["f-or", @tag != "" && "f-or--off"]}>or</span>
