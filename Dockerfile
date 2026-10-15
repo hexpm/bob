@@ -30,7 +30,19 @@ RUN mix deps.get
 # release, so it's copied in right before it, and a change to it doesn't
 # recompile the dependencies.
 COPY config/config.exs config/prod.exs config/
-RUN mix deps.compile
+# Compiling dependencies across multiple OS processes
+# https://mix.hexdocs.pm/Mix.Tasks.Deps.Compile.html#module-compiling-dependencies-across-multiple-os-processes
+RUN <<EOF
+  CORES=$(nproc 2>/dev/null || echo 2)
+  PARTITIONS=$(( CORES / 2 ))
+  [ "$PARTITIONS" -lt 1 ] && PARTITIONS=1
+  [ "$PARTITIONS" -gt 4 ] && PARTITIONS=4
+  MIX_OS_DEPS_COMPILE_PARTITION_COUNT=$PARTITIONS mix deps.compile
+EOF
+# The esbuild and tailwind binaries go in _build at the versions config.exs
+# sets, so this layer is cached until one of them changes, and assets.deploy
+# doesn't download them on every build.
+RUN mix assets.setup
 
 # build project
 COPY priv priv
@@ -48,7 +60,8 @@ RUN mix do sentry.package_source_code, release
 FROM debian:${DEBIAN_VERSION} AS app
 
 RUN apt update -y && \
-    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker-cli gnupg gzip libffi-dev libssl-dev openssl python3-dev tar zip
+    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker-cli gnupg gzip libffi-dev libssl-dev openssl python3-dev tar zip && \
+    apt clean -y && rm -rf /var/lib/apt/lists/*
 
 ARG BUILDX_VERSION=0.17.1
 RUN mkdir -p /usr/libexec/docker/cli-plugins && \
@@ -60,7 +73,8 @@ COPY --from=ghcr.io/sigstore/cosign/cosign:v3.1.3@sha256:9e5c2f2edc34351160407ca
 
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
-    apt update -y && apt install --no-install-recommends -y google-cloud-cli
+    apt update -y && apt install --no-install-recommends -y google-cloud-cli && \
+    apt clean -y && rm -rf /var/lib/apt/lists/*
 
 # The release creates /app/tmp when it starts and writes its runtime config
 # there, so /app is nobody's.
