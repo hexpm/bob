@@ -59,8 +59,9 @@ RUN mix do sentry.package_source_code, release
 # prepare release image
 FROM debian:${DEBIAN_VERSION} AS app
 
+# Erlang/OTP loads libsctp.so.1 when it starts and prints a warning without it
 RUN apt update -y && \
-    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker-cli gnupg gzip libffi-dev libssl-dev openssl python3-dev tar zip && \
+    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker-cli gnupg gzip libffi-dev libsctp1 libssl-dev openssl python3-dev tar zip && \
     apt clean -y && rm -rf /var/lib/apt/lists/*
 
 ARG BUILDX_VERSION=0.17.1
