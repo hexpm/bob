@@ -9,7 +9,7 @@ tag=$2
 digest=sha256:$(docker buildx imagetools inspect --raw ${repo}:${tag} | sha256sum | cut -d ' ' -f 1)
 
 # Cloud KMS is called as the service account whose key Bob.Application writes here
-export GOOGLE_APPLICATION_CREDENTIALS=/boto/keyfile.json
+export GOOGLE_APPLICATION_CREDENTIALS=/gcp/keyfile.json
 
 # This command has a tendency to intermittently fail
 cosign sign --yes --key ${BOB_COSIGN_KEY} ${repo}@${digest} ||

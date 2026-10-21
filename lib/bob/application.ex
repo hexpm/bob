@@ -6,7 +6,7 @@ defmodule Bob.Application do
     BobWeb.BanditTelemetry.attach()
 
     setup_docker()
-    setup_gsutil()
+    setup_gcp_credentials()
     auth_docker()
     validate_jobs()
 
@@ -77,11 +77,11 @@ defmodule Bob.Application do
     end
   end
 
-  defp setup_gsutil() do
+  defp setup_gcp_credentials() do
     if credentials = System.get_env("BOB_GCP_CREDENTIALS") do
       credentials = fix_env_newlines(credentials)
-      File.mkdir_p!("/boto")
-      File.write!("/boto/keyfile.json", credentials)
+      File.mkdir_p!("/gcp")
+      File.write!("/gcp/keyfile.json", credentials)
     end
   end
 

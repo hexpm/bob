@@ -9,7 +9,7 @@ ENV LANG=C.UTF-8
 # install build dependencies
 RUN apt update -y && \
     apt upgrade -y && \
-    apt install -y --no-install-recommends git build-essential ca-certificates && \
+    apt install -y --no-install-recommends ca-certificates && \
     apt clean -y && rm -rf /var/lib/apt/lists/*
 
 # prepare build dir
@@ -61,7 +61,7 @@ FROM debian:${DEBIAN_VERSION} AS app
 
 # Erlang/OTP loads libsctp.so.1 when it starts and prints a warning without it
 RUN apt update -y && \
-    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker-cli gnupg gzip libffi-dev libsctp1 libssl-dev openssl python3-dev tar zip && \
+    apt install --no-install-recommends -y awscli bash ca-certificates coreutils curl docker-cli libsctp1 openssl && \
     apt clean -y && rm -rf /var/lib/apt/lists/*
 
 ARG BUILDX_VERSION=0.17.1
@@ -72,15 +72,9 @@ RUN mkdir -p /usr/libexec/docker/cli-plugins && \
 
 COPY --from=ghcr.io/sigstore/cosign/cosign:v3.1.3@sha256:9e5c2f2edc34351160407ca3416c61855bdf9403c3c5936e0f0be7fc261611b8 /ko-app/cosign /usr/local/bin/cosign
 
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
-    apt update -y && apt install --no-install-recommends -y google-cloud-cli && \
-    apt clean -y && rm -rf /var/lib/apt/lists/*
-
 # The release creates /app/tmp when it starts and writes its runtime config
 # there, so /app is nobody's.
-RUN mkdir /app /boto /persist && chown nobody:nogroup /app /boto /persist
-COPY --chown=65534:65534 etc/boto /app/.boto
+RUN mkdir /app /gcp /persist && chown nobody:nogroup /app /gcp /persist
 
 WORKDIR /app
 
