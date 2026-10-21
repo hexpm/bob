@@ -1,6 +1,6 @@
 ARG ELIXIR_VERSION=1.20.4
 ARG ERLANG_VERSION=29.1.1
-ARG DEBIAN_VERSION=trixie-20260918-slim
+ARG DEBIAN_VERSION=trixie-20261005-slim
 
 FROM hexpm/elixir:${ELIXIR_VERSION}-erlang-${ERLANG_VERSION}-debian-${DEBIAN_VERSION} AS build
 
@@ -92,6 +92,9 @@ USER nobody
 
 ENV HOME=/app
 ENV LANG=C.UTF-8
+# awscli verifies servers against the CA bundle it ships with unless this
+# points it at another one
+ENV AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 # Declared here, in the last stage, so a new commit does not invalidate the
 # build cache for everything above it. PromEx reads these to report which
 # revision is running.
