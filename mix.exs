@@ -34,7 +34,7 @@ defmodule Bob.Mixfile do
       {:req, "~> 0.5"},
       {:porcelain, "~> 2.0"},
       {:postgrex, "~> 0.19"},
-      {:sentry, "~> 13.5"},
+      {:sentry, "~> 14.0"},
       {:sweet_xml, "~> 0.5"},
       {:logger_json, "~> 7.0"},
       {:observer_cli, "~> 2.0"},
