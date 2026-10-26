@@ -9,9 +9,7 @@ arch=$4
 
 echo "Building $1 $2 $3 $4"
 
-container="otp-build-${linux}-${ref_name}"
-image="bob-otp"
-tag=${linux}
+image_file="${PWD}/image.id"
 date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Disable PIE for OTP prior to 21; see http://erlang.org/doc/apps/hipe/notes.html#hipe-3.18
@@ -24,18 +22,23 @@ fi
 
 docker build \
   --ulimit nofile=1024:1024 \
-  -t ${image}:${tag} \
+  --iidfile "${image_file}" \
   --build-arg OTP_REF=${ref_name} \
   --build-arg PIE_CFLAGS=${pie_cflags} \
   --build-arg PIE_LDFLAGS=${pie_ldflags} \
   -f ${SCRIPT_DIR}/otp/otp-${linux}.dockerfile ${SCRIPT_DIR}
 
-docker rm -f ${container} || true
-docker run -t -e OTP_REF=${ref_name} --name=${container} ${image}:${tag}
+container=$(docker create -t -e OTP_REF="${ref_name}" -e OTP_SHA="${ref}" "$(cat "${image_file}")")
+trap 'docker rm -f "${container}"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-docker cp ${container}:/home/build/out/${ref_name}.tar.gz ${ref_name}.tar.gz
+docker start -a "${container}"
 
-docker rm -f ${container}
+docker cp "${container}:/home/build/out/${ref_name}.tar.gz" "${ref_name}.tar.gz"
+
+docker rm -f "${container}"
+trap - EXIT INT TERM
 
 build_sha256=$(sha256sum ${ref_name}.tar.gz | cut -d ' ' -f 1)
 
