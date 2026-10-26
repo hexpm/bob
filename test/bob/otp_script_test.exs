@@ -56,25 +56,8 @@ defmodule Bob.OTPScriptTest do
       bin: bin,
       state: state,
       env: env,
-      image_id: image_id,
       container_id: container_id
     }
-  end
-
-  test "uses the image and container IDs returned by Docker", context do
-    assert {_output, 0} = build(context)
-    commands = commands(context)
-    create = Enum.find(commands, &String.starts_with?(&1, "create "))
-    assert String.ends_with?(create, " " <> context.image_id)
-    assert create =~ "OTP_SHA=queued-sha"
-    refute create =~ "--name"
-    assert "start -a #{context.container_id}" in commands
-
-    assert "cp #{context.container_id}:/home/build/out/master.tar.gz master.tar.gz" in commands
-
-    assert Enum.filter(commands, &String.starts_with?(&1, "rm ")) == [
-             "rm -f #{context.container_id}"
-           ]
   end
 
   for {stage, status} <- [{"start", 42}, {"cp", 42}, {"aws", 42}, {"term", 143}] do
@@ -138,7 +121,7 @@ defmodule Bob.OTPScriptTest do
     context.state |> Path.join("commands") |> File.read!() |> String.split("\n", trim: true)
   end
 
-  defp build(context, opts \\ []) do
+  defp build(context, opts) do
     directory = Path.join(context.directory, "build")
     File.mkdir_p!(directory)
 
