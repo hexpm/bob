@@ -7,80 +7,33 @@ defmodule Bob.OTPScriptTest do
     bin = Path.join(directory, "bin")
     state = Path.join(directory, "docker")
     File.mkdir_p!(bin)
-    File.mkdir_p!(Path.join(state, "containers"))
+    File.mkdir_p!(state)
+    image_id = "sha256:" <> String.duplicate("a", 64)
+    container_id = String.duplicate("b", 64)
 
     write_command(bin, "docker", ~S"""
-    wait_for() {
-      for ((attempt=0; attempt<1000; attempt++)); do
-        [ ! -f "$1" ] || return 0
-        sleep 0.01
-      done
-      echo "Timed out waiting for $1" >&2
-      exit 99
-    }
-
-    run_container() {
-      [ "${BOB_TEST_FAIL:-}" != start ] || exit 42
-      touch "$BOB_TEST_STATE/$BOB_TEST_JOB-started"
-      if [ "${BOB_TEST_FAIL:-}" = term ]; then
-        kill -TERM "$PPID"
-      fi
-      if [ "${BOB_TEST_OVERLAP:-}" = 1 ] && [ "$BOB_TEST_JOB" = first ]; then
-        wait_for "$BOB_TEST_STATE/release-first"
-      fi
-      [ -f "$BOB_TEST_STATE/containers/$container" ] || exit 137
-    }
-
     command=$1
     shift
-    printf '%s %s\n' "$command" "$*" >> "$BOB_TEST_STATE/$BOB_TEST_JOB-commands"
+    printf '%s %s\n' "$command" "$*" >> "$BOB_TEST_STATE/commands"
     [ "${BOB_TEST_FAIL:-}" != "$command" ] || exit 42
 
     case "$command" in
       build)
-        image="image-$BOB_TEST_JOB"
         while [ "$#" -gt 0 ]; do
           case "$1" in
-            --iidfile) printf '%s\n' "$image" > "$2"; shift ;;
-            -t) printf '%s\n' "$image" > "$BOB_TEST_STATE/tag-${2//\//_}"; shift ;;
+            --iidfile) printf '%s\n' "$BOB_TEST_IMAGE_ID" > "$2"; shift ;;
           esac
           shift
         done
-        if [ "${BOB_TEST_OVERLAP:-}" = 1 ]; then
-          touch "$BOB_TEST_STATE/$BOB_TEST_JOB-built"
-          if [ "$BOB_TEST_JOB" = first ]; then
-            wait_for "$BOB_TEST_STATE/second-built"
-          else
-            wait_for "$BOB_TEST_STATE/first-started"
-          fi
-        fi
         ;;
-      create|run)
-        image=${!#}
-        if [ -f "$BOB_TEST_STATE/tag-${image//\//_}" ]; then
-          image=$(cat "$BOB_TEST_STATE/tag-${image//\//_}")
-        fi
-        container="container-$BOB_TEST_JOB"
-        for arg in "$@"; do
-          case "$arg" in --name=*) container=${arg#--name=} ;; esac
-        done
-        printf '%s\n' "$image" > "$BOB_TEST_STATE/containers/$container"
-        if [ "$command" = create ]; then
-          echo "$container"
-        else
-          run_container
-        fi
-        ;;
+      create) echo "$BOB_TEST_CONTAINER_ID" ;;
       start)
-        container=${!#}
-        run_container
+        if [ "${BOB_TEST_FAIL:-}" = term ]; then
+          kill -TERM "$PPID"
+        fi
         ;;
-      cp)
-        cat "$BOB_TEST_STATE/containers/${1%%:*}" > "$2"
-        ;;
-      rm)
-        rm -f "$BOB_TEST_STATE/containers/${!#}"
-        ;;
+      cp) printf 'build\n' > "$2" ;;
+      rm) exit 0 ;;
       *) echo "Unexpected docker command: $command" >&2; exit 1 ;;
     esac
     """)
@@ -93,41 +46,44 @@ defmodule Bob.OTPScriptTest do
       {"SCRIPT_DIR", Application.app_dir(:bob, "priv/scripts")},
       {"BOB_AGENT_SECRET", "test"},
       {"BOB_MASTER_URL", "http://bob.test"},
-      {"BOB_TEST_STATE", state}
+      {"BOB_TEST_STATE", state},
+      {"BOB_TEST_IMAGE_ID", image_id},
+      {"BOB_TEST_CONTAINER_ID", container_id}
     ]
 
-    %{directory: directory, bin: bin, state: state, env: env}
+    %{
+      directory: directory,
+      bin: bin,
+      state: state,
+      env: env,
+      image_id: image_id,
+      container_id: container_id
+    }
   end
 
-  test "overlapping builds of the same branch keep their own containers and images", context do
-    first = Task.async(fn -> build(context, "first", overlap: true) end)
+  test "uses the image and container IDs returned by Docker", context do
+    assert {_output, 0} = build(context)
+    commands = commands(context)
+    create = Enum.find(commands, &String.starts_with?(&1, "create "))
+    assert String.ends_with?(create, " " <> context.image_id)
+    assert create =~ "OTP_SHA=queued-sha"
+    refute create =~ "--name"
+    assert "start -a #{context.container_id}" in commands
 
-    second_result =
-      try do
-        build(context, "second", overlap: true)
-      after
-        File.write!(Path.join(context.state, "release-first"), "")
-      end
+    assert "cp #{context.container_id}:/home/build/out/master.tar.gz master.tar.gz" in commands
 
-    assert {first_output, 0} = Task.await(first, 15_000)
-    assert {second_output, 0} = second_result
-    assert first_output =~ "Building master"
-    assert second_output =~ "Building master"
-
-    for job <- ["first", "second"] do
-      assert File.read!(Path.join([context.directory, job, "master.tar.gz"])) == "image-#{job}\n"
-      assert File.read!(Path.join(context.state, "#{job}-commands")) =~ "OTP_SHA=#{job}"
-    end
-
-    assert File.ls!(Path.join(context.state, "containers")) == []
+    assert Enum.filter(commands, &String.starts_with?(&1, "rm ")) == [
+             "rm -f #{context.container_id}"
+           ]
   end
 
   for {stage, status} <- [{"start", 42}, {"cp", 42}, {"aws", 42}, {"term", 143}] do
     test "cleans up only its own container on #{stage}", context do
-      File.write!(Path.join([context.state, "containers", "another-job"]), "image-other")
+      assert {_output, unquote(status)} = build(context, fail: unquote(stage))
 
-      assert {_output, unquote(status)} = build(context, "failed", fail: unquote(stage))
-      assert File.ls!(Path.join(context.state, "containers")) == ["another-job"]
+      assert Enum.filter(commands(context), &String.starts_with?(&1, "rm ")) == [
+               "rm -f #{context.container_id}"
+             ]
     end
   end
 
@@ -178,13 +134,15 @@ defmodule Bob.OTPScriptTest do
     end
   end
 
-  defp build(context, job, opts) do
-    directory = Path.join(context.directory, job)
+  defp commands(context) do
+    context.state |> Path.join("commands") |> File.read!() |> String.split("\n", trim: true)
+  end
+
+  defp build(context, opts \\ []) do
+    directory = Path.join(context.directory, "build")
     File.mkdir_p!(directory)
 
-    script("otp/otp.sh", ["master", job, "ubuntu-22.04", "amd64"], directory, [
-      {"BOB_TEST_JOB", job},
-      {"BOB_TEST_OVERLAP", if(opts[:overlap], do: "1", else: "")},
+    script("otp/otp.sh", ["master", "queued-sha", "ubuntu-22.04", "amd64"], directory, [
       {"BOB_TEST_FAIL", opts[:fail] || ""} | context.env
     ])
   end
