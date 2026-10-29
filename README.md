@@ -2,6 +2,10 @@
 
 Bob performs automated tasks for the Elixir and Hex projects.
 
+## Public API
+
+Bob provides an unauthenticated JSON API for searching build artifacts and Docker tags. See the [API documentation](docs/api.md).
+
 ## Erlang builds
 
 Erlang builds compiled on Ubuntu LTS versions are built periodically. Bob checks for new tagged releases every 15 minutes and builds any new versions it discovers. The "master" and "maint*" branches are built once a day.
@@ -37,18 +41,22 @@ For lists of builds see:
 
 ## Docker images
 
-Docker images for Bob's Elixir and Erlang builds are built periodically. Bob checks for new Elixir and Erlang releases every 15 minutes and builds images for any new versions it discovers. The list of operating system distributions we base the images on can be found here: https://github.com/hexpm/bob/blob/main/lib/bob/job/docker_checker.ex#L5.
+Docker images for Bob's Elixir and Erlang builds are built periodically. Bob checks for new Elixir and Erlang releases every 15 minutes and builds images for any new versions it discovers. The list of operating system distributions we base the images on is defined by `builds/0` in https://github.com/hexpm/bob/blob/main/lib/bob/job/docker_checker.ex.
+
+Bob automatically builds the latest patch release of every version family: the newest release per Erlang `major.minor` line (for example only `26.2.5.21` out of the `26.2.x` line) and the newest Elixir patch release per minor version, for every compatible OTP major. Older patch versions are not built automatically but can be requested manually, see below.
 
 Tagged images are never changed, that means `hexpm/erlang@22.0-alpine-3.11.2` will always target the tag `OTP-22.0` and won't update when `OTP-22.0.1` is released.
 
-Erlang builds are found at https://hub.docker.com/r/hexpm/erlang, they use the versioning scheme `${OTP_VER}-${OS_NAME}-${OS_VER}` for tags. Builds for all releases since OTP 17 are provided.
+Erlang builds are found at https://hub.docker.com/r/hexpm/erlang, they use the versioning scheme `${OTP_VER}-${OS_NAME}-${OS_VER}` for tags.
 
-Elixir builds are found at https://hub.docker.com/r/hexpm/elixir, they use the versioning scheme `${ELIXIR_VER}-erlang-${OTP_VER}-${OS_NAME}-${OS_VER}`. Builds for all major releases since Elixir 1.0.0 are provided. Images are built for all pairs of compatible Elixir and OTP versions.
+Elixir builds are found at https://hub.docker.com/r/hexpm/elixir, they use the versioning scheme `${ELIXIR_VER}-erlang-${OTP_VER}-${OS_NAME}-${OS_VER}`.
 
 Builds are provided for the following OS and architectures using the docker `OS/ARCH` scheme:
 
 * `linux/amd64`
 * `linux/arm64/v8`
+
+All provided images and tags can be searched at https://bob.hex.pm/docker.
 
 ### Examples of image names
 
@@ -56,3 +64,36 @@ Builds are provided for the following OS and architectures using the docker `OS/
  * `hexpm/erlang:22.2-ubuntu-bionic-20200219`
  * `hexpm/elixir:1.10.2-erlang-22.2.8-alpine-3.11.3`
  * `hexpm/elixir:1.10.0-erlang-22.2-ubuntu-bionic-20200219`
+
+### Requesting builds
+
+If you need a specific patch version that is not built automatically, request it at https://bob.hex.pm/request. Sign in with your hex.pm account, then pick the image kind (Erlang or Elixir), the OS and base image version, and the exact Erlang (and Elixir) version. The image is built for both architectures, including the multi-arch manifest; when an Elixir image needs an Erlang base image that does not exist yet, the base is built first and the Elixir image follows automatically.
+
+Requested builds are limited to ten image builds per user per hour. Build progress can be followed on the jobs dashboard at https://bob.hex.pm.
+
+Requesting an image also reserves it from cleanup, permanently. If the image already exists it is reserved without rebuilding. The multi-arch images you pull are never removed anyway, so this only matters for the per-architecture build images (see Retention and cleanup below).
+
+### Retention and cleanup
+
+**The images you pull are never removed.** Every tag in `hexpm/erlang` and `hexpm/elixir` stays available indefinitely, however old it is and however rarely it is used.
+
+Cleanup only touches `hexpm/elixir-amd64` and `hexpm/elixir-arm64`, which hold the single-arch images the multi-arch manifests are assembled from rather than images meant to be pulled directly. They keep the last 30 days of builds; older single-arch tags are removed, and the multi-arch image they back stays available.
+
+Tags reserved by a build request are never removed and are flagged as `reserved`. To pin a single-arch tag indefinitely, request it at https://bob.hex.pm/request.
+
+### Verifying images
+
+Images are signed with [cosign](https://github.com/sigstore/cosign) using a key held in Google Cloud KMS, and every signature is recorded in the public [Rekor](https://docs.sigstore.dev/logging/overview/) transparency log. The public key is [`cosign.pub`](cosign.pub). Verify an image with:
+
+```
+curl -fsSLO https://raw.githubusercontent.com/hexpm/bob/main/cosign.pub
+cosign verify --key cosign.pub hexpm/elixir:<tag>
+```
+
+Tags built before signing was added have no signature.
+
+Each image also carries a [SLSA provenance](https://docs.docker.com/build/metadata/attestations/slsa-provenance/) attestation recording the build arguments, the Dockerfile and the digests of the base images it was built from:
+
+```
+docker buildx imagetools inspect hexpm/elixir:<tag> --format '{{json .Provenance}}'
+```

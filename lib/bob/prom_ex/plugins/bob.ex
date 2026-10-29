@@ -1,0 +1,204 @@
+defmodule Bob.PromEx.Plugins.Bob do
+  @moduledoc """
+  PromEx plugin for Bob's build queue and runner, and the responses Bandit
+  sends for the endpoint (`BobWeb.BanditTelemetry`).
+
+  Job events are emitted by `Bob.Runner` on every node. Queue depth is polled
+  from Postgres, so that polling group only runs on the master.
+
+  A counter series is created by its first event, and Prometheus' `increase()`
+  needs two samples, so it never counts that first event. The counters are
+  sums of each event's `:count` measurement, 1 when absent, and
+  `initialize_counters/0` creates the series of every job the node runs and
+  of every response status class at zero when the application starts.
+  """
+
+  use PromEx.Plugin
+
+  @http_status_classes ~w(1xx 2xx 3xx 4xx 5xx)
+
+  @impl true
+  def event_metrics(_opts) do
+    [job_event_metrics(), http_event_metrics()]
+  end
+
+  defp job_event_metrics() do
+    Event.build(:bob_job_event_metrics, [
+      distribution("bob.job.run.duration.milliseconds",
+        event_name: [:bob, :job, :stop],
+        measurement: :duration,
+        unit: {:native, :millisecond},
+        description: "Build job duration.",
+        reporter_options: [
+          buckets: [
+            1_000,
+            5_000,
+            15_000,
+            60_000,
+            300_000,
+            900_000,
+            1_800_000,
+            3_600_000,
+            7_200_000
+          ]
+        ],
+        tags: [:job_type, :result],
+        tag_values: &job_stop_tag_values/1
+      ),
+      sum("bob.job.timeout.total",
+        event_name: [:bob, :job, :timeout],
+        measurement: &__MODULE__.count/1,
+        description: "Build jobs killed after exceeding the job timeout.",
+        tags: [:job_type],
+        tag_values: &job_tag_values/1
+      ),
+      sum("bob.job.crash.total",
+        event_name: [:bob, :job, :crash],
+        measurement: &__MODULE__.count/1,
+        description: "Build jobs that died from an uncaught throw or exit.",
+        tags: [:job_type],
+        tag_values: &job_tag_values/1
+      )
+    ])
+  end
+
+  defp http_event_metrics() do
+    Event.build(:bob_http_event_metrics, [
+      sum("bob.http.response.total",
+        event_name: [:bob, :http, :response],
+        measurement: :count,
+        description:
+          "Responses Bandit sent for the endpoint by status class, the ones it sends itself when a plug raises or sends nothing included.",
+        tags: [:status_class]
+      )
+    ])
+  end
+
+  @impl true
+  def polling_metrics(opts) do
+    poll_rate = Keyword.get(opts, :poll_rate, 15_000)
+
+    [runner_metrics(poll_rate)] ++
+      if Application.get_env(:bob, :master?) do
+        [queue_metrics(poll_rate)]
+      else
+        []
+      end
+  end
+
+  defp runner_metrics(poll_rate) do
+    Polling.build(
+      :bob_runner_polling_metrics,
+      poll_rate,
+      {__MODULE__, :execute_runner_metrics, []},
+      [
+        last_value("bob.runner.tasks.count",
+          event_name: [:bob, :runner, :tasks],
+          measurement: :count,
+          description: "Number of build jobs currently running on this node."
+        )
+      ]
+    )
+  end
+
+  defp queue_metrics(poll_rate) do
+    Polling.build(
+      :bob_queue_polling_metrics,
+      poll_rate,
+      {__MODULE__, :execute_queue_metrics, []},
+      [
+        last_value("bob.queue.size.count",
+          event_name: [:bob, :queue, :size],
+          measurement: :count,
+          description: "Number of queued build jobs.",
+          tags: [:job_type],
+          tag_values: &job_tag_values/1
+        )
+      ]
+    )
+  end
+
+  @doc false
+  def count(measurements), do: Map.get(measurements, :count, 1)
+
+  @doc """
+  Reports a zero timeout and crash for every job this node runs, and a zero
+  response for every status class, so the first real one is an increase
+  Prometheus can see. Started as a child right after `Bob.PromEx`, before the
+  runner and the endpoint.
+  """
+  def initialize_counters() do
+    for key <- node_jobs() do
+      :telemetry.execute([:bob, :job, :timeout], %{count: 0}, %{key: key})
+      :telemetry.execute([:bob, :job, :crash], %{count: 0}, %{key: key})
+    end
+
+    for status_class <- @http_status_classes do
+      :telemetry.execute([:bob, :http, :response], %{count: 0}, %{status_class: status_class})
+    end
+
+    :ignore
+  end
+
+  # The runner takes queued jobs from the local jobs on the master and from the
+  # remote jobs on an agent, and runs the node's scheduled jobs that aren't
+  # queued itself.
+  defp node_jobs() do
+    {queued, schedule} =
+      if Application.get_env(:bob, :master?) do
+        {Application.get_env(:bob, :local_jobs, []),
+         Application.get_env(:bob, :master_schedule, [])}
+      else
+        {Application.get_env(:bob, :remote_jobs, []),
+         Application.get_env(:bob, :agent_schedule, [])}
+      end
+
+    scheduled = for opts <- schedule, !Keyword.get(opts, :queue, false), do: opts[:module]
+    Enum.uniq(queued ++ scheduled)
+  end
+
+  @doc false
+  def execute_runner_metrics() do
+    if GenServer.whereis(Bob.Runner) do
+      %{tasks: tasks} = Bob.Runner.state()
+      :telemetry.execute([:bob, :runner, :tasks], %{count: map_size(tasks)}, %{})
+    end
+
+    :ok
+  end
+
+  @doc false
+  def execute_queue_metrics() do
+    sizes = Map.new(Bob.Queue.queue_sizes())
+
+    known_keys =
+      Application.get_env(:bob, :local_jobs, []) ++ Application.get_env(:bob, :remote_jobs, [])
+
+    # Emit zeroes for configured but empty queues so gauges don't go stale
+    for key <- Enum.uniq(known_keys ++ Map.keys(sizes)) do
+      :telemetry.execute([:bob, :queue, :size], %{count: Map.get(sizes, key, 0)}, %{key: key})
+    end
+
+    :ok
+  rescue
+    # Polling must not crash while the Repo is unavailable (e.g. while it is
+    # restarting); ArgumentError covers the repo not yet being registered
+    DBConnection.ConnectionError -> :ok
+    ArgumentError -> :ok
+  end
+
+  defp job_stop_tag_values(%{key: key, result: result}) do
+    %{job_type: job_label(key), result: result}
+  end
+
+  defp job_tag_values(%{key: key}) do
+    %{job_type: job_label(key)}
+  end
+
+  @doc """
+  Formats a queue module key (`Bob.Job.BuildOTP` or `{Bob.Job.BuildOTP, "amd64"}`)
+  as a low-cardinality metric label like `"BuildOTP-amd64"`.
+  """
+  def job_label({module, key}), do: "#{job_label(module)}-#{key}"
+  def job_label(module) when is_atom(module), do: module |> Module.split() |> List.last()
+end

@@ -8,6 +8,7 @@ defmodule BobWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import BobWeb.ConnCase
+      import Bob.LogLines, only: [capture_log_lines: 1]
 
       alias Bob.Repo
 

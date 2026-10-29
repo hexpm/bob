@@ -3,6 +3,8 @@ defmodule Bob.RunnerTest do
   # the shared Bob.Repo, so they must not run alongside anything else.
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   defmodule QuietJob do
     def run(), do: :ok
     def priority(), do: 1
@@ -17,15 +19,26 @@ defmodule Bob.RunnerTest do
     def concurrency(), do: :shared
   end
 
-  setup do
+  # The test process is the runner's parent and the runner traps exits, so it
+  # runs terminate/2 and exits when the test process does. terminate/2 requeues
+  # in-flight jobs through the repo. on_exit callbacks run last registered first:
+  # this one, registered in the test body, waits for the runner to exit before a
+  # setup's on_exit stops the sandbox owner. The wait also frees the registered
+  # name for the next test's start_link.
+  defp start_runner() do
+    {:ok, runner} = Bob.Runner.start_link([])
+
     on_exit(fn ->
-      case Process.whereis(Bob.Runner) do
-        nil -> :ok
-        pid -> Process.exit(pid, :kill)
+      ref = Process.monitor(runner)
+
+      receive do
+        {:DOWN, ^ref, :process, ^runner, _reason} -> :ok
+      after
+        5_000 -> raise "the runner outlived the test that started it"
       end
     end)
 
-    :ok
+    runner
   end
 
   describe "master node" do
@@ -43,7 +56,7 @@ defmodule Bob.RunnerTest do
     test "claims a queued job from the local (repo-backed) queue" do
       Bob.Queue.add(QuietJob, [])
 
-      {:ok, runner} = Bob.Runner.start_link([])
+      runner = start_runner()
       send(runner, :local_timeout)
       # Flush the mailbox so the :local_timeout tick has been processed.
       :sys.get_state(runner)
@@ -62,7 +75,7 @@ defmodule Bob.RunnerTest do
 
       Bob.Queue.add(BlockingJob, [])
 
-      {:ok, runner} = Bob.Runner.start_link([])
+      runner = start_runner()
       send(runner, :local_timeout)
       :sys.get_state(runner)
 
@@ -81,7 +94,12 @@ defmodule Bob.RunnerTest do
       Bob.Queue.add(QuietJob, [:terminate_test])
       {:ok, {id, [:terminate_test]}} = Bob.Queue.start(QuietJob)
 
-      state = %{tasks: %{task.ref => {QuietJob, [:terminate_test], {:local, id}, task.pid}}}
+      timer = Process.send_after(self(), :noop, 100_000)
+
+      state = %{
+        tasks: %{task.ref => {QuietJob, [:terminate_test], {:local, id}, task.pid, timer}}
+      }
+
       Bob.Runner.terminate(:shutdown, state)
 
       refute Process.alive?(task.pid)
@@ -93,11 +111,36 @@ defmodule Bob.RunnerTest do
       {:ok, {id, [:down_test]}} = Bob.Queue.start(QuietJob)
 
       ref = make_ref()
-      state = %{tasks: %{ref => {QuietJob, [:down_test], {:local, id}, self()}}}
+      timer = Process.send_after(self(), :noop, 100_000)
+      state = %{tasks: %{ref => {QuietJob, [:down_test], {:local, id}, self(), timer}}}
 
-      {:noreply, new_state} =
-        Bob.Runner.handle_info({:DOWN, ref, :process, self(), :killed}, state)
+      {{:noreply, new_state}, log} =
+        with_log(fn ->
+          Bob.Runner.handle_info({:DOWN, ref, :process, self(), :killed}, state)
+        end)
 
+      assert log =~ "Job crashed"
+      assert log =~ ~s(reason: ":killed")
+      assert log =~ ~s(job_args: "[:down_test]")
+      assert new_state.tasks == %{}
+      assert Bob.Repo.get!(Bob.Queue.Job, id).state == "failed"
+    end
+
+    test "a task that outlives its timeout is killed and the job failed" do
+      task = Task.Supervisor.async_nolink(Bob.Tasks, fn -> Process.sleep(:infinity) end)
+
+      Bob.Queue.add(QuietJob, [:timeout_test])
+      {:ok, {id, [:timeout_test]}} = Bob.Queue.start(QuietJob)
+
+      timer = Process.send_after(self(), :noop, 100_000)
+      state = %{tasks: %{task.ref => {QuietJob, [:timeout_test], {:local, id}, task.pid, timer}}}
+
+      {{:noreply, new_state}, log} =
+        with_log(fn -> Bob.Runner.handle_info({:job_timeout, task.ref}, state) end)
+
+      assert log =~ "Job timed out"
+      assert log =~ ~s(job_args: "[:timeout_test]")
+      refute Process.alive?(task.pid)
       assert new_state.tasks == %{}
       assert Bob.Repo.get!(Bob.Queue.Job, id).state == "failed"
     end
@@ -139,7 +182,7 @@ defmodule Bob.RunnerTest do
     test "polls for work on startup without touching the database" do
       Process.flag(:trap_exit, true)
 
-      {:ok, runner} = Bob.Runner.start_link([])
+      runner = start_runner()
 
       # init/1 drives the agent poll loop. With the regression it also polled the
       # local queue, crashing on the stopped repo and exiting the linked runner.
@@ -150,7 +193,7 @@ defmodule Bob.RunnerTest do
     test "re-polls after a job completes without touching the database" do
       Process.flag(:trap_exit, true)
 
-      {:ok, runner} = Bob.Runner.start_link([])
+      runner = start_runner()
       assert Bob.Runner.run(QuietJob, []) == :ok
 
       # Completing a job triggers another poll; on an agent that must stay off the

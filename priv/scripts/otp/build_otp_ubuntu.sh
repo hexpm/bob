@@ -8,9 +8,9 @@ if [ -z "${OTP_REF}" ]; then
 fi
 
 echo "Building OTP_REF ${OTP_REF}"
-otp_url=https://github.com/erlang/otp/archive/${OTP_REF}.tar.gz
-otp_tar_name=$(basename https://github.com/erlang/otp/archive/${OTP_REF}.tar.gz)
-otp_untar_dir="otp-${OTP_REF}"
+otp_url=https://github.com/erlang/otp/archive/${OTP_SHA}.tar.gz
+otp_tar_name=$(basename "${otp_url}")
+otp_untar_dir="otp-${OTP_SHA}"
 
 wget -nv ${otp_url}
 tar -zxf ${otp_tar_name}
@@ -39,6 +39,6 @@ if [ "${OTP_REF:0:3}" = "OTP" ] && [ "${OTP_REF:4:2}" -ge "23" ]; then
 fi
 
 cd ../
-mv otp-${OTP_REF}/release/*/ ${OTP_REF}
-rm ${OTP_REF}.tar.gz
+mv "${otp_untar_dir}"/release/*/ "${OTP_REF}"
+rm "${otp_tar_name}"
 tar -zcf out/${OTP_REF}.tar.gz ${OTP_REF}

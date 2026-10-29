@@ -1,4 +1,6 @@
 defmodule Bob.Script do
+  @kill_after "30s"
+
   def run(action, args, dir) do
     File.mkdir_p!(dir)
 
@@ -24,13 +26,42 @@ defmodule Bob.Script do
   end
 
   defp exec({:cmd, cmd}, [], dir, log) do
-    Porcelain.shell(cmd, out: {:file, log}, err: :out, dir: dir, env: env())
+    Porcelain.shell(timeout_shell(cmd), out: {:file, log}, err: :out, dir: dir, env: env())
   end
 
   defp exec({:script, script}, args, dir, log) do
-    Path.join(script_dir(), script)
-    |> Path.expand()
-    |> Porcelain.exec(args, out: {:file, log}, err: :out, dir: dir, env: env())
+    script = Path.expand(Path.join(script_dir(), script))
+    {exe, exe_args} = timeout_exec(script, args)
+    Porcelain.exec(exe, exe_args, out: {:file, log}, err: :out, dir: dir, env: env())
+  end
+
+  # Bound every job so one that hangs anywhere — a stuck `docker build`,
+  # `docker push`, `wget`, etc. — is killed instead of pinning a build slot
+  # forever. GNU timeout run without --foreground signals the whole process
+  # group, so the script's children die with it; killing the `docker` client
+  # also makes the daemon cancel the build. Mirrors the runner's per-task
+  # backstop. When timeout is unavailable (non-Linux dev) the script runs
+  # unwrapped.
+  defp timeout_exec(script, args) do
+    case timeout_cmd() do
+      nil -> {script, args}
+      cmd -> {cmd, ["--kill-after=#{@kill_after}", timeout(), script | args]}
+    end
+  end
+
+  defp timeout_shell(cmd) do
+    case timeout_cmd() do
+      nil -> cmd
+      bin -> "#{bin} --kill-after=#{@kill_after} #{timeout()} #{cmd}"
+    end
+  end
+
+  defp timeout_cmd() do
+    System.find_executable("timeout") || System.find_executable("gtimeout")
+  end
+
+  defp timeout() do
+    Application.get_env(:bob, :script_timeout, "3h")
   end
 
   defp env() do

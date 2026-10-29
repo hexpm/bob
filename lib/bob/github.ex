@@ -3,8 +3,31 @@ defmodule Bob.GitHub do
 
   def fetch_repo_refs(repo) do
     branches = github_request(@github_url <> "repos/#{repo}/branches?per_page=100")
-    tags = github_request(@github_url <> "repos/#{repo}/tags?per_page=100")
-    response_to_refs(branches) ++ response_to_refs(tags)
+    response_to_refs(branches) ++ fetch_repo_tags(repo)
+  end
+
+  def fetch_repo_tags(repo) do
+    repo
+    |> tags_url()
+    |> github_request()
+    |> response_to_refs()
+  end
+
+  def fetch_repo_releases(repo) do
+    repo
+    |> releases_url()
+    |> github_request()
+  end
+
+  # Releases come back newest-first, so the first page is enough to find
+  # anything published recently without paging through years of history.
+  def fetch_recent_releases(repo) do
+    {body, _headers} =
+      repo
+      |> releases_url()
+      |> github_get()
+
+    body
   end
 
   defp response_to_refs(response) do
@@ -14,20 +37,35 @@ defmodule Bob.GitHub do
   end
 
   defp github_request(url) do
-    user = Application.get_env(:bob, :github_user)
-    token = Application.get_env(:bob, :github_token)
-
-    opts = [basic_auth: {user, token}]
-
-    {:ok, 200, headers, body} =
-      Bob.HTTP.retry("GitHub #{url}", fn -> Bob.HTTP.request(:get, url, [], "", opts) end)
-
-    body = JSON.decode!(body)
+    {body, headers} = github_get(url)
 
     if url = next_link(headers) do
       body ++ github_request(url)
     else
       body
+    end
+  end
+
+  defp github_get(url) do
+    user = Application.get_env(:bob, :github_user)
+    token = Application.get_env(:bob, :github_token)
+
+    opts = if user && token, do: [basic_auth: {user, token}], else: []
+
+    result =
+      Bob.HTTP.track_request(:get, url, fn ->
+        Bob.HTTP.retry("GitHub #{url}", fn -> Bob.HTTP.request(:get, url, [], "", opts) end)
+      end)
+
+    case result do
+      {:ok, 200, headers, body} ->
+        {JSON.decode!(body), headers}
+
+      {:ok, status, _headers, _body} ->
+        raise "GitHub #{url} returned status #{status} after retries"
+
+      {:error, reason} ->
+        raise "GitHub #{url} failed after retries: #{inspect(reason)}"
     end
   end
 
@@ -46,4 +84,8 @@ defmodule Bob.GitHub do
       end
     end)
   end
+
+  defp tags_url(repo), do: @github_url <> "repos/#{repo}/tags?per_page=100"
+
+  defp releases_url(repo), do: @github_url <> "repos/#{repo}/releases?per_page=100"
 end

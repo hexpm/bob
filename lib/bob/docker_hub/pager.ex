@@ -1,14 +1,8 @@
 defmodule Bob.DockerHub.Pager do
   use GenServer
 
-  alias Bob.DockerHub.RateLimiter
-
   @concurrency 50
   @timeout 60 * 60 * 1000
-
-  # Cap re-acquires after a 429 so a permanently throttled IP can't loop forever;
-  # each re-acquire already blocks on the rate limiter until the window resets.
-  @max_rate_limit_retries 20
 
   def start_link(url, on_page) do
     GenServer.start_link(__MODULE__, {url, on_page})
@@ -83,7 +77,7 @@ defmodule Bob.DockerHub.Pager do
   defp next_request(state) do
     if MapSet.size(state.tasks) < @concurrency do
       url = String.replace(state.url, "${page}", Integer.to_string(state.page))
-      task = Task.async(fn -> fetch_page(url, 0) end)
+      task = Task.async(fn -> fetch_page(url) end)
       state = %{state | page: state.page + 1, tasks: MapSet.put(state.tasks, task.ref)}
       next_request(state)
     else
@@ -91,35 +85,14 @@ defmodule Bob.DockerHub.Pager do
     end
   end
 
-  # Each attempt acquires from the rate limiter (which blocks until the window
-  # has budget), so a 429 simply feeds the limiter and re-acquires — the next
-  # attempt waits for the window to reset rather than hammering.
-  defp fetch_page(url, attempts) do
-    headers = Bob.DockerHub.headers()
-    opts = [recv_timeout: 20_000]
-
-    RateLimiter.acquire()
-
-    result =
-      Bob.HTTP.retry(
-        "DockerHub #{url}",
-        fn -> Bob.HTTP.request(:get, url, headers, "", opts) end,
-        retry_rate_limit?: false
-      )
-
-    case result do
-      {:ok, 200, headers, body} ->
-        RateLimiter.observe(headers)
+  defp fetch_page(url) do
+    case Bob.DockerHub.paced_request(:get, url) do
+      {:ok, 200, _headers, body} ->
         decoded = JSON.decode!(body)
         {:ok, Enum.flat_map(decoded["results"], &List.wrap(Bob.DockerHub.parse(&1)))}
 
-      {:ok, 404, headers, _body} ->
-        RateLimiter.observe(headers)
+      {:ok, 404, _headers, _body} ->
         :done
-
-      {:ok, 429, headers, _body} when attempts < @max_rate_limit_retries ->
-        RateLimiter.throttle(headers)
-        fetch_page(url, attempts + 1)
 
       other ->
         {:error, other}

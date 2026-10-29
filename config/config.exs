@@ -32,6 +32,12 @@ config :bob,
       queue: true
     ],
     [
+      module: Bob.Job.DockerCleanup,
+      period: :day,
+      time: {2, 0, 0},
+      queue: true
+    ],
+    [
       module: Bob.Job.ReconcileBaseImages,
       period: {1, :hour},
       queue: true
@@ -50,7 +56,18 @@ config :bob,
   master?: true,
   parallel_jobs: 1,
   local_jobs: [],
-  remote_jobs: []
+  remote_jobs: [],
+  hexpm_impl: Bob.Hexpm.Impl,
+  # :dry_run logs the counts a live run would delete without touching Docker
+  # Hub; :live deletes.
+  docker_cleanup_mode: :dry_run
+
+# Metrics are served by a standalone Bandit listener (see Bob.Application)
+# on :metrics_port instead of PromEx's built-in cowboy server
+config :bob, Bob.PromEx,
+  disabled: false,
+  metrics_server: :disabled,
+  grafana: :disabled
 
 config :mime, :types, %{
   "application/vnd.bob+erlang" => ["erlang"]
@@ -63,6 +80,12 @@ config :ex_aws, http_client: ExAws.Request.Req
 config :sentry, client: Bob.SentryClient
 
 config :logger, :default_formatter, format: "$metadata[$level] $message\n"
+
+config :logger_json, encoder: JSON
+
+# Logger metadata that reaches the log line in production. A line's own
+# fields go in its message map; this is the key processes carry.
+config :bob, :log_metadata, [:request_id]
 
 config :bob, BobWeb.Endpoint,
   url: [host: "localhost"],

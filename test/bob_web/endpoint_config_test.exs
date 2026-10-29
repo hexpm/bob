@@ -11,6 +11,8 @@ defmodule BobWeb.EndpointConfigTest do
     "BOB_HOSTNAME" => "gce",
     "BOB_LOCAL_JOBS" => "[]",
     "BOB_MASTER_URL" => "https://bob.hex.pm",
+    "BOB_OAUTH_CLIENT_ID" => "client-id",
+    "BOB_OAUTH_CLIENT_SECRET" => "client-secret",
     "BOB_PARALLEL_JOBS" => "10",
     "BOB_PORT" => "4003",
     "BOB_REMOTE_JOBS" => "[]",

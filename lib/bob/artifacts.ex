@@ -3,10 +3,11 @@ defmodule Bob.Artifacts do
 
   alias Bob.Repo
   alias Bob.Artifacts.{Artifact, BaseImageTag, DockerTag, DockerTagSearch, DockerTagStaging}
+  alias Bob.BuildRequests.BuildRequest
 
   @builds_txt_lock 4_771_002
 
-  # Each staging row binds six parameters; Postgres caps a statement at 65535,
+  # Each staging row binds seven parameters; Postgres caps a statement at 65535,
   # so a page is inserted in chunks well under that ceiling.
   @staging_chunk 5000
 
@@ -17,11 +18,15 @@ defmodule Bob.Artifacts do
   # wraps.
   @long_query_timeout 5 * 60 * 1000
 
+  @erlang_arch_repos ~w(hexpm/erlang-amd64 hexpm/erlang-arm64)
+  @docker_cleanup_per_arch_repos ~w(hexpm/elixir-amd64 hexpm/elixir-arm64) ++ @erlang_arch_repos
+
+  # The CDN purge sleeps 4 seconds between each of its three requests, so it is
+  # queued rather than run in the agent's POST /api/artifacts/add.
   def add(attrs) do
     upsert(attrs)
     generate_builds_txt(attrs.arch, attrs.os)
-    Bob.Fastly.purge_builds(purge_keys(attrs.arch, attrs.os, attrs.name))
-    :ok
+    Bob.Queue.add(Bob.Job.PurgeBuilds, [purge_keys(attrs.arch, attrs.os, attrs.name)])
   end
 
   def add_docker_tag(repo, tag, archs, built_at \\ DateTime.utc_now()) do
@@ -34,11 +39,11 @@ defmodule Bob.Artifacts do
       INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $6)
       ON CONFLICT (repo, tag)
+      -- archs is taken from the caller, so a manifest that loses one is visible
+      -- here. manifest_mismatches/3 reads this row to decide whether the
+      -- manifest still spans everything that was built.
       DO UPDATE SET
-        archs = (
-          SELECT array_agg(DISTINCT a ORDER BY a)
-          FROM unnest(docker_tags.archs || EXCLUDED.archs) AS a
-        ),
+        archs = EXCLUDED.archs,
         search = EXCLUDED.search,
         built_at = EXCLUDED.built_at,
         updated_at = EXCLUDED.updated_at
@@ -95,6 +100,11 @@ defmodule Bob.Artifacts do
 
     Repo.transaction(
       fn ->
+        # Scoped to this transaction. The insert sorts the whole staged set and
+        # the delete hashes it, up to ~1M rows for hexpm/elixir, which spills at
+        # the 4MB default: a 229MB sort file and 63 hash batches per swap.
+        Repo.query!("SET LOCAL work_mem = '256MB'")
+
         Repo.query!(
           """
           INSERT INTO docker_tags (repo, tag, archs, search, built_at, inserted_at, updated_at)
@@ -222,10 +232,17 @@ defmodule Bob.Artifacts do
     |> Repo.aggregate(:count, :id)
   end
 
-  def search_docker_tags(filters \\ %{}, limit \\ 100, offset \\ 0) do
+  def artifact_page(filters, limit, offset) do
+    %{
+      results: search_artifacts(filters, limit, offset),
+      total: count_artifacts(filters)
+    }
+  end
+
+  def search_docker_tags(filters \\ %{}, limit \\ 100, offset \\ 0, sort \\ ["built_at"]) do
     filters
     |> docker_tag_search_query()
-    |> order_by([d], desc: d.built_at, desc: d.id)
+    |> docker_tag_order(sort)
     |> limit(^limit)
     |> offset(^offset)
     |> Repo.all()
@@ -235,6 +252,30 @@ defmodule Bob.Artifacts do
     filters
     |> docker_tag_search_query()
     |> Repo.aggregate(:count, :id)
+  end
+
+  @doc """
+  Returns a page of matching Docker tags together with the total match count.
+
+  The page and the count are separate queries, so the total is kept coherent
+  with the page if tags change between them, and the count is skipped entirely
+  when the first page comes back empty.
+  """
+  def docker_tag_page(filters, limit, offset, sort \\ ["built_at"]) do
+    results = search_docker_tags(filters, limit, offset, sort)
+
+    total =
+      if offset == 0 and results == [] do
+        0
+      else
+        filters
+        |> count_docker_tags()
+        # The page and count are separate queries, so keep the pager coherent if
+        # tags change between them.
+        |> max(offset + length(results))
+      end
+
+    %{results: results, total: total}
   end
 
   def distinct_kinds(), do: distinct_values(Artifact, :kind)
@@ -272,7 +313,7 @@ defmodule Bob.Artifacts do
 
   defp docker_tag_search_query(filters) do
     DockerTag
-    |> prefix_filter(:repo, Map.get(filters, :repo))
+    |> eq_filter(:repo, Map.get(filters, :repo))
     |> prefix_filter(:tag, Map.get(filters, :tag))
     |> arch_prefix_filter(Map.get(filters, :arch))
     |> search_metadata_prefix_filter(:elixir_version, Map.get(filters, :elixir_version))
@@ -280,6 +321,49 @@ defmodule Bob.Artifacts do
     |> search_metadata_prefix_filter(:os, Map.get(filters, :os))
     |> search_metadata_prefix_filter(:os_version, Map.get(filters, :os_version))
   end
+
+  defp docker_tag_order(query, sort) do
+    query = Enum.reduce(sort, query, &docker_tag_order_field/2)
+    query = if "built_at" in sort, do: query, else: docker_tag_order_field("built_at", query)
+    order_by(query, [d], desc: d.id)
+  end
+
+  defp docker_tag_order_field("elixir_version", query) do
+    order_by(query, [d],
+      desc_nulls_last:
+        fragment(
+          "docker_tag_natural_sort_key(split_part(?->>'elixir_version', '-', 1))",
+          d.search
+        ),
+      desc_nulls_last: fragment("strpos(?->>'elixir_version', '-') = 0", d.search),
+      desc_nulls_last: fragment("docker_tag_natural_sort_key(?->>'elixir_version')", d.search)
+    )
+  end
+
+  defp docker_tag_order_field("erlang_version", query) do
+    order_by(query, [d],
+      desc_nulls_last:
+        fragment(
+          "docker_tag_natural_sort_key(split_part(?->>'erlang_version', '-', 1))",
+          d.search
+        ),
+      desc_nulls_last: fragment("strpos(?->>'erlang_version', '-') = 0", d.search),
+      desc_nulls_last: fragment("docker_tag_natural_sort_key(?->>'erlang_version')", d.search)
+    )
+  end
+
+  defp docker_tag_order_field("os", query) do
+    order_by(query, [d], desc_nulls_last: fragment("?->>'os'", d.search))
+  end
+
+  defp docker_tag_order_field("os_version", query) do
+    order_by(query, [d],
+      desc_nulls_last: fragment("docker_tag_natural_sort_key(?->>'os_version')", d.search)
+    )
+  end
+
+  defp docker_tag_order_field("built_at", query), do: order_by(query, [d], desc: d.built_at)
+  defp docker_tag_order_field(_sort, query), do: query
 
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil
@@ -408,6 +492,19 @@ defmodule Bob.Artifacts do
   end
 
   @doc """
+  The architectures a single tag covers, or `nil` if the tag is absent. Used to
+  tell whether a manifest tag already spans every architecture.
+  """
+  def docker_tag_archs(repo, tag) do
+    Repo.one(
+      from(d in DockerTag,
+        where: d.repo == ^repo and d.tag == ^tag,
+        select: d.archs
+      )
+    )
+  end
+
+  @doc """
   `{repo, tag}` for every tag of `repos` whose search metadata carries one of
   `os_versions`. Scopes the checker's erlang reads to current base images —
   a fraction of the full history.
@@ -460,6 +557,124 @@ defmodule Bob.Artifacts do
     Enum.map(rows, fn [tag, archs] -> {tag, archs} end)
   end
 
+  # build_requests is small, so collecting the reserved tag names and matching
+  # against the list is cheap.
+  defp reserved_targets() do
+    from(br in BuildRequest, where: br.state in ["pending", "completed"])
+    |> Repo.all()
+    |> Enum.flat_map(&BuildRequest.targets/1)
+  end
+
+  defp reserved(query), do: where(query, [d], d.tag in ^reserved_targets())
+
+  defp unreserved(query), do: where(query, [d], d.tag not in ^reserved_targets())
+
+  defp stale_per_arch(cutoff, current_os_versions) do
+    from(d in DockerTag,
+      where: d.repo in ^@docker_cleanup_per_arch_repos and d.built_at < ^cutoff
+    )
+    |> keep_current_erlang(current_os_versions)
+  end
+
+  # An empty list means the build matrix could not be read, which protects every
+  # erlang tag. `<> ALL('{}')` is true, so leaving this to the general clause
+  # would delete the lot.
+  defp keep_current_erlang(query, []) do
+    where(query, [d], d.repo not in ^@erlang_arch_repos)
+  end
+
+  # An erlang per-arch tag on one of the os_versions the build matrix currently
+  # targets is kept whatever its age. DockerChecker.expected_elixir_tags/0 reads
+  # those rows to decide which Elixir images to build and ranks them by version,
+  # not by date, so the newest tag of an old OTP line stays in use indefinitely.
+  # A tag whose metadata carries no os_version is kept, spelled out rather than
+  # left to `NULL <> ALL(...)` returning NULL.
+  defp keep_current_erlang(query, current_os_versions) do
+    where(
+      query,
+      [d],
+      d.repo not in ^@erlang_arch_repos or
+        fragment(
+          "?->>'os_version' IS NOT NULL AND ?->>'os_version' <> ALL(?)",
+          d.search,
+          d.search,
+          ^current_os_versions
+        )
+    )
+  end
+
+  @doc "Per-repo count of the tags a run would delete."
+  def count_stale_per_arch_tags(cutoff, current_os_versions) do
+    stale_per_arch(cutoff, current_os_versions)
+    |> unreserved()
+    |> group_by([d], d.repo)
+    |> select([d], {d.repo, count(d.id)})
+    |> Repo.all(timeout: @long_query_timeout)
+    |> Map.new()
+  end
+
+  @doc "Up to `limit` deletable `{repo, tag}` pairs."
+  def stale_per_arch_tags(cutoff, limit, current_os_versions) do
+    stale_per_arch(cutoff, current_os_versions)
+    |> unreserved()
+    |> limit(^limit)
+    |> select([d], {d.repo, d.tag})
+    |> Repo.all(timeout: @long_query_timeout)
+  end
+
+  @doc """
+  The subset of `repo_tags` still deletable: present, older than `cutoff`,
+  unreserved and not an erlang tag the build matrix still targets. Re-checked
+  per chunk because a run is slow enough for a tag to get reserved or re-pushed
+  while it works.
+  """
+  def deletable_docker_tags([], _cutoff, _current_os_versions), do: []
+
+  def deletable_docker_tags(repo_tags, cutoff, current_os_versions) do
+    {repos, tags} = Enum.unzip(repo_tags)
+    wanted = MapSet.new(repo_tags)
+
+    from(d in DockerTag,
+      where: d.repo in ^Enum.uniq(repos) and d.tag in ^Enum.uniq(tags),
+      where: d.built_at < ^cutoff,
+      select: {d.repo, d.tag}
+    )
+    |> unreserved()
+    |> keep_current_erlang(current_os_versions)
+    |> Repo.all(timeout: @long_query_timeout)
+    # The two `in` clauses match a cross product, so drop pairs not asked for.
+    |> Enum.filter(&MapSet.member?(wanted, &1))
+  end
+
+  @doc """
+  The ids of the given `DockerTag` rows that a build request reserves, as a
+  MapSet. Lets the tags page flag reserved tags without re-deriving the match.
+  """
+  def reserved_docker_tag_ids([]), do: MapSet.new()
+
+  def reserved_docker_tag_ids(tags) do
+    ids = Enum.map(tags, & &1.id)
+
+    from(d in DockerTag, where: d.id in ^ids, select: d.id)
+    |> reserved()
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc "Drops `docker_tags` rows for the given `{repo, tag}` pairs, after Docker Hub deletion."
+  def delete_docker_tags([]), do: :ok
+
+  def delete_docker_tags(repo_tags) do
+    repo_tags
+    |> Enum.group_by(fn {repo, _tag} -> repo end, fn {_repo, tag} -> tag end)
+    |> Enum.each(fn {repo, tags} ->
+      from(d in DockerTag, where: d.repo == ^repo and d.tag in ^tags)
+      |> Repo.delete_all(timeout: @long_query_timeout)
+    end)
+
+    :ok
+  end
+
   def base_image_tags(repo) do
     Repo.all(
       from(b in BaseImageTag,
@@ -471,16 +686,35 @@ defmodule Bob.Artifacts do
 
   def replace_base_image_tags(repo, tags) do
     now = DateTime.utc_now()
+    tags = Enum.uniq(tags)
+    rows = Enum.map(tags, &%{repo: repo, tag: &1, inserted_at: now, updated_at: now})
 
-    rows =
-      tags |> Enum.uniq() |> Enum.map(&%{repo: repo, tag: &1, inserted_at: now, updated_at: now})
-
+    # Prune vanished tags but keep existing rows untouched, so inserted_at marks
+    # when a base image first appeared rather than the last reconcile.
     Repo.transaction(fn ->
-      Repo.delete_all(from(b in BaseImageTag, where: b.repo == ^repo))
-      Repo.insert_all(BaseImageTag, rows)
+      Repo.delete_all(from(b in BaseImageTag, where: b.repo == ^repo and b.tag not in ^tags))
+      Repo.insert_all(BaseImageTag, rows, on_conflict: :nothing, conflict_target: [:repo, :tag])
     end)
 
     :ok
+  end
+
+  @doc """
+  `{os, tag}` for every base image first seen on or after `cutoff`. A recent
+  base image is one of the components that makes a build worth triggering.
+  """
+  def recent_base_image_versions(cutoff) do
+    Repo.all(
+      from(b in BaseImageTag,
+        where: b.inserted_at >= ^cutoff,
+        select: {b.repo, b.tag}
+      )
+    )
+    |> Enum.flat_map(fn
+      {"library/" <> os, tag} -> [{os, tag}]
+      _other -> []
+    end)
+    |> MapSet.new()
   end
 
   def upsert(attrs) do

@@ -1,0 +1,155 @@
+defmodule Bob.DockerCleanup do
+  @moduledoc """
+  Deletes per-arch Docker Hub tags older than 30 days. Tags reserved by a build
+  request are kept, as are the erlang tags on an os_version the build matrix
+  still targets. The manifest repos are not pruned.
+
+  A live run keeps taking batches until one deletes nothing, so it clears the
+  whole backlog rather than a single batch. What bounds it is the job's timeout.
+  `:docker_cleanup_mode` gates whether it deletes or only reports.
+  """
+
+  require Logger
+
+  alias Bob.Artifacts
+
+  # Must stay >= the DockerChecker build freshness window or cleanup deletes
+  # tags that pass still expects.
+  @per_arch_max_age_days 30
+
+  # Candidate query page size.
+  @default_batch 10_000
+
+  # Rows are committed per chunk so a killed run keeps its progress.
+  @delete_chunk 100
+
+  # Abort a run whose deletes are all failing, e.g. a token without permission.
+  @dead_chunk_ceiling 3
+
+  # The rate limiter caps throughput; this only keeps latency from binding it.
+  @default_concurrency 25
+
+  def run(opts \\ []) do
+    case Keyword.get(opts, :mode, configured_mode()) do
+      :dry_run -> dry_run()
+      :live -> live(opts)
+    end
+  end
+
+  defp configured_mode(), do: Application.get_env(:bob, :docker_cleanup_mode, :dry_run)
+
+  defp dry_run() do
+    per_arch = Artifacts.count_stale_per_arch_tags(per_arch_cutoff(), current_os_versions())
+
+    Logger.info(
+      "DOCKER CLEANUP dry-run: per-arch built_at < #{@per_arch_max_age_days}d -> " <>
+        format_counts(per_arch)
+    )
+
+    {:dry_run, %{per_arch: per_arch}}
+  end
+
+  defp live(opts) do
+    deleter = Keyword.get(opts, :deleter, &Bob.DockerHub.delete_tag/2)
+    limit = Keyword.get(opts, :limit, @default_batch)
+    cutoff = per_arch_cutoff()
+
+    # Pinned for the whole run, like the cutoff. A base image released mid-run
+    # rotates the os_version it replaces out of the matrix, and the erlang tags
+    # on it must stay protected until the checker has built their replacements.
+    os_versions = current_os_versions()
+
+    deleted =
+      Stream.repeatedly(fn ->
+        cutoff
+        |> Artifacts.stale_per_arch_tags(limit, os_versions)
+        |> delete(deleter, cutoff, os_versions)
+      end)
+      |> Enum.reduce_while(0, fn batch, total ->
+        if batch == 0, do: {:halt, total}, else: {:cont, total + batch}
+      end)
+
+    Logger.info(%{
+      message: "Docker cleanup deleted tags",
+      event: "docker_cleanup.deleted",
+      deleted: deleted
+    })
+
+    {:live, deleted}
+  end
+
+  # Deleted rows are dropped only after Docker Hub confirms, so a failed tag is
+  # retried next run. Candidates are re-checked per chunk because a run is slow
+  # enough for a tag to get reserved or re-pushed while it works.
+  defp delete(candidates, deleter, cutoff, os_versions) do
+    candidates
+    |> Enum.chunk_every(@delete_chunk)
+    |> Enum.reduce_while({0, 0}, fn chunk, {deleted, dead_chunks} ->
+      {confirmed, failed} = delete_chunk(chunk, deleter, cutoff, os_versions)
+      Artifacts.delete_docker_tags(confirmed)
+      deleted = deleted + length(confirmed)
+
+      # Counted per chunk so a flaky tag does not trip the abort.
+      dead_chunks = if failed > 0 and confirmed == [], do: dead_chunks + 1, else: 0
+
+      if dead_chunks >= @dead_chunk_ceiling do
+        Logger.error(%{
+          message: "Docker cleanup aborted",
+          event: "docker_cleanup.aborted",
+          dead_chunks: dead_chunks,
+          deleted: deleted
+        })
+
+        {:halt, {deleted, dead_chunks}}
+      else
+        {:cont, {deleted, dead_chunks}}
+      end
+    end)
+    |> elem(0)
+  end
+
+  defp delete_chunk(chunk, deleter, cutoff, os_versions) do
+    chunk
+    |> Artifacts.deletable_docker_tags(cutoff, os_versions)
+    |> Task.async_stream(
+      fn {repo, tag} ->
+        case deleter.(repo, tag) do
+          :ok ->
+            {:ok, {repo, tag}}
+
+          {:error, reason} ->
+            Logger.error(%{
+              message: "Docker cleanup delete failed",
+              event: "docker_cleanup.delete_failed",
+              repo: repo,
+              tag: tag,
+              reason: inspect(reason)
+            })
+
+            :error
+        end
+      end,
+      max_concurrency: @default_concurrency,
+      ordered: false,
+      # The limiter can hold a caller until the budget recovers.
+      timeout: :infinity
+    )
+    |> Enum.reduce({[], 0}, fn
+      {:ok, {:ok, repo_tag}}, {confirmed, failed} -> {[repo_tag | confirmed], failed}
+      {:ok, :error}, {confirmed, failed} -> {confirmed, failed + 1}
+    end)
+  end
+
+  defp per_arch_cutoff(), do: DateTime.add(DateTime.utc_now(), -@per_arch_max_age_days, :day)
+
+  defp current_os_versions(), do: Bob.Job.DockerChecker.current_os_versions()
+
+  defp format_counts(counts) do
+    total = counts |> Map.values() |> Enum.sum()
+
+    detail =
+      counts |> Enum.sort() |> Enum.map_join(", ", fn {repo, count} -> "#{repo}=#{count}" end)
+
+    "#{total} (#{detail})"
+  end
+end

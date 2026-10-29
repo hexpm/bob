@@ -39,6 +39,7 @@ fi
 
 docker build \
   --ulimit nofile=1024:1024 \
+  --provenance=mode=max \
   -t hexpm/erlang-${arch}:${tag} \
   --build-arg ARCH=${arch} \
   --build-arg ERLANG=${erlang} \
@@ -57,4 +58,6 @@ docker push docker.io/hexpm/erlang-${arch}:${tag} ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
   (sleep $((20 + $RANDOM % 40)) && docker push docker.io/hexpm/erlang-${arch}:${tag}) ||
-  (exit 0)
+  (exit 1)
+
+${SCRIPT_DIR}/docker/sign.sh hexpm/erlang-${arch} ${tag}

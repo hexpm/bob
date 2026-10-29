@@ -3,36 +3,63 @@ defmodule Bob.Application do
 
   def start(_type, _args) do
     :logger.add_handler(:sentry_handler, Sentry.LoggerHandler, %{})
+    BobWeb.BanditTelemetry.attach()
 
     setup_docker()
-    setup_gsutil()
+    setup_gcp_credentials()
     auth_docker()
     validate_jobs()
 
     File.mkdir_p!(Bob.tmp_dir())
 
+    opts = [strategy: :one_for_one, name: Bob.Supervisor]
+    Supervisor.start_link(children(), opts)
+  end
+
+  @doc false
+  # PromEx has to start before the repo. Its Ecto plugin picks up the pool size,
+  # timeout and repo name from the telemetry event the repo emits once, when it
+  # starts, and the Ecto dashboard reads its repo dropdown from those.
+  def children() do
     children =
-      repo_children() ++
+      [Bob.PromEx, initialize_counters(Bob.PromEx.Plugins.Bob)] ++
+        repo_children() ++
         [
           {Finch, name: Bob.Finch},
           {Task.Supervisor, [name: Bob.Tasks]},
           {Phoenix.PubSub, name: Bob.PubSub},
+          Bob.Cache,
           Bob.DockerHub.RateLimiter,
           Bob.DockerHub.Auth,
           runner_spec(),
           {Bob.Schedule, [schedule()]},
-          BobWeb.Endpoint
+          BobWeb.Endpoint,
+          metrics_server_spec()
         ]
 
-    opts = [strategy: :one_for_one, name: Bob.Supervisor]
-    Supervisor.start_link(children, opts)
+    Enum.reject(children, &is_nil/1)
   end
 
   defp repo_children() do
     if Application.get_env(:bob, :master?) do
-      [Bob.Repo] ++ maintenance_children()
+      [
+        initialize_counters(Bob.PromEx.Plugins.DbConnection),
+        {DBConnection.TelemetryListener, name: Bob.Repo.TelemetryListener},
+        Bob.Repo
+      ] ++ maintenance_children()
     else
       []
+    end
+  end
+
+  defp initialize_counters(plugin) do
+    %{id: {plugin, :initialize_counters}, start: {plugin, :initialize_counters, []}}
+  end
+
+  # Serves Prometheus metrics on a port separate from the main endpoint
+  defp metrics_server_spec() do
+    if port = Application.get_env(:bob, :metrics_port) do
+      {Bandit, plug: {PromEx.Plug, prom_ex_module: Bob.PromEx}, port: port}
     end
   end
 
@@ -50,11 +77,11 @@ defmodule Bob.Application do
     end
   end
 
-  defp setup_gsutil() do
+  defp setup_gcp_credentials() do
     if credentials = System.get_env("BOB_GCP_CREDENTIALS") do
       credentials = fix_env_newlines(credentials)
-      File.mkdir_p!("/boto")
-      File.write!("/boto/keyfile.json", credentials)
+      File.mkdir_p!("/gcp")
+      File.write!("/gcp/keyfile.json", credentials)
     end
   end
 

@@ -1,18 +1,15 @@
 defmodule BobWeb.ArtifactsLive do
   use BobWeb, :live_view
 
-  @page 100
+  alias Bob.Artifacts.ArtifactSearch
+
+  @page ArtifactSearch.page_size()
+  @filter_keys ArtifactSearch.filter_keys()
 
   @impl true
   def mount(_params, _session, socket) do
     socket =
-      socket
-      |> assign(
-        query: "",
-        kind: "",
-        arch: "",
-        os: "",
-        offset: 0,
+      assign(socket,
         page: @page,
         kinds: [],
         arches: [],
@@ -22,34 +19,42 @@ defmodule BobWeb.ArtifactsLive do
         results: []
       )
 
-    socket = if connected?(socket), do: socket |> load_options() |> load(), else: socket
-
+    socket = if connected?(socket), do: load_options(socket), else: socket
     {:ok, socket}
   end
 
   @impl true
-  def handle_event("search", params, socket) do
-    socket =
-      socket
-      |> assign(
-        query: params["query"] || "",
-        kind: params["kind"] || "",
-        arch: params["arch"] || "",
-        os: params["os"] || "",
-        offset: 0
-      )
-      |> load()
-
+  def handle_params(params, _uri, socket) do
+    socket = assign(socket, filter_assigns(params))
+    socket = if connected?(socket), do: load(socket), else: socket
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("search", params, socket) do
+    filters = Keyword.delete(filter_assigns(params), :offset)
+    {:noreply, push_patch(socket, to: ~p"/artifacts?#{query(filters, 0)}", replace: true)}
   end
 
   def handle_event("page", %{"dir" => dir}, socket) do
     offset = max(socket.assigns.offset + step(dir), 0)
-    {:noreply, socket |> assign(offset: offset) |> load()}
+    filters = Enum.map(@filter_keys, &{&1, socket.assigns[&1]})
+    {:noreply, push_patch(socket, to: ~p"/artifacts?#{query(filters, offset)}")}
   end
 
   defp step("next"), do: @page
   defp step("prev"), do: -@page
+
+  defp filter_assigns(params) do
+    filters = ArtifactSearch.parse_filters(params)
+
+    Enum.map(@filter_keys, &{&1, filters[&1]}) ++ [offset: ArtifactSearch.parse_offset(params)]
+  end
+
+  defp query(filters, offset) do
+    filters = Enum.reject(filters, fn {_key, value} -> value in [nil, ""] end)
+    if offset > 0, do: filters ++ [offset: offset], else: filters
+  end
 
   defp load_options(socket) do
     assign(socket,
@@ -64,14 +69,9 @@ defmodule BobWeb.ArtifactsLive do
 
     filters = %{query: q, kind: kind, arch: arch, os: os}
 
-    results =
-      Bob.Artifacts.search_artifacts(filters, @page, offset)
+    %{results: results, total: total} = Bob.Artifacts.artifact_page(filters, @page, offset)
 
-    assign(socket,
-      results: results,
-      total: Bob.Artifacts.count_artifacts(filters),
-      loading: false
-    )
+    assign(socket, results: results, total: total, loading: false)
   end
 
   defp fmt(nil), do: "—"
@@ -96,7 +96,12 @@ defmodule BobWeb.ArtifactsLive do
       </div>
 
       <section class="sec">
-        <form phx-change="search" phx-submit="search" class="filter-bar filter-bar--wrap">
+        <form
+          id="artifact-filters"
+          phx-change="search"
+          phx-submit="search"
+          class="filter-bar filter-bar--wrap"
+        >
           <.search_box name="query" value={@query} placeholder="Search name or ref..." />
           <.filter_select name="kind" label="kind" value={@kind} options={@kinds} />
           <.filter_select name="arch" label="arch" value={@arch} options={@arches} />

@@ -2,14 +2,24 @@ import Config
 
 config :bob,
   master_schedule: [],
-  agent_schedule: []
+  agent_schedule: [],
+  github: Bob.FakeGitHub,
+  hexpm_impl: Bob.FakeHexpm,
+  hexpm_url: "http://localhost:4000",
+  oauth_client_id: "b0b00000-0000-4000-8000-000000000b0b",
+  oauth_client_secret: "test_secret"
+
+config :bob, Bob.PromEx, disabled: true
 
 config :ex_aws,
   access_key_id: "test",
   secret_access_key: "test",
   http_client: Bob.FakeHttpClient
 
-config :logger, level: :warning
+config :logger, level: :info
+config :logger, :default_handler, level: :error
+
+config :phoenix_live_view, :test_warnings, missing_form_id: :raise
 
 config :bob, Bob.Repo,
   username: "postgres",
@@ -22,4 +32,8 @@ config :bob, Bob.Repo,
 config :bob, BobWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "tT9wQ2eR5yU8iO1pA4sD7fG0hJ3kL6zX9cV2bN5mQ8wE1rT4yU7iO0pA3sD6fG90",
-  server: false
+  server: false,
+  cache_static_manifest_latest: %{
+    "assets/app.css" => "assets/app-11111111111111111111111111111111.css",
+    "assets/app.js" => "assets/app-22222222222222222222222222222222.js"
+  }

@@ -20,3 +20,5 @@ docker buildx imagetools create -t hexpm/${kind}:${tag} ${arch_images} ||
   (sleep $((10 + $RANDOM % 20)) && docker buildx imagetools create -t hexpm/${kind}:${tag} ${arch_images}) ||
   (sleep $((10 + $RANDOM % 20)) && docker buildx imagetools create -t hexpm/${kind}:${tag} ${arch_images}) ||
   (exit 1)
+
+${SCRIPT_DIR}/docker/sign.sh hexpm/${kind} ${tag}

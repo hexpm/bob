@@ -1,13 +1,15 @@
 defmodule Bob.ReconcileTest do
   use Bob.DataCase
 
+  import ExUnit.CaptureLog
+
   alias Bob.{Artifacts, Reconcile}
 
   @docker_built_at ~U[2025-01-02 03:04:05.000000Z]
   @newer_docker_built_at ~U[2025-02-03 04:05:06.000000Z]
 
-  # Streamer stub: invokes on_page once with the canned {tag, archs, built_at} list for the
-  # repo (mimicking a single Docker Hub page), or nothing for an empty repo.
+  # Streamer stub: invokes on_page once with the canned {tag, archs, built_at} list
+  # for the repo (mimicking a single Docker Hub page), or nothing for an empty repo.
   defp streamer(map) do
     fn repo, on_page ->
       case Map.get(map, repo, []) do
@@ -136,8 +138,11 @@ defmodule Bob.ReconcileTest do
         _repo, _on_page -> :ok
       end
 
-      Reconcile.reconcile(stream)
+      log = capture_log(fn -> Reconcile.reconcile(stream) end)
 
+      assert log =~ "Reconcile fetch failed"
+      assert log =~ ~s(reason: "DockerHub paging blew up")
+      assert log =~ ~s(repo: "hexpm/erlang-amd64")
       assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"keep-me", ["amd64"]}]
       assert Artifacts.docker_tags("hexpm/elixir-arm64") == [{"fresh-tag", ["arm64"]}]
     end

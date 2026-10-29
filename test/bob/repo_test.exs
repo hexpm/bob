@@ -6,8 +6,9 @@ defmodule Bob.RepoTest do
   end
 
   describe "init/2" do
-    test "leaves opts unchanged without BOB_DATABASE_URL" do
-      assert Bob.Repo.init(:supervisor, pool_size: 3) == {:ok, [pool_size: 3]}
+    test "adds only the connection listener without BOB_DATABASE_URL" do
+      assert Bob.Repo.init(:supervisor, pool_size: 3) ==
+               {:ok, connection_listeners: {[Bob.Repo.TelemetryListener], Bob.Repo}, pool_size: 3}
     end
 
     test "applies url and pool_size from the environment without ssl when no CA cert" do

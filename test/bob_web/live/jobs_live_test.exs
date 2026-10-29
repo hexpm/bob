@@ -24,7 +24,35 @@ defmodule BobWeb.JobsLiveTest do
     assert html =~ "OTPChecker"
     assert html =~ "done"
     assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>1<\/b>\s*queued\s*of\s*1 queued/
-    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>1<\/b>\s*job\s*of\s*1 job/
+    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>1<\/b>\s*job/
+    refute html =~ ~r/job\s*of\s*1 job/
+  end
+
+  test "pages past jobs without an exact total", %{conn: conn} do
+    # One more than the 50-row past page, so a second page exists.
+    for i <- 1..51 do
+      Bob.Queue.add(Bob.Job.OTPChecker, [i])
+      {:ok, {id, _}} = Bob.Queue.start(Bob.Job.OTPChecker)
+      Bob.Queue.success(id)
+    end
+
+    {:ok, view, html} = live(conn, ~p"/")
+
+    assert html =~ ~r/Showing\s*<b>1<\/b>\s*-\s*<b>50<\/b>\s*jobs/
+    refute html =~ "of 51"
+
+    assert has_element?(
+             view,
+             "button[phx-click='past_page'][phx-value-dir='next']:not([disabled])"
+           )
+
+    html =
+      view
+      |> element("button[phx-click='past_page'][phx-value-dir='next']")
+      |> render_click()
+
+    assert html =~ ~r/Showing\s*<b>51<\/b>\s*-\s*<b>51<\/b>\s*job/
+    assert has_element?(view, "button[phx-click='past_page'][phx-value-dir='next'][disabled]")
   end
 
   test "filters jobs by toggling module chips", %{conn: conn} do
@@ -66,6 +94,26 @@ defmodule BobWeb.JobsLiveTest do
     refute html =~ ":otp_queued"
     assert html =~ ":docker_queued"
     assert html =~ ":docker_done"
+  end
+
+  test "selecting a module patches the URL so the filter survives a re-mount", %{conn: conn} do
+    Bob.Queue.add(Bob.Job.OTPChecker, [:otp_queued])
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    view |> element("button[phx-value-module='Bob.Job.OTPChecker']") |> render_click()
+    assert_patch(view, ~p"/?#{[module: ["Bob.Job.OTPChecker"]]}")
+  end
+
+  test "applies the module filter from URL params on load", %{conn: conn} do
+    Bob.Queue.add(Bob.Job.OTPChecker, [:otp_queued])
+    Bob.Queue.add(Bob.Job.DockerChecker, [:docker_queued])
+
+    {:ok, _view, html} = live(conn, ~p"/?#{[module: ["Bob.Job.OTPChecker"]]}")
+
+    assert html =~ ":otp_queued"
+    refute html =~ ":docker_queued"
+    assert html =~ "chip--active"
   end
 
   test "renders tuple module keys without inspect syntax", %{conn: conn} do

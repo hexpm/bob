@@ -30,8 +30,10 @@ defmodule Bob.Fastly do
       {"surrogate-key", keys}
     ]
 
-    Bob.HTTP.retry("Fastly", fn ->
-      Bob.HTTP.request(:post, url, headers, "")
+    Bob.HTTP.track_request(:post, url, fn ->
+      Bob.HTTP.retry("Fastly", fn ->
+        Bob.HTTP.request(:post, url, headers, "")
+      end)
     end)
   end
 end

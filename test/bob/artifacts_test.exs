@@ -3,6 +3,7 @@ defmodule Bob.ArtifactsTest do
 
   alias Bob.Artifacts
   alias Bob.Artifacts.{Artifact, BaseImageTag, DockerTag, DockerTagStaging}
+  alias Bob.BuildRequests
 
   @docker_built_at ~U[2025-01-02 03:04:05.000000Z]
   @newer_docker_built_at ~U[2025-02-03 04:05:06.000000Z]
@@ -213,7 +214,7 @@ defmodule Bob.ArtifactsTest do
   end
 
   describe "add/1" do
-    test "upserts and regenerates builds.txt" do
+    test "upserts, regenerates builds.txt and queues the CDN purge" do
       Bob.FakeHttpClient.reset()
 
       Bob.FakeHttpClient.stub(
@@ -225,6 +226,13 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.add(attrs()) == :ok
       assert [%Artifact{name: "OTP-27.0"}] = Repo.all(Artifact)
+
+      assert Bob.Queue.queued() == [
+               {Bob.Job.PurgeBuilds,
+                [
+                  "builds/otp/amd64/ubuntu-24.04/txt builds/otp/amd64/ubuntu-24.04/txt-signed builds/otp/amd64/ubuntu-24.04/OTP-27.0"
+                ]}
+             ]
     end
   end
 
@@ -267,12 +275,12 @@ defmodule Bob.ArtifactsTest do
       assert [%DockerTag{built_at: @docker_built_at}] = Repo.all(DockerTag)
     end
 
-    test "unions archs on conflicting (repo, tag)" do
+    test "takes the archs from the report, so a manifest that loses one shows it" do
+      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64", "arm64"])
       Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
-      Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["arm64"])
 
       assert Artifacts.docker_tags("hexpm/erlang") ==
-               [{"27.0-ubuntu-noble-20250101", ["amd64", "arm64"]}]
+               [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
     end
 
     test "is idempotent for a repeated single-arch report" do
@@ -325,6 +333,27 @@ defmodule Bob.ArtifactsTest do
                  }
                }
              ] = Repo.all(DockerTag)
+    end
+
+    test "raises work_mem for the swap transaction" do
+      test = self()
+      ref = make_ref()
+
+      :telemetry.attach(
+        ref,
+        Repo.config()[:telemetry_prefix] ++ [:query],
+        fn _event, _measurements, %{query: query}, _config ->
+          # Handlers are global, so only this process's queries count.
+          if self() == test and query =~ "work_mem", do: send(test, {ref, query})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(ref) end)
+
+      replace("hexpm/erlang-amd64", [docker_tag("27.0-ubuntu-noble-20250101", ["amd64"])])
+
+      assert_received {^ref, "SET LOCAL work_mem = '256MB'"}
     end
 
     test "swaps the staged Docker Hub timestamp into built_at" do
@@ -692,6 +721,51 @@ defmodule Bob.ArtifactsTest do
 
       assert Artifacts.base_image_tags("library/alpine") == ["3.23.5"]
     end
+
+    test "keeps inserted_at for surviving tags and stamps only new ones" do
+      old = DateTime.add(DateTime.utc_now(), -90, :day)
+
+      %BaseImageTag{repo: "library/alpine", tag: "3.23.5"}
+      |> Repo.insert!()
+      |> Ecto.Changeset.change(inserted_at: old)
+      |> Repo.update!()
+
+      Artifacts.replace_base_image_tags("library/alpine", ["3.23.5", "3.24.0"])
+
+      by_tag =
+        from(b in BaseImageTag, where: b.repo == "library/alpine")
+        |> Repo.all()
+        |> Map.new(&{&1.tag, &1.inserted_at})
+
+      assert DateTime.compare(by_tag["3.23.5"], old) == :eq
+      assert DateTime.diff(DateTime.utc_now(), by_tag["3.24.0"]) < 60
+    end
+  end
+
+  describe "recent_base_image_versions/1" do
+    test "returns {os, tag} for base images first seen since the cutoff" do
+      Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250601"})
+
+      %BaseImageTag{repo: "library/debian", tag: "bookworm-20240101"}
+      |> Repo.insert!()
+      |> Ecto.Changeset.change(inserted_at: DateTime.add(DateTime.utc_now(), -90, :day))
+      |> Repo.update!()
+
+      cutoff = DateTime.add(DateTime.utc_now(), -30, :day)
+
+      assert Artifacts.recent_base_image_versions(cutoff) ==
+               MapSet.new([{"ubuntu", "noble-20250601"}])
+    end
+
+    test "skips repos without a library/ prefix instead of crashing" do
+      Repo.insert!(%BaseImageTag{repo: "library/ubuntu", tag: "noble-20250601"})
+      Repo.insert!(%BaseImageTag{repo: "hexpm/custom", tag: "weird"})
+
+      cutoff = DateTime.add(DateTime.utc_now(), -30, :day)
+
+      assert Artifacts.recent_base_image_versions(cutoff) ==
+               MapSet.new([{"ubuntu", "noble-20250601"}])
+    end
   end
 
   describe "search" do
@@ -725,19 +799,126 @@ defmodule Bob.ArtifactsTest do
       Bob.Artifacts.add_docker_tag(
         "hexpm/erlang",
         "old-ubuntu-noble-20250101",
-        ["amd64"],
+        ["amd64", "arm64"],
         ~U[2025-01-01 00:00:00Z]
       )
 
       Bob.Artifacts.add_docker_tag(
         "hexpm/erlang",
         "new-ubuntu-noble-20250101",
-        ["amd64"],
+        ["amd64", "arm64"],
         ~U[2025-02-01 00:00:00Z]
       )
 
       assert [%{tag: "new-ubuntu-noble-20250101"}, %{tag: "old-ubuntu-noble-20250101"}] =
                Bob.Artifacts.search_docker_tags(%{})
+    end
+
+    test "search_docker_tags/4 sorts language releases numerically and stable before matching prereleases" do
+      older = ~U[2025-01-01 00:00:00Z]
+      newer = ~U[2026-01-01 00:00:00Z]
+
+      for {elixir, erlang, built_at} <- [
+            {"1.9.0", "9.3", newer},
+            {"1.19.0", "28.3", newer},
+            {"1.20.1", "29.0.2", older},
+            {"1.21.0-rc.1", "30.0-rc1", newer},
+            {"1.21.0-rc.2", "30.0-rc2", newer},
+            {"1.21.0-rc.10", "30.0-rc10", newer},
+            {"1.21.0", "30.0", older}
+          ] do
+        Artifacts.add_docker_tag(
+          "hexpm/elixir",
+          "#{elixir}-erlang-#{erlang}-debian-trixie-20260610-slim",
+          ["amd64", "arm64"],
+          built_at
+        )
+      end
+
+      elixir_versions =
+        Artifacts.search_docker_tags(%{repo: "hexpm/elixir"}, 100, 0, ["elixir_version"])
+        |> Enum.map(& &1.search["elixir_version"])
+
+      assert elixir_versions == [
+               "1.21.0",
+               "1.21.0-rc.10",
+               "1.21.0-rc.2",
+               "1.21.0-rc.1",
+               "1.20.1",
+               "1.19.0",
+               "1.9.0"
+             ]
+
+      erlang_versions =
+        Artifacts.search_docker_tags(%{repo: "hexpm/elixir"}, 100, 0, ["erlang_version"])
+        |> Enum.map(& &1.search["erlang_version"])
+
+      assert erlang_versions == [
+               "30.0",
+               "30.0-rc10",
+               "30.0-rc2",
+               "30.0-rc1",
+               "29.0.2",
+               "28.3",
+               "9.3"
+             ]
+    end
+
+    test "search_docker_tags/4 sorts OS versions by numeric components" do
+      for os_version <- [
+            "trixie-20260609-slim",
+            "trixie-20260610-slim",
+            "trixie-99999999999999999999-slim"
+          ] do
+        Artifacts.add_docker_tag(
+          "hexpm/elixir",
+          "1.20.1-erlang-29.0.2-debian-#{os_version}",
+          ["amd64", "arm64"],
+          ~U[2025-01-01 00:00:00Z]
+        )
+      end
+
+      os_versions =
+        Artifacts.search_docker_tags(%{repo: "hexpm/elixir"}, 100, 0, ["os_version"])
+        |> Enum.map(& &1.search["os_version"])
+
+      assert os_versions == [
+               "trixie-99999999999999999999-slim",
+               "trixie-20260610-slim",
+               "trixie-20260609-slim"
+             ]
+    end
+
+    test "search_docker_tags/4 applies sort fields in order" do
+      for {elixir, erlang} <- [
+            {"1.20.0", "28.3"},
+            {"1.20.0", "29.0"},
+            {"1.19.0", "30.0"}
+          ] do
+        Artifacts.add_docker_tag(
+          "hexpm/elixir",
+          "#{elixir}-erlang-#{erlang}-alpine-3.22.1",
+          ["amd64", "arm64"],
+          ~U[2025-01-01 00:00:00Z]
+        )
+      end
+
+      versions = fn sort ->
+        Artifacts.search_docker_tags(%{repo: "hexpm/elixir"}, 100, 0, sort)
+        |> Enum.map(&{&1.search["elixir_version"], &1.search["erlang_version"]})
+      end
+
+      assert versions.(["elixir_version", "erlang_version"]) == [
+               {"1.20.0", "29.0"},
+               {"1.20.0", "28.3"},
+               {"1.19.0", "30.0"}
+             ]
+
+      assert versions.(["erlang_version", "elixir_version"]) == [
+               {"1.19.0", "30.0"},
+               {"1.20.0", "29.0"},
+               {"1.20.0", "28.3"}
+             ]
     end
 
     test "search_artifacts/1 filters by free-text on name" do
@@ -767,33 +948,39 @@ defmodule Bob.ArtifactsTest do
     end
 
     test "distinct Docker repositories" do
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
-        "amd64",
-        "arm64"
-      ])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"]
+      )
 
       Bob.Artifacts.add_docker_tag(
         "hexpm/elixir",
         "1.17.3-erlang-26.2-debian-bookworm-20250113-slim",
-        ["amd64"]
+        ["amd64", "arm64"]
       )
 
       assert Bob.Artifacts.distinct_repos() == ["hexpm/elixir", "hexpm/erlang"]
     end
 
     test "search_docker_tags/1 filters by structured prefixes" do
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
-        "amd64",
-        "arm64"
-      ])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"]
+      )
 
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.1-ubuntu-noble-20250101", [
-        "amd64"
-      ])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang-amd64",
+        "27.1-ubuntu-noble-20250101",
+        ["amd64"]
+      )
 
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "26.2-debian-bookworm-20250113-slim", [
-        "amd64"
-      ])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "26.2-debian-bookworm-20250113-slim",
+        ["amd64", "arm64"]
+      )
 
       Bob.Artifacts.add_docker_tag(
         "hexpm/elixir",
@@ -802,14 +989,20 @@ defmodule Bob.ArtifactsTest do
       )
 
       Bob.Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"]
+      )
+
+      Bob.Artifacts.add_docker_tag(
         "hexpm/elixir",
         "1.17.3-erlang-26.2-debian-bookworm-20250113-slim",
-        ["amd64"]
+        ["amd64", "arm64"]
       )
 
       assert [%{tag: "27.0-ubuntu-noble-20250101"}] =
                Bob.Artifacts.search_docker_tags(%{
-                 repo: "hexpm/erl",
+                 repo: "hexpm/erlang",
                  tag: "27",
                  arch: "arm",
                  erlang_version: "27",
@@ -819,15 +1012,18 @@ defmodule Bob.ArtifactsTest do
 
       assert [%{tag: "27.0-ubuntu-noble-20250101"}] =
                Bob.Artifacts.search_docker_tags(%{
-                 repo: "hexpm/erl",
+                 repo: "hexpm/erlang",
                  tag: "27",
                  arch: "arm",
                  os: "ub",
                  os_version: "noble"
                })
 
+      assert [] = Bob.Artifacts.search_docker_tags(%{repo: "hexpm/erl"})
+
       assert [
                "1.17.3-erlang-26.2-debian-bookworm-20250113-slim",
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101",
                "1.18.0-erlang-27.0-ubuntu-noble-20250101"
              ] =
                Bob.Artifacts.search_docker_tags(%{elixir_version: "1"})
@@ -836,6 +1032,7 @@ defmodule Bob.ArtifactsTest do
 
       assert [
                "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101",
                "27.0-ubuntu-noble-20250101",
                "27.1-ubuntu-noble-20250101"
              ] =
@@ -843,11 +1040,16 @@ defmodule Bob.ArtifactsTest do
                |> Enum.map(& &1.tag)
                |> Enum.sort()
 
-      assert [%{tag: "1.18.0-erlang-27.0-ubuntu-noble-20250101"}] =
+      assert [
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+               "1.18.0-erlang-27.0-ubuntu-noble-20250101"
+             ] =
                Bob.Artifacts.search_docker_tags(%{
                  elixir_version: "1",
                  os: "ub"
                })
+               |> Enum.map(& &1.tag)
+               |> Enum.sort()
 
       assert [%{tag: "1.18.0-erlang-27.0-ubuntu-noble-20250101"}] =
                Bob.Artifacts.search_docker_tags(%{
@@ -864,19 +1066,31 @@ defmodule Bob.ArtifactsTest do
                  os: "deb",
                  os_version: "bookworm"
                })
+
+      elixir_results = Bob.Artifacts.search_docker_tags(%{repo: "hexpm/elixir"})
+      assert length(elixir_results) == 2
+      assert Enum.all?(elixir_results, &(&1.repo == "hexpm/elixir"))
+      refute Enum.any?(elixir_results, &(&1.repo == "hexpm/elixir-amd64"))
     end
 
     test "count_docker_tags/1 counts exact matching tags" do
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", [
-        "amd64",
-        "arm64"
-      ])
+      # 27.0 is a complete dual-arch manifest, while 27.1 is intentionally
+      # single-arch to test arch count filtering with partial manifests.
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"]
+      )
 
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.1-ubuntu-noble-20250101", ["arm64"])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.1-ubuntu-noble-20250101",
+        ["arm64"]
+      )
 
       count =
         Bob.Artifacts.count_docker_tags(%{
-          repo: "hexpm/erl",
+          repo: "hexpm/erlang",
           tag: "27",
           arch: "arm",
           erlang_version: "27",
@@ -885,6 +1099,7 @@ defmodule Bob.ArtifactsTest do
         })
 
       assert count == 2
+      assert Bob.Artifacts.count_docker_tags(%{repo: "hexpm/erl"}) == 0
       assert Bob.Artifacts.count_docker_tags(%{arch: "amd64"}) == 1
       assert Bob.Artifacts.count_docker_tags(%{arch: "arm64"}) == 2
       assert Bob.Artifacts.count_docker_tags(%{tag: "missing"}) == 0
@@ -895,7 +1110,11 @@ defmodule Bob.ArtifactsTest do
     end
 
     test "search_docker_tags/1 does not treat % or _ as LIKE wildcards" do
-      Bob.Artifacts.add_docker_tag("hexpm/erlang", "27.0-ubuntu-noble-20250101", ["amd64"])
+      Bob.Artifacts.add_docker_tag(
+        "hexpm/erlang",
+        "27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"]
+      )
 
       assert Bob.Artifacts.search_docker_tags(%{tag: "%"}) == []
       assert Bob.Artifacts.search_docker_tags(%{repo: "hexpm/_"}) == []
@@ -909,6 +1128,243 @@ defmodule Bob.ArtifactsTest do
       assert [%{name: "OTP-27.0"}] = Bob.Artifacts.search_artifacts(%{}, 1, 1)
     end
   end
+
+  describe "docker cleanup candidates" do
+    test "per-arch candidates are tags built before the cutoff, excluding manifest repos" do
+      old = days_ago(40)
+      recent = days_ago(10)
+      cutoff = days_ago(30)
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.1-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        recent
+      )
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.17.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64", "arm64"],
+        old
+      )
+
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+
+      current = ["jammy-20250101"]
+
+      assert Artifacts.count_stale_per_arch_tags(cutoff, current) ==
+               %{"hexpm/elixir-amd64" => 1, "hexpm/erlang-amd64" => 1}
+
+      assert Artifacts.stale_per_arch_tags(cutoff, 100, current) |> Enum.sort() ==
+               [
+                 {"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"},
+                 {"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"}
+               ]
+    end
+
+    test "an erlang tag on an os_version the build matrix targets is never a candidate" do
+      old = days_ago(40)
+      cutoff = days_ago(30)
+
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101", ["amd64"], old)
+
+      # expected_elixir_tags/0 ranks these by version, not date, so the newest
+      # tag of an old OTP line stays in use however old it gets.
+      assert Artifacts.count_stale_per_arch_tags(cutoff, ["noble-20250101"]) ==
+               %{"hexpm/erlang-amd64" => 1}
+
+      assert Artifacts.stale_per_arch_tags(cutoff, 100, ["noble-20250101"]) ==
+               [{"hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101"}]
+
+      # And the per-chunk re-check applies the same rule.
+      chunk = [
+        {"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"},
+        {"hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101"}
+      ]
+
+      assert Artifacts.deletable_docker_tags(chunk, cutoff, ["noble-20250101"]) ==
+               [{"hexpm/erlang-amd64", "27.0-ubuntu-jammy-20240101"}]
+    end
+
+    test "no readable build matrix protects every erlang tag" do
+      old = days_ago(40)
+
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      # An empty list means the matrix could not be read, not that nothing is
+      # current, so the erlang tags are held back and only elixir is a candidate.
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), []) ==
+               %{"hexpm/elixir-amd64" => 1}
+
+      chunk = [
+        {"hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101"},
+        {"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"}
+      ]
+
+      assert Artifacts.deletable_docker_tags(chunk, days_ago(30), []) ==
+               [{"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"}]
+    end
+
+    test "an elixir build request reserves the erlang image it builds FROM" do
+      old = days_ago(40)
+
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"], old)
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      BuildRequests.create(%{
+        username: "eric",
+        kind: "elixir",
+        elixir: "1.18.0",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 0
+      })
+
+      # jammy is current, so the noble base is not held by the os_version rule.
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), ["jammy-20250101"]) == %{}
+    end
+
+    test "a current os_version does not protect an elixir tag" do
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        days_ago(40)
+      )
+
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), ["noble-20250101"]) ==
+               %{"hexpm/elixir-amd64" => 1}
+    end
+
+    test "a non-expired build request reserves its per-arch tags" do
+      old = days_ago(250)
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      Artifacts.add_docker_tag(
+        "hexpm/elixir",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        old
+      )
+
+      BuildRequests.create(%{
+        username: "eric",
+        kind: "elixir",
+        elixir: "1.18.0",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 0
+      })
+
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), []) == %{}
+    end
+
+    test "an expired build request does not reserve its tags" do
+      Artifacts.add_docker_tag(
+        "hexpm/elixir-amd64",
+        "1.18.0-erlang-27.0-ubuntu-noble-20250101",
+        ["amd64"],
+        days_ago(40)
+      )
+
+      {:ok, request} =
+        BuildRequests.create(%{
+          username: "eric",
+          kind: "erlang",
+          erlang: "27.0",
+          os: "ubuntu",
+          os_version: "noble-20250101",
+          builds_count: 0
+        })
+
+      BuildRequests.expire(request)
+
+      assert Artifacts.count_stale_per_arch_tags(days_ago(30), []) ==
+               %{"hexpm/elixir-amd64" => 1}
+    end
+
+    test "delete_docker_tags removes the given rows" do
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "a", ["amd64"])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "b", ["amd64"])
+
+      assert Artifacts.delete_docker_tags([{"hexpm/erlang-amd64", "a"}]) == :ok
+      assert Artifacts.docker_tags("hexpm/erlang-amd64") == [{"b", ["amd64"]}]
+    end
+
+    test "reserved_docker_tag_ids returns the ids matched by a build request, across repos" do
+      Artifacts.add_docker_tag("hexpm/elixir", "1.18.0-erlang-27.0-ubuntu-noble-20250101", [
+        "amd64",
+        "arm64"
+      ])
+
+      Artifacts.add_docker_tag("hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101", [
+        "amd64"
+      ])
+
+      Artifacts.add_docker_tag("hexpm/elixir", "1.17.0-erlang-27.0-ubuntu-noble-20250101", [
+        "amd64",
+        "arm64"
+      ])
+
+      BuildRequests.create(%{
+        username: "eric",
+        kind: "elixir",
+        elixir: "1.18.0",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 0
+      })
+
+      tags = Repo.all(DockerTag)
+      reserved = Artifacts.reserved_docker_tag_ids(tags)
+
+      reserved_tags =
+        tags
+        |> Enum.filter(&MapSet.member?(reserved, &1.id))
+        |> Enum.map(&{&1.repo, &1.tag})
+        |> Enum.sort()
+
+      assert reserved_tags == [
+               {"hexpm/elixir", "1.18.0-erlang-27.0-ubuntu-noble-20250101"},
+               {"hexpm/elixir-amd64", "1.18.0-erlang-27.0-ubuntu-noble-20250101"}
+             ]
+
+      assert Artifacts.reserved_docker_tag_ids([]) == MapSet.new()
+    end
+  end
+
+  defp days_ago(days), do: DateTime.add(DateTime.utc_now(), -days, :day)
 
   defp replace(repo, tag_archs) do
     token = Ecto.UUID.generate()

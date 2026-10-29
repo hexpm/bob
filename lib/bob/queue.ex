@@ -10,11 +10,16 @@ defmodule Bob.Queue do
 
   # Periodic scheduler jobs re-run every interval and must not be suppressed by
   # backoff after a transient failure; only the build jobs they enqueue back off.
+  # A builds purge is queued once per uploaded artifact and nothing re-queues it,
+  # so backing off after a failed purge would skip the next build's purge of the
+  # same keys.
   @no_backoff [
     Bob.Job.OTPChecker,
     Bob.Job.DockerChecker,
     Bob.Job.Reconcile,
-    Bob.Job.ReconcileBaseImages
+    Bob.Job.ReconcileBaseImages,
+    Bob.Job.DockerCleanup,
+    Bob.Job.PurgeBuilds
   ]
 
   @dedup_conflict_target {:unsafe_fragment,
@@ -38,7 +43,12 @@ defmodule Bob.Queue do
       end)
       |> reject_backed_off(now)
       |> Enum.map(fn candidate ->
-        Logger.info("QUEUED #{inspect(candidate.module_key)} #{inspect(candidate.args)}")
+        Logger.info(%{
+          message: "Job queued",
+          event: "job.queued",
+          job: inspect(candidate.module_key),
+          job_args: inspect(candidate.args)
+        })
 
         %{
           module_key: candidate.module_key,
@@ -87,7 +97,14 @@ defmodule Bob.Queue do
     case rows do
       [[id, args_binary]] ->
         args = Term.decode(args_binary)
-        Logger.info("STARTING #{inspect(key)} #{inspect(args)}")
+
+        Logger.info(%{
+          message: "Job claimed",
+          event: "job.claimed",
+          job: inspect(key),
+          job_args: inspect(args)
+        })
+
         broadcast()
         {:ok, {id, args}}
 
@@ -100,7 +117,12 @@ defmodule Bob.Queue do
     Repo.transaction(fn ->
       case finish(id, "done") do
         {:ok, module_key, args_digest, args} ->
-          Logger.info("SUCCESS #{inspect(module_key)} #{inspect(args)}")
+          Logger.info(%{
+            message: "Job succeeded",
+            event: "job.succeeded",
+            job: inspect(module_key),
+            job_args: inspect(args)
+          })
 
           Repo.delete_all(
             from(f in Failure,
@@ -121,7 +143,13 @@ defmodule Bob.Queue do
     Repo.transaction(fn ->
       case finish(id, "failed") do
         {:ok, module_key, args_digest, args} ->
-          Logger.info("FAILURE #{inspect(module_key)} #{inspect(args)}")
+          Logger.info(%{
+            message: "Job failed",
+            event: "job.failed",
+            job: inspect(module_key),
+            job_args: inspect(args)
+          })
+
           if backoff?(module_key), do: record_failure(module_key, args_digest)
 
         :error ->
@@ -154,7 +182,13 @@ defmodule Bob.Queue do
 
     case rows do
       [{module_key, args}] ->
-        Logger.info("REQUEUED #{inspect(module_key)} #{inspect(args)}")
+        Logger.info(%{
+          message: "Job requeued",
+          event: "job.requeued",
+          job: inspect(module_key),
+          job_args: inspect(args)
+        })
+
         broadcast()
 
       [] ->
@@ -232,7 +266,18 @@ defmodule Bob.Queue do
   end
 
   defp filter_modules(query, []), do: query
-  defp filter_modules(query, modules), do: where(query, [j], j.module_key in ^modules)
+
+  defp filter_modules(query, modules) do
+    # A module key can be a `{module, key}` tuple, and a list of those reads as a
+    # keyword list, which Ecto's `in` rejects. Match each key with `==` so the
+    # Term type dumps it as a single value instead.
+    conditions =
+      Enum.reduce(modules, dynamic(false), fn module, acc ->
+        dynamic([j], ^acc or j.module_key == ^module)
+      end)
+
+    where(query, ^conditions)
+  end
 
   defp finish(id, state) do
     now = DateTime.utc_now()
@@ -294,7 +339,12 @@ defmodule Bob.Queue do
           backed_off? = DateTime.diff(now, last_failed_at) < backoff_seconds(count)
 
           if backed_off? do
-            Logger.info("BACKOFF #{inspect(candidate.module_key)} #{inspect(candidate.args)}")
+            Logger.info(%{
+              message: "Job backed off",
+              event: "job.backoff",
+              job: inspect(candidate.module_key),
+              job_args: inspect(candidate.args)
+            })
           end
 
           backed_off?

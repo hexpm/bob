@@ -1,6 +1,6 @@
-ARG ELIXIR_VERSION=1.18.1
-ARG ERLANG_VERSION=27.3.4.12
-ARG DEBIAN_VERSION=bookworm-20260518-slim
+ARG ELIXIR_VERSION=1.20.4
+ARG ERLANG_VERSION=29.1.1
+ARG DEBIAN_VERSION=trixie-20261005-slim
 
 FROM hexpm/elixir:${ELIXIR_VERSION}-erlang-${ERLANG_VERSION}-debian-${DEBIAN_VERSION} AS build
 
@@ -9,7 +9,7 @@ ENV LANG=C.UTF-8
 # install build dependencies
 RUN apt update -y && \
     apt upgrade -y && \
-    apt install -y --no-install-recommends git build-essential ca-certificates && \
+    apt install -y --no-install-recommends ca-certificates && \
     apt clean -y && rm -rf /var/lib/apt/lists/*
 
 # prepare build dir
@@ -25,9 +25,24 @@ ENV MIX_ENV=prod
 
 # install mix dependencies
 COPY mix.exs mix.lock ./
-COPY config config
 RUN mix deps.get
-RUN mix deps.compile
+# The config the dependencies compile with. runtime.exs is only read by the
+# release, so it's copied in right before it, and a change to it doesn't
+# recompile the dependencies.
+COPY config/config.exs config/prod.exs config/
+# Compiling dependencies across multiple OS processes
+# https://mix.hexdocs.pm/Mix.Tasks.Deps.Compile.html#module-compiling-dependencies-across-multiple-os-processes
+RUN <<EOF
+  CORES=$(nproc 2>/dev/null || echo 2)
+  PARTITIONS=$(( CORES / 2 ))
+  [ "$PARTITIONS" -lt 1 ] && PARTITIONS=1
+  [ "$PARTITIONS" -gt 4 ] && PARTITIONS=4
+  MIX_OS_DEPS_COMPILE_PARTITION_COUNT=$PARTITIONS mix deps.compile
+EOF
+# The esbuild and tailwind binaries go in _build at the versions config.exs
+# sets, so this layer is cached until one of them changes, and assets.deploy
+# doesn't download them on every build.
+RUN mix assets.setup
 
 # build project
 COPY priv priv
@@ -37,14 +52,17 @@ RUN mix assets.deploy
 RUN mix compile
 
 # build release
+COPY config/runtime.exs config/
 COPY rel rel
 RUN mix do sentry.package_source_code, release
 
 # prepare release image
 FROM debian:${DEBIAN_VERSION} AS app
 
+# Erlang/OTP loads libsctp.so.1 when it starts and prints a warning without it
 RUN apt update -y && \
-    apt install --no-install-recommends -y apt-transport-https awscli bash build-essential ca-certificates coreutils curl docker.io gnupg gzip libffi-dev libssl-dev openssl python3-dev tar zip
+    apt install --no-install-recommends -y awscli bash ca-certificates coreutils curl docker-cli libsctp1 openssl && \
+    apt clean -y && rm -rf /var/lib/apt/lists/*
 
 ARG BUILDX_VERSION=0.17.1
 RUN mkdir -p /usr/libexec/docker/cli-plugins && \
@@ -52,18 +70,31 @@ RUN mkdir -p /usr/libexec/docker/cli-plugins && \
       -o /usr/libexec/docker/cli-plugins/docker-buildx && \
     chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
 
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
-    apt update -y && apt install --no-install-recommends -y google-cloud-cli
+COPY --from=ghcr.io/sigstore/cosign/cosign:v3.1.3@sha256:9e5c2f2edc34351160407ca3416c61855bdf9403c3c5936e0f0be7fc261611b8 /ko-app/cosign /usr/local/bin/cosign
 
-COPY etc/boto /app/.boto
+# The release creates /app/tmp when it starts and writes its runtime config
+# there, so /app is nobody's.
+RUN mkdir /app /gcp /persist && chown nobody:nogroup /app /gcp /persist
 
 WORKDIR /app
 
-COPY --from=build /app/_build/prod/rel/bob ./
-RUN mkdir /boto /persist
-RUN chown -R nobody: /app /boto /persist
+# A --link copy doesn't depend on the layers before it, so a build that has
+# them in its cache doesn't have to download them. --link can't look up user
+# names, so the owner is nobody:nogroup by ID.
+COPY --link --from=build --chown=65534:65534 /app/_build/prod/rel/bob ./
 USER nobody
 
 ENV HOME=/app
 ENV LANG=C.UTF-8
+# awscli verifies servers against the CA bundle it ships with unless this
+# points it at another one
+ENV AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+# Declared here, in the last stage, so a new commit does not invalidate the
+# build cache for everything above it. PromEx reads these to report which
+# revision is running.
+# Defaulted, because PromEx treats an empty variable as present and would
+# label the metric with a blank rather than saying it is unknown.
+ARG GIT_SHA=unknown
+ARG GIT_AUTHOR=unknown
+ENV GIT_SHA=${GIT_SHA}
+ENV GIT_AUTHOR=${GIT_AUTHOR}

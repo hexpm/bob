@@ -6,6 +6,8 @@ defmodule BobWeb.Endpoint do
     store: :cookie,
     key: "_bob_key",
     signing_salt: "9kLm2Qx7",
+    encryption_salt: "X4vR7nTq",
+    max_age: 60 * 60 * 24 * 30,
     same_site: "Lax"
   ]
 
@@ -14,11 +16,14 @@ defmodule BobWeb.Endpoint do
   plug(Bob.Plug.Forwarded)
   plug(Bob.Plug.Status)
 
+  # only_matching also serves the digested /favicon-<hash>.ico that
+  # ~p"/favicon.ico" resolves to when the static manifest is loaded.
   plug(Plug.Static,
     at: "/",
     from: :bob,
     gzip: Mix.env() != :dev,
-    only: BobWeb.static_paths()
+    only: BobWeb.static_paths(),
+    only_matching: ~w(favicon)
   )
 
   if Mix.env() == :dev do
@@ -32,12 +37,13 @@ defmodule BobWeb.Endpoint do
   end
 
   plug(Plug.RequestId)
-  plug(Logster.Plugs.Logger, excludes: [:params])
+  plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint], log: false)
+  plug(Bob.Plug.RequestLog)
   plug(BobWeb.Plugs.Secret, api_only: true)
 
   plug(Plug.Parsers,
-    parsers: [:json, Bob.Plug.Parser],
-    pass: ["application/json", "application/vnd.bob+erlang"],
+    parsers: [:urlencoded, :json, Bob.Plug.Parser],
+    pass: ["application/x-www-form-urlencoded", "application/json", "application/vnd.bob+erlang"],
     json_decoder: JSON
   )
 

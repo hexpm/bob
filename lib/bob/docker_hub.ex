@@ -1,5 +1,13 @@
 defmodule Bob.DockerHub do
+  alias Bob.DockerHub.RateLimiter
+
   @dockerhub_url "https://hub.docker.com/"
+
+  # Caps re-attempts after a 429 so a throttled account can't loop forever. Each
+  # attempt takes a slot, which the limiter holds until the budget recovers, and
+  # Bob.HTTP.retry multiplies its own attempts on top, so a small number here
+  # already covers a window's worth of waiting.
+  @max_rate_limit_retries 5
 
   def auth(username, password) do
     url = @dockerhub_url <> "v2/users/login/"
@@ -8,12 +16,15 @@ defmodule Bob.DockerHub do
     opts = [recv_timeout: 10_000]
 
     {:ok, 200, _headers, body} =
-      Bob.HTTP.retry("DockerHub #{url}", fn ->
-        Bob.HTTP.request(:post, url, headers, JSON.encode!(body), opts)
+      Bob.HTTP.track_request(:post, url, fn ->
+        Bob.HTTP.retry("DockerHub #{url}", fn ->
+          Bob.HTTP.request(:post, url, headers, JSON.encode!(body), opts)
+        end)
       end)
 
-    result = JSON.decode!(body)
-    Application.put_env(:bob, :dockerhub_token, result["token"])
+    token = JSON.decode!(body)["token"]
+    Application.put_env(:bob, :dockerhub_token, token)
+    token
   end
 
   @doc """
@@ -33,40 +44,94 @@ defmodule Bob.DockerHub do
     end
   end
 
-  def fetch_tag(repo, tag) do
+  @doc """
+  Fetches a tag as `{:ok, {name, archs, built_at}}`.
+
+  `:not_found` means Docker Hub returned 404. `:unreadable` means the request
+  failed after retries or returned no usable image data. Callers must preserve
+  existing manifests when a tag is unreadable.
+  """
+  def fetch_tag(repo, tag, opts \\ []) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
-    headers = headers()
-    opts = [recv_timeout: 20_000]
 
-    result =
-      Bob.HTTP.retry("DockerHub #{url}", fn ->
-        Bob.HTTP.request(:get, url, headers, "", opts)
-      end)
-
-    case result do
+    case paced_request(:get, url, opts) do
       {:ok, 200, _headers, body} ->
-        parse(JSON.decode!(body))
+        with {:ok, decoded} when is_map(decoded) <- JSON.decode(body),
+             parsed when not is_nil(parsed) <- parse(decoded) do
+          {:ok, parsed}
+        else
+          _ -> :unreadable
+        end
 
       {:ok, 404, _headers, _body} ->
-        nil
+        :not_found
+
+      _other ->
+        :unreadable
     end
   end
 
+  @doc """
+  Deletes a tag on Docker Hub, paced by the shared rate limiter. A missing tag
+  (404) counts as success so the cleanup is idempotent across retries. Returns
+  `{:error, _}` for any other outcome so the caller can skip the tag and retry it
+  on a later run rather than crash the batch.
+  """
   def delete_tag(repo, tag) do
     url = @dockerhub_url <> "v2/repositories/#{repo}/tags/#{tag}"
-    headers = headers()
-    opts = [recv_timeout: 20_000]
 
-    result =
-      Bob.HTTP.retry("DockerHub #{url}", fn ->
-        Bob.HTTP.request(:delete, url, headers, "", opts)
-      end)
-
-    case result do
-      {:ok, 204, _headers, _body} -> :ok
-      {:ok, 404, _headers, _body} -> :ok
+    case paced_request(:delete, url) do
+      {:ok, status, _headers, _body} when status in [204, 404] -> :ok
+      other -> {:error, other}
     end
   end
+
+  @doc """
+  Sends `method` to `url` paced by the shared rate limiter, and waits out 429s
+  up to the retry cap. Returns the final non-429 result for the caller to match
+  on.
+
+  A slot is taken per attempt rather than per call, so the retries `Bob.HTTP`
+  makes for a transport error or a 5xx are counted against the budget like any
+  other request. Every attempt reports back, so a failed one can't leave the
+  gate holding a slot that is never returned.
+  """
+  def paced_request(method, url, opts \\ []) do
+    Bob.HTTP.track_request(method, url, fn -> paced_request(method, url, 0, opts) end)
+  end
+
+  defp paced_request(method, url, attempts, opts) do
+    request = Keyword.get(opts, :request, &Bob.HTTP.request/5)
+    limiter = Keyword.get(opts, :rate_limiter, RateLimiter)
+
+    result =
+      Bob.HTTP.retry(
+        "DockerHub #{url}",
+        fn ->
+          RateLimiter.acquire(limiter)
+          result = request.(method, url, headers(), "", recv_timeout: 20_000)
+          report(result, limiter)
+          result
+        end,
+        Keyword.put(opts, :retry_rate_limit?, false)
+      )
+
+    case result do
+      {:ok, 429, _response_headers, _body} when attempts < @max_rate_limit_retries ->
+        paced_request(method, url, attempts + 1, opts)
+
+      _other ->
+        result
+    end
+  end
+
+  defp report({:ok, 429, response_headers, _body}, limiter),
+    do: RateLimiter.throttle(response_headers, limiter)
+
+  defp report({:ok, _status, response_headers, _body}, limiter),
+    do: RateLimiter.observe(response_headers, limiter)
+
+  defp report({:error, _reason}, limiter), do: RateLimiter.observe([], limiter)
 
   def headers() do
     if token = Application.get_env(:bob, :dockerhub_token) do
@@ -77,10 +142,11 @@ defmodule Bob.DockerHub do
   end
 
   def parse(result) do
-    # Reject corrupt images
+    # Reject corrupt images, and the attestation manifest BuildKit pushes next
+    # to each image, which Docker Hub lists with an "unknown" architecture
     images =
       Enum.reject(result["images"] || [], fn image ->
-        image["digest"] in [nil, ""] or image["architecture"] in [nil, ""]
+        image["digest"] in [nil, ""] or image["architecture"] in [nil, "", "unknown"]
       end)
 
     built_at = docker_hub_timestamp(result, images)

@@ -2,6 +2,8 @@ defmodule Bob.Queue.MaintenanceTest do
   use Bob.DataCase
 
   alias Bob.Queue.{Maintenance, Job, Failure, Term}
+  alias Bob.BuildRequests
+  alias Bob.BuildRequests.BuildRequest
 
   @hour 60 * 60
   @day 24 * @hour
@@ -72,6 +74,37 @@ defmodule Bob.Queue.MaintenanceTest do
     assert [%Job{state: "running"}] = Repo.all(Job)
   end
 
+  test "leaves a job running past the default timeout but inside its own" do
+    old = ago(4 * @hour)
+
+    insert_job(
+      module_key: Bob.Job.DockerCleanup,
+      state: "running",
+      inserted_at: old,
+      started_at: old
+    )
+
+    Maintenance.run()
+
+    # Requeuing a cleanup at three hours starts a second one alongside it.
+    assert [%Job{state: "running"}] = Repo.all(Job)
+  end
+
+  test "requeues a long-timeout job once past its own timeout" do
+    old = ago(24 * @hour)
+
+    insert_job(
+      module_key: Bob.Job.DockerCleanup,
+      state: "running",
+      inserted_at: old,
+      started_at: old
+    )
+
+    Maintenance.run()
+
+    assert [%Job{state: "queued", requeues: 1}] = Repo.all(Job)
+  end
+
   test "prunes failures older than the expiry window" do
     insert_failure(last_failed_at: ago(8 * @day))
 
@@ -112,5 +145,84 @@ defmodule Bob.Queue.MaintenanceTest do
     Maintenance.run()
 
     assert [%Job{state: "queued"}] = Repo.all(Job)
+  end
+
+  defp insert_build_request(state, inserted_at) do
+    {:ok, request} =
+      BuildRequests.create(%{
+        username: "eric",
+        kind: "erlang",
+        erlang: "27.0",
+        os: "ubuntu",
+        os_version: "noble-20250101",
+        builds_count: 2
+      })
+
+    request
+    |> Ecto.Changeset.change(state: state, inserted_at: inserted_at)
+    |> Repo.update!()
+  end
+
+  test "prunes expired build requests past the retention window" do
+    insert_build_request("expired", ago(91 * @day))
+
+    Maintenance.run()
+
+    assert Repo.all(BuildRequest) == []
+  end
+
+  test "keeps completed reservations and pending build requests regardless of age" do
+    insert_build_request("completed", ago(91 * @day))
+    insert_build_request("pending", ago(91 * @day))
+
+    Maintenance.run()
+
+    assert Enum.map(Repo.all(BuildRequest), & &1.state) |> Enum.sort() == ["completed", "pending"]
+  end
+
+  test "caps completed job history at the maximum, keeping the most recent" do
+    Application.put_env(:bob, :history_max_jobs, 2)
+    on_exit(fn -> Application.delete_env(:bob, :history_max_jobs) end)
+
+    now = DateTime.utc_now()
+
+    for i <- 1..4 do
+      insert_job(state: "done", inserted_at: now, finished_at: DateTime.add(now, i, :second))
+    end
+
+    Maintenance.run()
+
+    kept =
+      Repo.all(from(j in Job, order_by: [asc: j.finished_at], select: j.finished_at))
+
+    assert kept == [DateTime.add(now, 3, :second), DateTime.add(now, 4, :second)]
+  end
+
+  test "does not count queued or running jobs toward the history cap" do
+    Application.put_env(:bob, :history_max_jobs, 2)
+    on_exit(fn -> Application.delete_env(:bob, :history_max_jobs) end)
+
+    now = DateTime.utc_now()
+    insert_job(state: "queued", args: [:q], args_digest: Term.digest([:q]), inserted_at: now)
+
+    insert_job(
+      state: "running",
+      args: [:r],
+      args_digest: Term.digest([:r]),
+      inserted_at: now,
+      started_at: now
+    )
+
+    for i <- 1..3 do
+      insert_job(state: "done", inserted_at: now, finished_at: DateTime.add(now, i, :second))
+    end
+
+    Maintenance.run()
+
+    assert Repo.all(Job) |> Enum.frequencies_by(& &1.state) == %{
+             "queued" => 1,
+             "running" => 1,
+             "done" => 2
+           }
   end
 end

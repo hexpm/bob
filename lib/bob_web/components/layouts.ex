@@ -18,6 +18,7 @@ defmodule BobWeb.Layouts do
   defp nav_active?("/", "/"), do: true
   defp nav_active?("/artifacts", "/artifacts"), do: true
   defp nav_active?("/docker", "/docker"), do: true
+  defp nav_active?("/request", "/request"), do: true
   defp nav_active?(_current_path, _target_path), do: false
 
   embed_templates("layouts/*")

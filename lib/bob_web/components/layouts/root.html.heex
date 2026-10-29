@@ -19,7 +19,6 @@
           <.link href={~p"/"} class="bob-brand">
             <img src={~p"/favicon.ico"} width="28" height="28" alt="" />
             <span class="bob-brand__name">Bob</span>
-            <span class="bob-brand__tag">Hex build server</span>
           </.link>
 
           <nav class="bob-nav__tabs" aria-label="Primary">
@@ -32,6 +31,9 @@
             <.link href={~p"/docker"} class={nav_class(@conn.request_path, "/docker")}>
               <.icon name="docker" /> Docker Tags
             </.link>
+            <.link href={~p"/request"} class={nav_class(@conn.request_path, "/request")}>
+              <.icon name="box" /> Request Build
+            </.link>
           </nav>
 
           <div class="bob-nav__right">
@@ -43,6 +45,12 @@
             >
               <.icon name="external" /> hexpm/bob
             </a>
+            <%= if assigns[:current_user] do %>
+              <span class="nav-user">{@current_user["username"]}</span>
+              <.link class="nav-ext" href={~p"/oauth/logout"} method="post">Log out</.link>
+            <% else %>
+              <.link class="nav-ext" href={~p"/oauth/login"}>Log in</.link>
+            <% end %>
           </div>
 
           <details class="bob-menu">
@@ -60,6 +68,9 @@
               <.link href={~p"/docker"} class={menu_class(@conn.request_path, "/docker")}>
                 <.icon name="docker" /> Docker Tags
               </.link>
+              <.link href={~p"/request"} class={menu_class(@conn.request_path, "/request")}>
+                <.icon name="box" /> Request Build
+              </.link>
               <a
                 class="bob-menu__item bob-menu__item--external"
                 href="https://github.com/hexpm/bob"
@@ -68,6 +79,15 @@
               >
                 <.icon name="external" /> hexpm/bob
               </a>
+              <%= if assigns[:current_user] do %>
+                <.link class="bob-menu__item" href={~p"/oauth/logout"} method="post">
+                  Log out ({@current_user["username"]})
+                </.link>
+              <% else %>
+                <.link class="bob-menu__item" href={~p"/oauth/login"}>
+                  Log in
+                </.link>
+              <% end %>
             </nav>
           </details>
         </div>

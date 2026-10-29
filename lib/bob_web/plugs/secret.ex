@@ -1,10 +1,19 @@
 defmodule BobWeb.Plugs.Secret do
   import Plug.Conn
 
+  # The public, read-only search API needs no secret; every other /api route
+  # is agent-only. The check stays in the endpoint, ahead of Plug.Parsers, so
+  # unauthorized requests are rejected before their body is parsed.
+  @public_api [{"GET", ["api", "artifacts"]}, {"GET", ["api", "docker"]}]
+
   def init(opts), do: opts
 
-  def call(%{path_info: ["api" | _]} = conn, _opts) do
-    authenticate(conn)
+  def call(%{path_info: ["api" | _] = path_info} = conn, _opts) do
+    if {conn.method, path_info} in @public_api do
+      conn
+    else
+      authenticate(conn)
+    end
   end
 
   def call(conn, opts) when is_list(opts) do
