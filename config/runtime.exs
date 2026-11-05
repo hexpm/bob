@@ -32,6 +32,7 @@ if config_env() == :prod do
   # variables. The checkers, the S3 store and the web login run on the master.
   if master? do
     config :bob,
+      builds_sign_key: System.get_env("BOB_BUILDS_SIGN_KEY"),
       github_user: System.fetch_env!("BOB_GITHUB_USER"),
       github_token: System.fetch_env!("BOB_GITHUB_TOKEN"),
       oauth_client_id: System.fetch_env!("BOB_OAUTH_CLIENT_ID"),
