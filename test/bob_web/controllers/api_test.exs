@@ -84,6 +84,18 @@ defmodule BobWeb.ApiTest do
              [{"27.0-ubuntu-noble-20250101", ["amd64"]}]
   end
 
+  test "refuses Erlang term bodies on routes that don't authenticate an agent", %{conn: conn} do
+    body = Bob.Plug.ErlangFormat.encode_to_iodata!(%{"key" => "value"})
+
+    for {method, path} <- [{"POST", "/"}, {"PUT", "/builds"}] do
+      assert_raise Plug.Parsers.UnsupportedMediaTypeError, fn ->
+        conn
+        |> put_req_header("content-type", "application/vnd.bob+erlang")
+        |> dispatch(@endpoint, method, path, body)
+      end
+    end
+  end
+
   test "POST /api/docker/add rejects a missing secret with 401", %{conn: conn} do
     body =
       Bob.Plug.ErlangFormat.encode_to_iodata!(%{

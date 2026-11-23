@@ -28,7 +28,7 @@ defmodule BobWeb.Plugs.Secret do
     secret = Application.get_env(:bob, :agent_secret)
 
     if authorized?(get_req_header(conn, "authorization"), secret) do
-      conn
+      put_private(conn, :bob_agent, true)
     else
       conn
       |> send_resp(401, "")

@@ -5,10 +5,23 @@ defmodule Bob.Plug.Parser do
     opts
   end
 
-  def parse(%Conn{} = conn, "application", "vnd.bob+erlang", _headers, opts) do
+  # Erlang terms are decoded only for requests BobWeb.Plugs.Secret
+  # authenticated as an agent. A decoded map can carry a __struct__ key, which
+  # protocol dispatch then trusts.
+  def parse(
+        %Conn{private: %{bob_agent: true}} = conn,
+        "application",
+        "vnd.bob+erlang",
+        _headers,
+        opts
+      ) do
     conn
     |> Conn.read_body(opts)
     |> decode()
+  end
+
+  def parse(%Conn{}, "application", "vnd.bob+erlang", _headers, _opts) do
+    raise Plug.Parsers.UnsupportedMediaTypeError, media_type: "application/vnd.bob+erlang"
   end
 
   def parse(conn, _type, _subtype, _headers, _opts) do
