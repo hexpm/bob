@@ -11,7 +11,7 @@ defmodule Bob.Repo.Migrations.IndexJobsByClaimOrder do
 
     execute("""
     CREATE INDEX CONCURRENTLY IF NOT EXISTS jobs_claim_order_index
-    ON jobs (module_key, state, priority DESC, released_at DESC NULLS LAST, inserted_at, id)
+    ON jobs (module_key, state, priority DESC, release_order DESC, inserted_at, id)
     """)
 
     execute("DROP INDEX CONCURRENTLY IF EXISTS jobs_module_key_state_inserted_at_index")

@@ -699,6 +699,16 @@ defmodule Bob.Artifacts do
     :ok
   end
 
+  @doc "Maps each `{os, os_version}` base image to when Bob first saw it."
+  def base_image_first_seen() do
+    Repo.all(from(b in BaseImageTag, select: {b.repo, b.tag, b.inserted_at}))
+    |> Enum.flat_map(fn
+      {"library/" <> os, tag, inserted_at} -> [{{os, tag}, inserted_at}]
+      _other -> []
+    end)
+    |> Map.new()
+  end
+
   @doc """
   `{os, tag}` for every base image first seen on or after `cutoff`. A recent
   base image is one of the components that makes a build worth triggering.

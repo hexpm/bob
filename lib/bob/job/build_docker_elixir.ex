@@ -20,15 +20,17 @@ defmodule Bob.Job.BuildDockerElixir do
     "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
   end
 
-  # The image can only be built once both releases are out, so it is as new as
-  # the newer of the two.
-  def released_at([_arch, elixir, erlang, _os, _os_version]) do
-    [
-      Bob.Job.DockerChecker.elixir_released_at(elixir),
-      Bob.Job.DockerChecker.erlang_released_at(erlang)
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.max(DateTime, fn -> nil end)
+  # The newer of the Elixir and OTP releases is when the image first became
+  # possible, so it ranks first; the base image only breaks ties.
+  def release_dates([_arch, elixir, erlang, os, os_version]) do
+    [newer, older] =
+      [
+        Bob.Job.DockerChecker.elixir_released_at(elixir),
+        Bob.Job.DockerChecker.erlang_released_at(erlang)
+      ]
+      |> Enum.sort_by(&if(&1, do: DateTime.to_unix(&1), else: 0), :desc)
+
+    [newer, older, Bob.Job.DockerChecker.base_image_released_at(os, os_version)]
   end
 
   def priority(), do: 4

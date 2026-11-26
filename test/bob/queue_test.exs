@@ -9,10 +9,15 @@ defmodule Bob.QueueTest do
     def concurrency(), do: :shared
   end
 
-  # The argument is the release date in days since the epoch, or nil.
+  # Each argument is a release date in days since the epoch, or nil.
   defmodule DatedJob do
-    def released_at([nil]), do: nil
-    def released_at([day]), do: DateTime.from_unix!(day * 86_400)
+    def release_dates(days) do
+      Enum.map(days, fn
+        nil -> nil
+        day -> DateTime.from_unix!(day * 86_400)
+      end)
+    end
+
     def priority(), do: 1
     def weight(), do: 1
     def concurrency(), do: :shared
@@ -319,6 +324,14 @@ defmodule Bob.QueueTest do
     assert {:ok, {_id, [25]}} = Queue.start(DatedJob)
   end
 
+  test "breaks a tie on the first release date with the next one" do
+    Queue.add_many([{DatedJob, [29, 5]}, {DatedJob, [28, 9]}, {DatedJob, [29, 7]}])
+
+    assert {:ok, {_id, [29, 7]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [29, 5]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [28, 9]}} = Queue.start(DatedJob)
+  end
+
   test "claims a request job before a newer normal job" do
     Queue.add_many([{DatedJob, [29]}])
     Queue.add_many([{DatedJob, [25]}], priority: :request)
@@ -345,11 +358,10 @@ defmodule Bob.QueueTest do
     assert {:ok, {_id, [nil]}} = Queue.start(DatedJob)
   end
 
-  test "passes a tuple key's argument to released_at first" do
-    Queue.add_many([{{DatedJob, 25}, []}])
+  test "passes a tuple key's argument to release_dates first" do
+    Queue.add_many([{{DatedJob, 25}, [nil]}])
 
-    assert [%Bob.Queue.Job{released_at: released_at}] = Repo.all(Bob.Queue.Job)
-    assert released_at == DateTime.from_unix!(25 * 86_400)
+    assert [%Bob.Queue.Job{release_order: [2_160_000, 0]}] = Repo.all(Bob.Queue.Job)
   end
 
   test "queued lists jobs in claim order" do

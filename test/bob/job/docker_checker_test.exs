@@ -394,10 +394,27 @@ defmodule Bob.Job.DockerCheckerTest do
           {elixir, erlang}
         end
 
-      # Both builds on the OTP released yesterday share its date, so their
-      # relative order is the queue's insertion order.
-      assert Enum.sort(Enum.take(claimed, 2)) == [{"1.17.3", "27.0"}, {"1.18.0", "27.0"}]
-      assert Enum.drop(claimed, 2) == [{"1.18.0", "26.2"}, {"1.17.3", "26.2"}]
+      assert claimed == [
+               {"1.18.0", "27.0"},
+               {"1.17.3", "27.0"},
+               {"1.18.0", "26.2"},
+               {"1.17.3", "26.2"}
+             ]
+    end
+
+    test "erlang/0 breaks a tie on the OTP release with the newer base image" do
+      insert_base_image("library/ubuntu", "jammy-20250101", 10)
+      insert_base_image("library/ubuntu", "noble-20250601", 2)
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0.1", "sha"}])
+      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0.1", days_ago_iso(1))])
+
+      DockerChecker.erlang()
+
+      assert {:ok, {_id, ["27.0.1", "ubuntu", "noble-20250601"]}} =
+               Bob.Queue.start({Bob.Job.BuildDockerErlang, "amd64"})
+
+      assert {:ok, {_id, ["27.0.1", "ubuntu", "jammy-20250101"]}} =
+               Bob.Queue.start({Bob.Job.BuildDockerErlang, "amd64"})
     end
 
     test "dates manually queued builds like checker builds" do
@@ -410,17 +427,30 @@ defmodule Bob.Job.DockerCheckerTest do
         release("v1.18.0", ["27"], "2026-03-01T00:00:00Z")
       ])
 
+      %BaseImageTag{} =
+        Repo.insert!(%BaseImageTag{
+          repo: "library/ubuntu",
+          tag: "noble-20250601",
+          inserted_at: ~U[2026-06-02 00:00:00.000000Z],
+          updated_at: ~U[2026-06-02 00:00:00.000000Z]
+        })
+
       Bob.build_docker_erlang("25.3.2.21", "ubuntu", "noble-20250601", "amd64")
       Bob.build_docker_elixir("1.18.0", "27.0", "ubuntu", "noble-20250601", "amd64")
 
-      jobs =
-        Repo.all(Job)
-        |> Enum.map(&{&1.module_key, &1.released_at})
-        |> Enum.sort()
+      jobs = Repo.all(Job) |> Enum.map(&{&1.module_key, &1.release_order}) |> Enum.sort()
 
       assert jobs == [
-               {Bob.Job.BuildDockerElixir, ~U[2026-03-01 00:00:00Z]},
-               {Bob.Job.BuildDockerErlang, ~U[2025-06-01 00:00:00Z]}
+               {Bob.Job.BuildDockerElixir,
+                Enum.map(
+                  [~U[2026-03-01 00:00:00Z], ~U[2026-01-10 00:00:00Z], ~U[2026-06-02 00:00:00Z]],
+                  &DateTime.to_unix/1
+                )},
+               {Bob.Job.BuildDockerErlang,
+                Enum.map(
+                  [~U[2025-06-01 00:00:00Z], ~U[2026-06-02 00:00:00Z]],
+                  &DateTime.to_unix/1
+                )}
              ]
     end
 

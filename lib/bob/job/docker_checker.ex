@@ -365,6 +365,16 @@ defmodule Bob.Job.DockerChecker do
     Map.get(release_dates("elixir-lang/elixir", "v"), elixir)
   end
 
+  @doc "When Bob first saw this base image tag, or nil."
+  def base_image_released_at(os, os_version) do
+    dates =
+      Bob.Cache.fetch({__MODULE__, :base_image_dates}, @github_cache_ttl, fn ->
+        Bob.Artifacts.base_image_first_seen()
+      end)
+
+    Map.get(dates, {os, os_version})
+  end
+
   defp release_dates(repo, prefix) do
     cached_github({:release_dates, repo}, fn ->
       {:repo_releases, repo}

@@ -39,9 +39,10 @@ defmodule Bob.Queue do
   Queues `{key, args}` entries, skipping any that are already queued or running.
 
   The `:priority` option is `:normal` (the default) or `:request`. Jobs of a key
-  are claimed `:request` jobs first, then by the job module's `released_at/1`,
-  newest first and jobs without one last, then oldest queued first. Adding a
-  job that is already queued at a lower priority raises its priority.
+  are claimed `:request` jobs first, then by the release dates the job module's
+  `release_dates/1` returns, compared in order and newest first with a missing
+  date as the oldest, then oldest queued first. Adding a job that is already
+  queued at a lower priority raises its priority.
   """
   def add_many(entries, opts \\ []) do
     priority = Map.fetch!(@priorities, Keyword.get(opts, :priority, :normal))
@@ -67,7 +68,7 @@ defmodule Bob.Queue do
           args_digest: candidate.args_digest,
           state: "queued",
           priority: priority,
-          released_at: released_at(candidate.module_key, candidate.args),
+          release_order: release_order(candidate.module_key, candidate.args),
           inserted_at: now,
           updated_at: now
         }
@@ -86,17 +87,23 @@ defmodule Bob.Queue do
     :ok
   end
 
-  # released_at/1 gets the same arguments as the job's run, which takes the
-  # key's argument first.
-  defp released_at(key, args) do
+  # release_dates/1 gets the same arguments as the job's run, which takes the
+  # key's argument first. The dates are stored as Unix seconds, with 0 for a
+  # missing date, so Postgres compares them element by element.
+  defp release_order(key, args) do
     {module, run_args} =
       case key do
         {module, arg} -> {module, [arg | args]}
         module -> {module, args}
       end
 
-    if Code.ensure_loaded?(module) and function_exported?(module, :released_at, 1) do
-      module.released_at(run_args)
+    if Code.ensure_loaded?(module) and function_exported?(module, :release_dates, 1) do
+      Enum.map(module.release_dates(run_args), fn
+        nil -> 0
+        datetime -> DateTime.to_unix(datetime)
+      end)
+    else
+      []
     end
   end
 
@@ -118,7 +125,7 @@ defmodule Bob.Queue do
         WITH candidate AS (
           SELECT id FROM jobs
           WHERE state = 'queued' AND module_key = $1
-          ORDER BY priority DESC, released_at DESC NULLS LAST, inserted_at, id
+          ORDER BY priority DESC, release_order DESC, inserted_at, id
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
@@ -200,7 +207,7 @@ defmodule Bob.Queue do
   Puts a running job back in the queue, e.g. when its node shuts down mid-run.
 
   Unlike `failure/1` this records no backoff — the job was interrupted, not
-  broken. The row keeps its `inserted_at`, `priority` and `released_at`, so
+  broken. The row keeps its `inserted_at`, `priority` and `release_order`, so
   it returns to its place in the queue and is picked up as soon as a runner
   polls.
   """
@@ -249,12 +256,7 @@ defmodule Bob.Queue do
     Repo.all(
       from(j in Job,
         where: j.state == "queued",
-        order_by: [
-          desc: j.priority,
-          desc_nulls_last: j.released_at,
-          asc: j.inserted_at,
-          asc: j.id
-        ],
+        order_by: [desc: j.priority, desc: j.release_order, asc: j.inserted_at, asc: j.id],
         select: {j.module_key, j.args}
       )
     )
@@ -274,12 +276,7 @@ defmodule Bob.Queue do
     Repo.all(
       from(j in Job,
         where: j.state == "queued",
-        order_by: [
-          desc: j.priority,
-          desc_nulls_last: j.released_at,
-          asc: j.inserted_at,
-          asc: j.id
-        ],
+        order_by: [desc: j.priority, desc: j.release_order, asc: j.inserted_at, asc: j.id],
         limit: ^limit,
         offset: ^offset
       )
