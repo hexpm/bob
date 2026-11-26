@@ -9,8 +9,10 @@ defmodule Bob.QueueTest do
     def concurrency(), do: :shared
   end
 
-  defmodule VersionedJob do
-    def queue_order([version]), do: version
+  # The argument is the release date in days since the epoch, or nil.
+  defmodule DatedJob do
+    def released_at([nil]), do: nil
+    def released_at([day]), do: DateTime.from_unix!(day * 86_400)
     def priority(), do: 1
     def weight(), do: 1
     def concurrency(), do: :shared
@@ -308,54 +310,59 @@ defmodule Bob.QueueTest do
     assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
   end
 
-  test "claims jobs highest queue_order first" do
-    Queue.add_many([{VersionedJob, [[25, 3]]}, {VersionedJob, [[29, 1]]}])
-    Queue.add_many([{VersionedJob, [[28]]}])
+  test "claims the newest release first" do
+    Queue.add_many([{DatedJob, [25]}, {DatedJob, [29]}])
+    Queue.add_many([{DatedJob, [28]}])
 
-    assert {:ok, {_id, [[29, 1]]}} = Queue.start(VersionedJob)
-    assert {:ok, {_id, [[28]]}} = Queue.start(VersionedJob)
-    assert {:ok, {_id, [[25, 3]]}} = Queue.start(VersionedJob)
+    assert {:ok, {_id, [29]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [28]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [25]}} = Queue.start(DatedJob)
   end
 
-  test "claims a request job before a higher queue_order normal job" do
-    Queue.add_many([{VersionedJob, [[29]]}])
-    Queue.add_many([{VersionedJob, [[25]]}], priority: :request)
+  test "claims a request job before a newer normal job" do
+    Queue.add_many([{DatedJob, [29]}])
+    Queue.add_many([{DatedJob, [25]}], priority: :request)
 
-    assert {:ok, {_id, [[25]]}} = Queue.start(VersionedJob)
-    assert {:ok, {_id, [[29]]}} = Queue.start(VersionedJob)
+    assert {:ok, {_id, [25]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [29]}} = Queue.start(DatedJob)
   end
 
   test "requeue keeps the job's place in the queue" do
-    Queue.add_many([{VersionedJob, [[25]]}])
-    Queue.add_many([{VersionedJob, [[29]]}], priority: :request)
-    {:ok, {id, [[29]]}} = Queue.start(VersionedJob)
+    Queue.add_many([{DatedJob, [25]}])
+    Queue.add_many([{DatedJob, [29]}], priority: :request)
+    {:ok, {id, [29]}} = Queue.start(DatedJob)
 
     Queue.requeue(id)
 
-    assert {:ok, {^id, [[29]]}} = Queue.start(VersionedJob)
+    assert {:ok, {^id, [29]}} = Queue.start(DatedJob)
   end
 
-  test "passes a tuple key's argument to queue_order first" do
-    Queue.add_many([{{VersionedJob, [25]}, []}, {{VersionedJob, [29]}, []}])
+  test "claims jobs without a release date after dated jobs" do
+    Queue.add_many([{DatedJob, [nil]}])
+    Queue.add_many([{DatedJob, [25]}])
 
-    assert {:ok, {_id, []}} = Queue.start({VersionedJob, [29]})
-    assert {:ok, {_id, []}} = Queue.start({VersionedJob, [25]})
+    assert {:ok, {_id, [25]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [nil]}} = Queue.start(DatedJob)
+  end
 
-    jobs = Repo.all(Bob.Queue.Job) |> Enum.map(&{&1.module_key, &1.version_order}) |> Enum.sort()
-    assert jobs == [{{VersionedJob, [25]}, [25]}, {{VersionedJob, [29]}, [29]}]
+  test "passes a tuple key's argument to released_at first" do
+    Queue.add_many([{{DatedJob, 25}, []}])
+
+    assert [%Bob.Queue.Job{released_at: released_at}] = Repo.all(Bob.Queue.Job)
+    assert released_at == DateTime.from_unix!(25 * 86_400)
   end
 
   test "queued lists jobs in claim order" do
-    Queue.add_many([{VersionedJob, [[25]]}, {VersionedJob, [[29]]}])
-    Queue.add_many([{VersionedJob, [[20]]}], priority: :request)
+    Queue.add_many([{DatedJob, [25]}, {DatedJob, [29]}])
+    Queue.add_many([{DatedJob, [20]}], priority: :request)
 
     assert Queue.queued() == [
-             {VersionedJob, [[20]]},
-             {VersionedJob, [[29]]},
-             {VersionedJob, [[25]]}
+             {DatedJob, [20]},
+             {DatedJob, [29]},
+             {DatedJob, [25]}
            ]
 
-    assert [%{args: [[20]]}, %{args: [[29]]}, %{args: [[25]]}] = Queue.queued_listing()
+    assert [%{args: [20]}, %{args: [29]}, %{args: [25]}] = Queue.queued_listing()
   end
 
   test "queue_sizes counts queued jobs per key" do

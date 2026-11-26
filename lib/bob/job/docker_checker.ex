@@ -355,50 +355,32 @@ defmodule Bob.Job.DockerChecker do
     :gt
   end
 
-  @doc """
-  A list of integers that sorts like the OTP version: the release components
-  padded to a fixed width, then 1 for a stable release or 0 for a prerelease,
-  then the prerelease number. `29.1.3` sorts above `29.1`, which sorts above
-  `29.1-rc2` and `29.1-rc1`.
-  """
-  def erlang_version_order(erlang), do: version_order(erlang, 6)
-
-  @doc "Like `erlang_version_order/1`, for an Elixir version such as `1.20.0-rc.6`."
-  def elixir_version_order(elixir), do: version_order(elixir, 3)
-
-  defp version_order(version, width) do
-    {release, pre} =
-      case String.split(version, "-", parts: 2) do
-        [release, pre] -> {release, pre}
-        [release] -> {release, nil}
-      end
-
-    components =
-      release
-      |> String.split(".")
-      |> Enum.map(&leading_integer/1)
-
-    padded = Enum.take(components ++ List.duplicate(0, width), width)
-
-    case pre do
-      nil -> padded ++ [1, 0]
-      pre -> padded ++ [0, prerelease_number(pre)]
-    end
+  @doc "When the GitHub release of this OTP version was published, or nil."
+  def erlang_released_at(erlang) do
+    Map.get(release_dates("erlang/otp", "OTP-"), erlang)
   end
 
-  # The last number in a prerelease, so `rc1`, `rc.6` and `rc.10` sort numerically.
-  defp prerelease_number(pre) do
-    case Regex.scan(~r/\d+/, pre) do
-      [] -> 0
-      numbers -> numbers |> List.last() |> hd() |> String.to_integer()
-    end
+  @doc "When the GitHub release of this Elixir version was published, or nil."
+  def elixir_released_at(elixir) do
+    Map.get(release_dates("elixir-lang/elixir", "v"), elixir)
   end
 
-  defp leading_integer(string) do
-    case Integer.parse(string) do
-      {integer, _rest} -> integer
-      :error -> 0
-    end
+  defp release_dates(repo, prefix) do
+    cached_github({:release_dates, repo}, fn ->
+      {:repo_releases, repo}
+      |> cached_github(fn -> github().fetch_repo_releases(repo) end)
+      |> Enum.flat_map(fn release ->
+        with %{"tag_name" => tag_name, "published_at" => published_at} <- release,
+             true <- is_binary(tag_name) and String.starts_with?(tag_name, prefix),
+             true <- is_binary(published_at),
+             {:ok, datetime, _offset} <- DateTime.from_iso8601(published_at) do
+          [{String.replace_prefix(tag_name, prefix, ""), DateTime.truncate(datetime, :second)}]
+        else
+          _other -> []
+        end
+      end)
+      |> Map.new()
+    end)
   end
 
   defp to_matchable(string) do

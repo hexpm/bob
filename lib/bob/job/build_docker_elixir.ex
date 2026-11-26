@@ -20,9 +20,15 @@ defmodule Bob.Job.BuildDockerElixir do
     "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
   end
 
-  def queue_order([_arch, elixir, erlang, _os, _os_version]) do
-    Bob.Job.DockerChecker.elixir_version_order(elixir) ++
-      Bob.Job.DockerChecker.erlang_version_order(erlang)
+  # The image can only be built once both releases are out, so it is as new as
+  # the newer of the two.
+  def released_at([_arch, elixir, erlang, _os, _os_version]) do
+    [
+      Bob.Job.DockerChecker.elixir_released_at(elixir),
+      Bob.Job.DockerChecker.erlang_released_at(erlang)
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.max(DateTime, fn -> nil end)
   end
 
   def priority(), do: 4

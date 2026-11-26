@@ -14,8 +14,8 @@ defmodule Bob.Job.BuildDockerErlang do
     "#{erlang}-#{os}-#{os_version}"
   end
 
-  def queue_order([_arch, erlang, _os, _os_version]) do
-    Bob.Job.DockerChecker.erlang_version_order(erlang)
+  def released_at([_arch, erlang, _os, _os_version]) do
+    Bob.Job.DockerChecker.erlang_released_at(erlang)
   end
 
   def priority(), do: 5
