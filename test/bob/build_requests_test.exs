@@ -107,7 +107,7 @@ defmodule Bob.BuildRequestsTest do
 
       jobs = Repo.all(Job) |> Enum.map(&{&1.module_key, &1.args}) |> Enum.sort()
 
-      assert Enum.all?(Repo.all(Job), &(&1.priority == 2))
+      assert Enum.all?(Repo.all(Job), &(&1.priority == 1))
 
       assert jobs ==
                Enum.sort([
@@ -125,8 +125,8 @@ defmodule Bob.BuildRequestsTest do
 
       assert jobs ==
                Enum.sort([
-                 {{Bob.Job.BuildDockerErlang, "amd64"}, 2},
-                 {{Bob.Job.BuildDockerErlang, "arm64"}, 2}
+                 {{Bob.Job.BuildDockerErlang, "amd64"}, 1},
+                 {{Bob.Job.BuildDockerErlang, "arm64"}, 1}
                ])
     end
 

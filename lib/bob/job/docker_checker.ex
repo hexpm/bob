@@ -89,19 +89,10 @@ defmodule Bob.Job.DockerChecker do
 
       Enum.reject(expected, &MapSet.member?(present, erlang_tag_name(&1)))
     end)
-    |> Enum.split_with(fn {erlang, _os, _os_version, _arch} ->
-      MapSet.member?(recent_otp, erlang)
-    end)
-    |> add_split(fn {erlang, os, os_version, arch} ->
+    |> Enum.map(fn {erlang, os, os_version, arch} ->
       {{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}
     end)
-  end
-
-  # Builds for a new OTP or Elixir release (often a security fix) jump ahead of
-  # the builds a new base image triggers across every older version.
-  defp add_split({release_builds, other_builds}, to_job) do
-    Bob.Queue.add_many(Enum.map(release_builds, to_job), priority: :release)
-    Bob.Queue.add_many(Enum.map(other_builds, to_job))
+    |> Bob.Queue.add_many()
   end
 
   defp erlang_tag_name({erlang, os, os_version, _arch}), do: "#{erlang}-#{os}-#{os_version}"
@@ -364,6 +355,52 @@ defmodule Bob.Job.DockerChecker do
     :gt
   end
 
+  @doc """
+  A list of integers that sorts like the OTP version: the release components
+  padded to a fixed width, then 1 for a stable release or 0 for a prerelease,
+  then the prerelease number. `29.1.3` sorts above `29.1`, which sorts above
+  `29.1-rc2` and `29.1-rc1`.
+  """
+  def erlang_version_order(erlang), do: version_order(erlang, 6)
+
+  @doc "Like `erlang_version_order/1`, for an Elixir version such as `1.20.0-rc.6`."
+  def elixir_version_order(elixir), do: version_order(elixir, 3)
+
+  defp version_order(version, width) do
+    {release, pre} =
+      case String.split(version, "-", parts: 2) do
+        [release, pre] -> {release, pre}
+        [release] -> {release, nil}
+      end
+
+    components =
+      release
+      |> String.split(".")
+      |> Enum.map(&leading_integer/1)
+
+    padded = Enum.take(components ++ List.duplicate(0, width), width)
+
+    case pre do
+      nil -> padded ++ [1, 0]
+      pre -> padded ++ [0, prerelease_number(pre)]
+    end
+  end
+
+  # The last number in a prerelease, so `rc1`, `rc.6` and `rc.10` sort numerically.
+  defp prerelease_number(pre) do
+    case Regex.scan(~r/\d+/, pre) do
+      [] -> 0
+      numbers -> numbers |> List.last() |> hd() |> String.to_integer()
+    end
+  end
+
+  defp leading_integer(string) do
+    case Integer.parse(string) do
+      {integer, _rest} -> integer
+      :error -> 0
+    end
+  end
+
   defp to_matchable(string) do
     destructure [version, pre], String.split(string, "-", parts: 2)
 
@@ -395,12 +432,10 @@ defmodule Bob.Job.DockerChecker do
 
       Enum.reject(expected, &MapSet.member?(present, elixir_tag_name(&1)))
     end)
-    |> Enum.split_with(fn {elixir, erlang, _os, _os_version, _arch} ->
-      MapSet.member?(recent_otp, erlang) or MapSet.member?(recent_elixir, elixir)
-    end)
-    |> add_split(fn {elixir, erlang, os, os_version, arch} ->
+    |> Enum.map(fn {elixir, erlang, os, os_version, arch} ->
       {{Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version]}
     end)
+    |> Bob.Queue.add_many()
   end
 
   defp elixir_tag_name({elixir, erlang, os, os_version, _arch}) do

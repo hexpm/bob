@@ -26,22 +26,22 @@ defmodule Bob.Queue do
                           "(module_key, args_digest) WHERE state IN ('queued', 'running')"}
 
   # Postgres rejects a statement with more than 65535 bind parameters. Each row
-  # inserted below binds 7 fields, so chunk inserts to stay under that ceiling.
-  @insert_chunk_size div(65_535, 7)
+  # inserted below binds 8 fields, so chunk inserts to stay under that ceiling.
+  @insert_chunk_size div(65_535, 8)
 
   def add(key, args) do
     add_many([{key, args}])
   end
 
-  @priorities %{normal: 0, release: 1, request: 2}
+  @priorities %{normal: 0, request: 1}
 
   @doc """
   Queues `{key, args}` entries, skipping any that are already queued or running.
 
-  The `:priority` option is `:normal` (the default), `:release` or `:request`.
-  Jobs of a key are claimed highest priority first and oldest first within a
-  priority. Adding a job that is already queued at a lower priority raises its
-  priority.
+  The `:priority` option is `:normal` (the default) or `:request`. Jobs of a key
+  are claimed `:request` jobs first, then by the job module's `queue_order/1`,
+  highest first, then oldest first. Adding a job that is already queued at a
+  lower priority raises its priority.
   """
   def add_many(entries, opts \\ []) do
     priority = Map.fetch!(@priorities, Keyword.get(opts, :priority, :normal))
@@ -67,6 +67,7 @@ defmodule Bob.Queue do
           args_digest: candidate.args_digest,
           state: "queued",
           priority: priority,
+          version_order: version_order(candidate.module_key, candidate.args),
           inserted_at: now,
           updated_at: now
         }
@@ -83,6 +84,22 @@ defmodule Bob.Queue do
 
     broadcast()
     :ok
+  end
+
+  # queue_order/1 gets the same arguments as the job's run, which takes the
+  # key's argument first.
+  defp version_order(key, args) do
+    {module, run_args} =
+      case key do
+        {module, arg} -> {module, [arg | args]}
+        module -> {module, args}
+      end
+
+    if Code.ensure_loaded?(module) and function_exported?(module, :queue_order, 1) do
+      module.queue_order(run_args)
+    else
+      []
+    end
   end
 
   defp on_conflict(0), do: :nothing
@@ -103,7 +120,7 @@ defmodule Bob.Queue do
         WITH candidate AS (
           SELECT id FROM jobs
           WHERE state = 'queued' AND module_key = $1
-          ORDER BY priority DESC, inserted_at, id
+          ORDER BY priority DESC, version_order DESC, inserted_at, id
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
@@ -185,8 +202,9 @@ defmodule Bob.Queue do
   Puts a running job back in the queue, e.g. when its node shuts down mid-run.
 
   Unlike `failure/1` this records no backoff — the job was interrupted, not
-  broken. The row keeps its `inserted_at` and `priority`, so it returns to the
-  front of its priority and is picked up as soon as a runner polls.
+  broken. The row keeps its `inserted_at`, `priority` and `version_order`, so
+  it returns to its place in the queue and is picked up as soon as a runner
+  polls.
   """
   def requeue(id) do
     now = DateTime.utc_now()
@@ -233,7 +251,7 @@ defmodule Bob.Queue do
     Repo.all(
       from(j in Job,
         where: j.state == "queued",
-        order_by: [desc: j.priority, asc: j.inserted_at, asc: j.id],
+        order_by: [desc: j.priority, desc: j.version_order, asc: j.inserted_at, asc: j.id],
         select: {j.module_key, j.args}
       )
     )
@@ -253,7 +271,7 @@ defmodule Bob.Queue do
     Repo.all(
       from(j in Job,
         where: j.state == "queued",
-        order_by: [desc: j.priority, asc: j.inserted_at, asc: j.id],
+        order_by: [desc: j.priority, desc: j.version_order, asc: j.inserted_at, asc: j.id],
         limit: ^limit,
         offset: ^offset
       )

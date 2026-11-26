@@ -14,6 +14,10 @@ defmodule Bob.Job.BuildDockerErlang do
     "#{erlang}-#{os}-#{os_version}"
   end
 
+  def queue_order([_arch, erlang, _os, _os_version]) do
+    Bob.Job.DockerChecker.erlang_version_order(erlang)
+  end
+
   def priority(), do: 5
   def weight(), do: 5
   def concurrency(), do: :shared

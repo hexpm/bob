@@ -7,11 +7,11 @@ defmodule Bob.Repo.Migrations.IndexJobsByClaimOrder do
   def up do
     # An interrupted build leaves an INVALID index that CREATE .. IF NOT EXISTS
     # would then skip by name, so drop first.
-    execute("DROP INDEX CONCURRENTLY IF EXISTS jobs_module_key_state_priority_inserted_at_index")
+    execute("DROP INDEX CONCURRENTLY IF EXISTS jobs_claim_order_index")
 
     execute("""
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS jobs_module_key_state_priority_inserted_at_index
-    ON jobs (module_key, state, priority DESC, inserted_at, id)
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS jobs_claim_order_index
+    ON jobs (module_key, state, priority DESC, version_order DESC, inserted_at, id)
     """)
 
     execute("DROP INDEX CONCURRENTLY IF EXISTS jobs_module_key_state_inserted_at_index")
@@ -23,6 +23,6 @@ defmodule Bob.Repo.Migrations.IndexJobsByClaimOrder do
     ON jobs (module_key, state, inserted_at)
     """)
 
-    execute("DROP INDEX CONCURRENTLY IF EXISTS jobs_module_key_state_priority_inserted_at_index")
+    execute("DROP INDEX CONCURRENTLY IF EXISTS jobs_claim_order_index")
   end
 end

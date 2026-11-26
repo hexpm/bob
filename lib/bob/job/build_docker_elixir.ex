@@ -20,6 +20,11 @@ defmodule Bob.Job.BuildDockerElixir do
     "#{elixir}-erlang-#{erlang}-#{os}-#{os_version}"
   end
 
+  def queue_order([_arch, elixir, erlang, _os, _os_version]) do
+    Bob.Job.DockerChecker.elixir_version_order(elixir) ++
+      Bob.Job.DockerChecker.erlang_version_order(erlang)
+  end
+
   def priority(), do: 4
   def weight(), do: 2
   def concurrency(), do: :shared

@@ -48,6 +48,24 @@ defmodule Bob.Job.DockerCheckerTest do
     end
   end
 
+  describe "erlang_version_order/1" do
+    test "sorts OTP versions newest first" do
+      versions = ["25.3.2.21", "29.1", "29.1-rc1", "26.2.5.21", "29.1.3", "29.1-rc2", "29.0.10"]
+
+      assert Enum.sort_by(versions, &DockerChecker.erlang_version_order/1, :desc) ==
+               ["29.1.3", "29.1", "29.1-rc2", "29.1-rc1", "29.0.10", "26.2.5.21", "25.3.2.21"]
+    end
+  end
+
+  describe "elixir_version_order/1" do
+    test "sorts Elixir versions newest first" do
+      versions = ["1.19.5", "1.20.0-rc.10", "1.20.5", "1.20.0", "1.20.0-rc.6", "1.9.4"]
+
+      assert Enum.sort_by(versions, &DockerChecker.elixir_version_order/1, :desc) ==
+               ["1.20.5", "1.20.0", "1.20.0-rc.10", "1.20.0-rc.6", "1.19.5", "1.9.4"]
+    end
+  end
+
   describe "latest_elixir_builds/1" do
     test "keeps only the newest build per elixir minor and otp major" do
       builds = [
@@ -286,6 +304,33 @@ defmodule Bob.Job.DockerCheckerTest do
       assert args == ["1.18.0", "27.0", "ubuntu", "noble-20250101"]
     end
 
+    test "queues the newest elixir version first, then the newest erlang" do
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha1"}, {"OTP-26.2", "sha2"}])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "26.2-ubuntu-noble-20250101", ["amd64"])
+
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
+        release("v1.17.3", ["27", "26"]),
+        release("v1.18.0", ["27", "26"])
+      ])
+
+      DockerChecker.elixir()
+
+      claimed =
+        for _ <- 1..4 do
+          {:ok, {_id, [elixir, erlang, "ubuntu", "noble-20250101"]}} =
+            Bob.Queue.start({Bob.Job.BuildDockerElixir, "amd64"})
+
+          {elixir, erlang}
+        end
+
+      assert claimed == [
+               {"1.18.0", "27.0"},
+               {"1.18.0", "26.2"},
+               {"1.17.3", "27.0"},
+               {"1.17.3", "26.2"}
+             ]
+    end
+
     test "does not enqueue elixir tags that are already built" do
       Artifacts.add_docker_tag(
         "hexpm/elixir-amd64",
@@ -317,7 +362,46 @@ defmodule Bob.Job.DockerCheckerTest do
 
       DockerChecker.erlang()
 
-      assert [%Job{priority: 1}, %Job{priority: 1}] = Repo.all(Job)
+      assert Enum.count(Repo.all(Job)) == 2
+    end
+
+    test "erlang/0 queues the newest OTP version first" do
+      insert_base_image("library/ubuntu", "noble-20250601", 2)
+
+      Bob.FakeGitHub.stub_refs("erlang/otp", [
+        {"OTP-25.3.2.21", "sha1"},
+        {"OTP-28.0.1", "sha2"},
+        {"OTP-27.0.1", "sha3"}
+      ])
+
+      Bob.FakeGitHub.stub_releases("erlang/otp", [])
+
+      DockerChecker.erlang()
+
+      claimed =
+        for _ <- 1..3 do
+          {:ok, {_id, [erlang, "ubuntu", "noble-20250601"]}} =
+            Bob.Queue.start({Bob.Job.BuildDockerErlang, "amd64"})
+
+          erlang
+        end
+
+      assert claimed == ["28.0.1", "27.0.1", "25.3.2.21"]
+    end
+
+    test "orders manually queued builds like checker builds" do
+      Bob.build_docker_erlang("25.3.2.21", "ubuntu", "noble-20250601", "amd64")
+      Bob.build_docker_elixir("1.18.0", "27.0", "ubuntu", "noble-20250601", "amd64")
+
+      jobs = Repo.all(Job) |> Enum.map(&{&1.module_key, &1.version_order}) |> Enum.sort()
+
+      assert jobs ==
+               Enum.sort([
+                 {Bob.Job.BuildDockerErlang, DockerChecker.erlang_version_order("25.3.2.21")},
+                 {Bob.Job.BuildDockerElixir,
+                  DockerChecker.elixir_version_order("1.18.0") ++
+                    DockerChecker.erlang_version_order("27.0")}
+               ])
     end
 
     test "erlang/0 builds when the base image is recent even for an old OTP" do
@@ -327,25 +411,7 @@ defmodule Bob.Job.DockerCheckerTest do
 
       DockerChecker.erlang()
 
-      assert [%Job{priority: 0}, %Job{priority: 0}] = Repo.all(Job)
-    end
-
-    test "erlang/0 prioritizes a recent OTP release over base-image rebuilds" do
-      insert_base_image("library/ubuntu", "noble-20250601", 2)
-      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0.1", "sha1"}, {"OTP-28.0.1", "sha2"}])
-
-      Bob.FakeGitHub.stub_releases("erlang/otp", [
-        otp_release("OTP-27.0.1", days_ago_iso(400)),
-        otp_release("OTP-28.0.1", days_ago_iso(2))
-      ])
-
-      DockerChecker.erlang()
-
-      assert {:ok, {_id, ["28.0.1", "ubuntu", "noble-20250601"]}} =
-               Bob.Queue.start({Bob.Job.BuildDockerErlang, "amd64"})
-
-      assert {:ok, {_id, ["27.0.1", "ubuntu", "noble-20250601"]}} =
-               Bob.Queue.start({Bob.Job.BuildDockerErlang, "amd64"})
+      assert Enum.count(Repo.all(Job)) == 2
     end
 
     test "elixir/0 builds when the Elixir version was released recently" do
@@ -360,38 +426,7 @@ defmodule Bob.Job.DockerCheckerTest do
 
       DockerChecker.elixir()
 
-      assert [%Job{module_key: {Bob.Job.BuildDockerElixir, "amd64"}, priority: 1}] =
-               Repo.all(Job)
-    end
-
-    test "elixir/0 prioritizes builds for a recent OTP release" do
-      insert_base_image("library/ubuntu", "noble-20240101", 60)
-      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha"}])
-      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0", days_ago_iso(2))])
-      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20240101", ["amd64"])
-
-      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
-        release("v1.18.0", ["27"], days_ago_iso(400))
-      ])
-
-      DockerChecker.elixir()
-
-      assert [%Job{priority: 1}] = Repo.all(Job)
-    end
-
-    test "elixir/0 keeps builds only a recent base image triggers at normal priority" do
-      insert_base_image("library/ubuntu", "noble-20250601", 2)
-      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha"}])
-      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0", days_ago_iso(400))])
-      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250601", ["amd64"])
-
-      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
-        release("v1.18.0", ["27"], days_ago_iso(400))
-      ])
-
-      DockerChecker.elixir()
-
-      assert [%Job{priority: 0}] = Repo.all(Job)
+      assert [%Job{module_key: {Bob.Job.BuildDockerElixir, "amd64"}}] = Repo.all(Job)
     end
 
     test "elixir/0 skips when every component is old" do
@@ -484,7 +519,7 @@ defmodule Bob.Job.DockerCheckerTest do
 
       DockerChecker.requests()
 
-      assert [%Job{priority: 2}, %Job{priority: 2}] = Repo.all(Job)
+      assert [%Job{priority: 1}, %Job{priority: 1}] = Repo.all(Job)
     end
 
     test "raises the elixir build of a request above a queued normal build" do
@@ -502,8 +537,8 @@ defmodule Bob.Job.DockerCheckerTest do
 
       assert jobs ==
                Enum.sort([
-                 {{Bob.Job.BuildDockerElixir, "amd64"}, 2},
-                 {{Bob.Job.BuildDockerErlang, "arm64"}, 2}
+                 {{Bob.Job.BuildDockerElixir, "amd64"}, 1},
+                 {{Bob.Job.BuildDockerErlang, "arm64"}, 1}
                ])
     end
 

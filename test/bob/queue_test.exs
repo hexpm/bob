@@ -9,6 +9,13 @@ defmodule Bob.QueueTest do
     def concurrency(), do: :shared
   end
 
+  defmodule VersionedJob do
+    def queue_order([version]), do: version
+    def priority(), do: 1
+    def weight(), do: 1
+    def concurrency(), do: :shared
+  end
+
   defp size(key) do
     case Enum.find(Queue.queue_sizes(), fn {k, _} -> k == key end) do
       {_key, size} -> size
@@ -267,82 +274,88 @@ defmodule Bob.QueueTest do
   end
 
   test "add_many chunks inserts that exceed the Postgres bind-parameter limit" do
-    # Each row binds 7 fields, so more than 65535 / 7 rows would overflow a
+    # Each row binds 8 fields, so more than 65535 / 8 rows would overflow a
     # single insert statement. Chunking must keep every row enqueued.
-    count = div(65_535, 7) + 1
+    count = div(65_535, 8) + 1
     entries = for i <- 1..count, do: {TestJob, [i]}
 
     Queue.add_many(entries)
     assert size(TestJob) == count
   end
 
-  test "claims release jobs before older normal jobs" do
+  test "claims request jobs before older normal jobs" do
     Queue.add_many([{TestJob, [:a]}, {TestJob, [:b]}])
-    Queue.add_many([{TestJob, [:c]}], priority: :release)
+    Queue.add_many([{TestJob, [:c]}], priority: :request)
 
     assert {:ok, {_id, [:c]}} = Queue.start(TestJob)
     assert {:ok, {_id, [:a]}} = Queue.start(TestJob)
     assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
   end
 
-  test "jobs of the same priority are claimed in FIFO order" do
-    Queue.add_many([{TestJob, [:a]}], priority: :release)
-    Queue.add_many([{TestJob, [:b]}], priority: :release)
-
-    assert {:ok, {_id, [:a]}} = Queue.start(TestJob)
-    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
-  end
-
-  test "a higher priority add raises an identical queued job" do
+  test "a request add raises an identical queued job" do
     Queue.add_many([{TestJob, [:a]}, {TestJob, [:b]}])
-    Queue.add_many([{TestJob, [:b]}], priority: :release)
+    Queue.add_many([{TestJob, [:b]}], priority: :request)
 
     assert size(TestJob) == 2
     assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
   end
 
-  test "a lower priority add does not lower an identical queued job" do
+  test "a normal add does not lower an identical queued request job" do
     Queue.add_many([{TestJob, [:a]}])
-    Queue.add_many([{TestJob, [:b]}], priority: :release)
+    Queue.add_many([{TestJob, [:b]}], priority: :request)
     Queue.add_many([{TestJob, [:b]}])
 
     assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
   end
 
-  test "requeue keeps the job's priority" do
-    Queue.add_many([{TestJob, [:a]}])
-    Queue.add_many([{TestJob, [:b]}], priority: :release)
-    {:ok, {id, [:b]}} = Queue.start(TestJob)
+  test "claims jobs highest queue_order first" do
+    Queue.add_many([{VersionedJob, [[25, 3]]}, {VersionedJob, [[29, 1]]}])
+    Queue.add_many([{VersionedJob, [[28]]}])
+
+    assert {:ok, {_id, [[29, 1]]}} = Queue.start(VersionedJob)
+    assert {:ok, {_id, [[28]]}} = Queue.start(VersionedJob)
+    assert {:ok, {_id, [[25, 3]]}} = Queue.start(VersionedJob)
+  end
+
+  test "claims a request job before a higher queue_order normal job" do
+    Queue.add_many([{VersionedJob, [[29]]}])
+    Queue.add_many([{VersionedJob, [[25]]}], priority: :request)
+
+    assert {:ok, {_id, [[25]]}} = Queue.start(VersionedJob)
+    assert {:ok, {_id, [[29]]}} = Queue.start(VersionedJob)
+  end
+
+  test "requeue keeps the job's place in the queue" do
+    Queue.add_many([{VersionedJob, [[25]]}])
+    Queue.add_many([{VersionedJob, [[29]]}], priority: :request)
+    {:ok, {id, [[29]]}} = Queue.start(VersionedJob)
 
     Queue.requeue(id)
 
-    assert {:ok, {^id, [:b]}} = Queue.start(TestJob)
+    assert {:ok, {^id, [[29]]}} = Queue.start(VersionedJob)
+  end
+
+  test "passes a tuple key's argument to queue_order first" do
+    Queue.add_many([{{VersionedJob, [25]}, []}, {{VersionedJob, [29]}, []}])
+
+    assert {:ok, {_id, []}} = Queue.start({VersionedJob, [29]})
+    assert {:ok, {_id, []}} = Queue.start({VersionedJob, [25]})
+
+    jobs = Repo.all(Bob.Queue.Job) |> Enum.map(&{&1.module_key, &1.version_order}) |> Enum.sort()
+    assert jobs == [{{VersionedJob, [25]}, [25]}, {{VersionedJob, [29]}, [29]}]
   end
 
   test "queued lists jobs in claim order" do
-    Queue.add(TestJob, [:a])
-    Queue.add_many([{TestJob, [:b]}], priority: :release)
+    Queue.add_many([{VersionedJob, [[25]]}, {VersionedJob, [[29]]}])
+    Queue.add_many([{VersionedJob, [[20]]}], priority: :request)
 
-    assert Queue.queued() == [{TestJob, [:b]}, {TestJob, [:a]}]
-    assert [%{args: [:b]}, %{args: [:a]}] = Queue.queued_listing()
-  end
+    assert Queue.queued() == [
+             {VersionedJob, [[20]]},
+             {VersionedJob, [[29]]},
+             {VersionedJob, [[25]]}
+           ]
 
-  test "claims request jobs before release jobs" do
-    Queue.add_many([{TestJob, [:a]}], priority: :release)
-    Queue.add_many([{TestJob, [:b]}], priority: :request)
-    Queue.add_many([{TestJob, [:c]}])
-
-    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
-    assert {:ok, {_id, [:a]}} = Queue.start(TestJob)
-    assert {:ok, {_id, [:c]}} = Queue.start(TestJob)
-  end
-
-  test "a release add does not lower a queued request job" do
-    Queue.add_many([{TestJob, [:a]}], priority: :release)
-    Queue.add_many([{TestJob, [:b]}], priority: :request)
-    Queue.add_many([{TestJob, [:b]}], priority: :release)
-
-    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
+    assert [%{args: [[20]]}, %{args: [[29]]}, %{args: [[25]]}] = Queue.queued_listing()
   end
 
   test "queue_sizes counts queued jobs per key" do
