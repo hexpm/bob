@@ -317,7 +317,7 @@ defmodule Bob.Job.DockerCheckerTest do
 
       DockerChecker.erlang()
 
-      assert Enum.count(Repo.all(Job)) == 2
+      assert [%Job{priority: 1}, %Job{priority: 1}] = Repo.all(Job)
     end
 
     test "erlang/0 builds when the base image is recent even for an old OTP" do
@@ -327,7 +327,25 @@ defmodule Bob.Job.DockerCheckerTest do
 
       DockerChecker.erlang()
 
-      assert Enum.count(Repo.all(Job)) == 2
+      assert [%Job{priority: 0}, %Job{priority: 0}] = Repo.all(Job)
+    end
+
+    test "erlang/0 prioritizes a recent OTP release over base-image rebuilds" do
+      insert_base_image("library/ubuntu", "noble-20250601", 2)
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0.1", "sha1"}, {"OTP-28.0.1", "sha2"}])
+
+      Bob.FakeGitHub.stub_releases("erlang/otp", [
+        otp_release("OTP-27.0.1", days_ago_iso(400)),
+        otp_release("OTP-28.0.1", days_ago_iso(2))
+      ])
+
+      DockerChecker.erlang()
+
+      assert {:ok, {_id, ["28.0.1", "ubuntu", "noble-20250601"]}} =
+               Bob.Queue.start({Bob.Job.BuildDockerErlang, "amd64"})
+
+      assert {:ok, {_id, ["27.0.1", "ubuntu", "noble-20250601"]}} =
+               Bob.Queue.start({Bob.Job.BuildDockerErlang, "amd64"})
     end
 
     test "elixir/0 builds when the Elixir version was released recently" do
@@ -342,7 +360,38 @@ defmodule Bob.Job.DockerCheckerTest do
 
       DockerChecker.elixir()
 
-      assert [%Job{module_key: {Bob.Job.BuildDockerElixir, "amd64"}}] = Repo.all(Job)
+      assert [%Job{module_key: {Bob.Job.BuildDockerElixir, "amd64"}, priority: 1}] =
+               Repo.all(Job)
+    end
+
+    test "elixir/0 prioritizes builds for a recent OTP release" do
+      insert_base_image("library/ubuntu", "noble-20240101", 60)
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha"}])
+      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0", days_ago_iso(2))])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20240101", ["amd64"])
+
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
+        release("v1.18.0", ["27"], days_ago_iso(400))
+      ])
+
+      DockerChecker.elixir()
+
+      assert [%Job{priority: 1}] = Repo.all(Job)
+    end
+
+    test "elixir/0 keeps builds only a recent base image triggers at normal priority" do
+      insert_base_image("library/ubuntu", "noble-20250601", 2)
+      Bob.FakeGitHub.stub_refs("erlang/otp", [{"OTP-27.0", "sha"}])
+      Bob.FakeGitHub.stub_releases("erlang/otp", [otp_release("OTP-27.0", days_ago_iso(400))])
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250601", ["amd64"])
+
+      Bob.FakeGitHub.stub_releases("elixir-lang/elixir", [
+        release("v1.18.0", ["27"], days_ago_iso(400))
+      ])
+
+      DockerChecker.elixir()
+
+      assert [%Job{priority: 0}] = Repo.all(Job)
     end
 
     test "elixir/0 skips when every component is old" do
@@ -428,6 +477,34 @@ defmodule Bob.Job.DockerCheckerTest do
                ])
 
       assert Repo.reload!(request).state == "pending"
+    end
+
+    test "queues request builds at request priority" do
+      insert_request(kind: "elixir", elixir: "1.18.0", erlang: "27.0")
+
+      DockerChecker.requests()
+
+      assert [%Job{priority: 2}, %Job{priority: 2}] = Repo.all(Job)
+    end
+
+    test "raises the elixir build of a request above a queued normal build" do
+      insert_request(kind: "elixir", elixir: "1.18.0", erlang: "27.0")
+      Artifacts.add_docker_tag("hexpm/erlang-amd64", "27.0-ubuntu-noble-20250101", ["amd64"])
+
+      Bob.Queue.add(
+        {Bob.Job.BuildDockerElixir, "amd64"},
+        ["1.18.0", "27.0", "ubuntu", "noble-20250101"]
+      )
+
+      DockerChecker.requests()
+
+      jobs = Repo.all(Job) |> Enum.map(&{&1.module_key, &1.priority}) |> Enum.sort()
+
+      assert jobs ==
+               Enum.sort([
+                 {{Bob.Job.BuildDockerElixir, "amd64"}, 2},
+                 {{Bob.Job.BuildDockerErlang, "arm64"}, 2}
+               ])
     end
 
     test "completes an elixir request once the manifest spans both archs" do

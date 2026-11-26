@@ -89,10 +89,19 @@ defmodule Bob.Job.DockerChecker do
 
       Enum.reject(expected, &MapSet.member?(present, erlang_tag_name(&1)))
     end)
-    |> Enum.map(fn {erlang, os, os_version, arch} ->
+    |> Enum.split_with(fn {erlang, _os, _os_version, _arch} ->
+      MapSet.member?(recent_otp, erlang)
+    end)
+    |> add_split(fn {erlang, os, os_version, arch} ->
       {{Bob.Job.BuildDockerErlang, arch}, [erlang, os, os_version]}
     end)
-    |> Bob.Queue.add_many()
+  end
+
+  # Builds for a new OTP or Elixir release (often a security fix) jump ahead of
+  # the builds a new base image triggers across every older version.
+  defp add_split({release_builds, other_builds}, to_job) do
+    Bob.Queue.add_many(Enum.map(release_builds, to_job), priority: :release)
+    Bob.Queue.add_many(Enum.map(other_builds, to_job))
   end
 
   defp erlang_tag_name({erlang, os, os_version, _arch}), do: "#{erlang}-#{os}-#{os_version}"
@@ -386,10 +395,12 @@ defmodule Bob.Job.DockerChecker do
 
       Enum.reject(expected, &MapSet.member?(present, elixir_tag_name(&1)))
     end)
-    |> Enum.map(fn {elixir, erlang, os, os_version, arch} ->
+    |> Enum.split_with(fn {elixir, erlang, _os, _os_version, _arch} ->
+      MapSet.member?(recent_otp, erlang) or MapSet.member?(recent_elixir, elixir)
+    end)
+    |> add_split(fn {elixir, erlang, os, os_version, arch} ->
       {{Bob.Job.BuildDockerElixir, arch}, [elixir, erlang, os, os_version]}
     end)
-    |> Bob.Queue.add_many()
   end
 
   defp elixir_tag_name({elixir, erlang, os, os_version, _arch}) do
@@ -535,7 +546,7 @@ defmodule Bob.Job.DockerChecker do
               Bob.BuildRequests.expire(request)
 
             true ->
-              Bob.Queue.add_many(jobs)
+              Bob.Queue.add_many(jobs, priority: :request)
           end
       end
     end)

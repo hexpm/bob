@@ -267,13 +267,82 @@ defmodule Bob.QueueTest do
   end
 
   test "add_many chunks inserts that exceed the Postgres bind-parameter limit" do
-    # Each row binds 6 fields, so more than 65535 / 6 rows would overflow a
+    # Each row binds 7 fields, so more than 65535 / 7 rows would overflow a
     # single insert statement. Chunking must keep every row enqueued.
-    count = div(65_535, 6) + 1
+    count = div(65_535, 7) + 1
     entries = for i <- 1..count, do: {TestJob, [i]}
 
     Queue.add_many(entries)
     assert size(TestJob) == count
+  end
+
+  test "claims release jobs before older normal jobs" do
+    Queue.add_many([{TestJob, [:a]}, {TestJob, [:b]}])
+    Queue.add_many([{TestJob, [:c]}], priority: :release)
+
+    assert {:ok, {_id, [:c]}} = Queue.start(TestJob)
+    assert {:ok, {_id, [:a]}} = Queue.start(TestJob)
+    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
+  end
+
+  test "jobs of the same priority are claimed in FIFO order" do
+    Queue.add_many([{TestJob, [:a]}], priority: :release)
+    Queue.add_many([{TestJob, [:b]}], priority: :release)
+
+    assert {:ok, {_id, [:a]}} = Queue.start(TestJob)
+    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
+  end
+
+  test "a higher priority add raises an identical queued job" do
+    Queue.add_many([{TestJob, [:a]}, {TestJob, [:b]}])
+    Queue.add_many([{TestJob, [:b]}], priority: :release)
+
+    assert size(TestJob) == 2
+    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
+  end
+
+  test "a lower priority add does not lower an identical queued job" do
+    Queue.add_many([{TestJob, [:a]}])
+    Queue.add_many([{TestJob, [:b]}], priority: :release)
+    Queue.add_many([{TestJob, [:b]}])
+
+    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
+  end
+
+  test "requeue keeps the job's priority" do
+    Queue.add_many([{TestJob, [:a]}])
+    Queue.add_many([{TestJob, [:b]}], priority: :release)
+    {:ok, {id, [:b]}} = Queue.start(TestJob)
+
+    Queue.requeue(id)
+
+    assert {:ok, {^id, [:b]}} = Queue.start(TestJob)
+  end
+
+  test "queued lists jobs in claim order" do
+    Queue.add(TestJob, [:a])
+    Queue.add_many([{TestJob, [:b]}], priority: :release)
+
+    assert Queue.queued() == [{TestJob, [:b]}, {TestJob, [:a]}]
+    assert [%{args: [:b]}, %{args: [:a]}] = Queue.queued_listing()
+  end
+
+  test "claims request jobs before release jobs" do
+    Queue.add_many([{TestJob, [:a]}], priority: :release)
+    Queue.add_many([{TestJob, [:b]}], priority: :request)
+    Queue.add_many([{TestJob, [:c]}])
+
+    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
+    assert {:ok, {_id, [:a]}} = Queue.start(TestJob)
+    assert {:ok, {_id, [:c]}} = Queue.start(TestJob)
+  end
+
+  test "a release add does not lower a queued request job" do
+    Queue.add_many([{TestJob, [:a]}], priority: :release)
+    Queue.add_many([{TestJob, [:b]}], priority: :request)
+    Queue.add_many([{TestJob, [:b]}], priority: :release)
+
+    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
   end
 
   test "queue_sizes counts queued jobs per key" do

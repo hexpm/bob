@@ -98,7 +98,7 @@ defmodule Bob.BuildRequests do
       {:ok, created} ->
         # Enqueue outside the lock; if it fails the request stays pending and
         # the checker's reconciliation enqueues the jobs on its next cycle.
-        Bob.Queue.add_many(jobs)
+        Bob.Queue.add_many(jobs, priority: :request)
 
         Logger.info(%{
           message: "Build requested",
