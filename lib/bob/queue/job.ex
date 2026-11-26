@@ -7,6 +7,8 @@ defmodule Bob.Queue.Job do
     field(:args_digest, :binary)
     field(:state, :string)
     field(:requeues, :integer, default: 0)
+    field(:priority, :integer, default: 0)
+    field(:release_order, {:array, :integer}, default: [])
     field(:inserted_at, :utc_datetime_usec)
     field(:updated_at, :utc_datetime_usec)
     field(:started_at, :utc_datetime_usec)

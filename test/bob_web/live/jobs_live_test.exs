@@ -117,7 +117,10 @@ defmodule BobWeb.JobsLiveTest do
   end
 
   test "renders tuple module keys without inspect syntax", %{conn: conn} do
-    Bob.Queue.add({Bob.Job.BuildDockerElixir, "amd64"}, [:tuple_label])
+    Bob.Queue.add(
+      {Bob.Job.BuildDockerElixir, "amd64"},
+      ["1.18.0", "27.0", "ubuntu", "noble-20250101"]
+    )
 
     {:ok, _view, html} = live(conn, ~p"/")
 

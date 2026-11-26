@@ -14,6 +14,13 @@ defmodule Bob.Job.BuildDockerErlang do
     "#{erlang}-#{os}-#{os_version}"
   end
 
+  def release_dates([_arch, erlang, os, os_version]) do
+    [
+      Bob.Job.DockerChecker.erlang_released_at(erlang),
+      Bob.Job.DockerChecker.base_image_released_at(os, os_version)
+    ]
+  end
+
   def priority(), do: 5
   def weight(), do: 5
   def concurrency(), do: :shared

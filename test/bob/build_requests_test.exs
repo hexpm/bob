@@ -107,6 +107,8 @@ defmodule Bob.BuildRequestsTest do
 
       jobs = Repo.all(Job) |> Enum.map(&{&1.module_key, &1.args}) |> Enum.sort()
 
+      assert Enum.all?(Repo.all(Job), &(&1.priority == 1))
+
       assert jobs ==
                Enum.sort([
                  {{Bob.Job.BuildDockerElixir, "amd64"},
@@ -119,12 +121,12 @@ defmodule Bob.BuildRequestsTest do
     test "enqueues the erlang base first when it is missing" do
       assert {:ok, %BuildRequest{builds_count: 4}} = submit(@elixir_attrs)
 
-      jobs = Repo.all(Job) |> Enum.map(& &1.module_key) |> Enum.sort()
+      jobs = Repo.all(Job) |> Enum.map(&{&1.module_key, &1.priority}) |> Enum.sort()
 
       assert jobs ==
                Enum.sort([
-                 {Bob.Job.BuildDockerErlang, "amd64"},
-                 {Bob.Job.BuildDockerErlang, "arm64"}
+                 {{Bob.Job.BuildDockerErlang, "amd64"}, 1},
+                 {{Bob.Job.BuildDockerErlang, "arm64"}, 1}
                ])
     end
 

@@ -9,6 +9,20 @@ defmodule Bob.QueueTest do
     def concurrency(), do: :shared
   end
 
+  # Each argument is a release date in days since the epoch, or nil.
+  defmodule DatedJob do
+    def release_dates(days) do
+      Enum.map(days, fn
+        nil -> nil
+        day -> DateTime.from_unix!(day * 86_400)
+      end)
+    end
+
+    def priority(), do: 1
+    def weight(), do: 1
+    def concurrency(), do: :shared
+  end
+
   defp size(key) do
     case Enum.find(Queue.queue_sizes(), fn {k, _} -> k == key end) do
       {_key, size} -> size
@@ -267,13 +281,100 @@ defmodule Bob.QueueTest do
   end
 
   test "add_many chunks inserts that exceed the Postgres bind-parameter limit" do
-    # Each row binds 6 fields, so more than 65535 / 6 rows would overflow a
+    # Each row binds 8 fields, so more than 65535 / 8 rows would overflow a
     # single insert statement. Chunking must keep every row enqueued.
-    count = div(65_535, 6) + 1
+    count = div(65_535, 8) + 1
     entries = for i <- 1..count, do: {TestJob, [i]}
 
     Queue.add_many(entries)
     assert size(TestJob) == count
+  end
+
+  test "claims request jobs before older normal jobs" do
+    Queue.add_many([{TestJob, [:a]}, {TestJob, [:b]}])
+    Queue.add_many([{TestJob, [:c]}], priority: :request)
+
+    assert {:ok, {_id, [:c]}} = Queue.start(TestJob)
+    assert {:ok, {_id, [:a]}} = Queue.start(TestJob)
+    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
+  end
+
+  test "a request add raises an identical queued job" do
+    Queue.add_many([{TestJob, [:a]}, {TestJob, [:b]}])
+    Queue.add_many([{TestJob, [:b]}], priority: :request)
+
+    assert size(TestJob) == 2
+    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
+  end
+
+  test "a normal add does not lower an identical queued request job" do
+    Queue.add_many([{TestJob, [:a]}])
+    Queue.add_many([{TestJob, [:b]}], priority: :request)
+    Queue.add_many([{TestJob, [:b]}])
+
+    assert {:ok, {_id, [:b]}} = Queue.start(TestJob)
+  end
+
+  test "claims the newest release first" do
+    Queue.add_many([{DatedJob, [25]}, {DatedJob, [29]}])
+    Queue.add_many([{DatedJob, [28]}])
+
+    assert {:ok, {_id, [29]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [28]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [25]}} = Queue.start(DatedJob)
+  end
+
+  test "breaks a tie on the first release date with the next one" do
+    Queue.add_many([{DatedJob, [29, 5]}, {DatedJob, [28, 9]}, {DatedJob, [29, 7]}])
+
+    assert {:ok, {_id, [29, 7]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [29, 5]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [28, 9]}} = Queue.start(DatedJob)
+  end
+
+  test "claims a request job before a newer normal job" do
+    Queue.add_many([{DatedJob, [29]}])
+    Queue.add_many([{DatedJob, [25]}], priority: :request)
+
+    assert {:ok, {_id, [25]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [29]}} = Queue.start(DatedJob)
+  end
+
+  test "requeue keeps the job's place in the queue" do
+    Queue.add_many([{DatedJob, [25]}])
+    Queue.add_many([{DatedJob, [29]}], priority: :request)
+    {:ok, {id, [29]}} = Queue.start(DatedJob)
+
+    Queue.requeue(id)
+
+    assert {:ok, {^id, [29]}} = Queue.start(DatedJob)
+  end
+
+  test "claims jobs without a release date after dated jobs" do
+    Queue.add_many([{DatedJob, [nil]}])
+    Queue.add_many([{DatedJob, [25]}])
+
+    assert {:ok, {_id, [25]}} = Queue.start(DatedJob)
+    assert {:ok, {_id, [nil]}} = Queue.start(DatedJob)
+  end
+
+  test "passes a tuple key's argument to release_dates first" do
+    Queue.add_many([{{DatedJob, 25}, [nil]}])
+
+    assert [%Bob.Queue.Job{release_order: [2_160_000, 0]}] = Repo.all(Bob.Queue.Job)
+  end
+
+  test "queued lists jobs in claim order" do
+    Queue.add_many([{DatedJob, [25]}, {DatedJob, [29]}])
+    Queue.add_many([{DatedJob, [20]}], priority: :request)
+
+    assert Queue.queued() == [
+             {DatedJob, [20]},
+             {DatedJob, [29]},
+             {DatedJob, [25]}
+           ]
+
+    assert [%{args: [20]}, %{args: [29]}, %{args: [25]}] = Queue.queued_listing()
   end
 
   test "queue_sizes counts queued jobs per key" do

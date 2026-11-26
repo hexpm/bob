@@ -26,14 +26,26 @@ defmodule Bob.Queue do
                           "(module_key, args_digest) WHERE state IN ('queued', 'running')"}
 
   # Postgres rejects a statement with more than 65535 bind parameters. Each row
-  # inserted below binds 6 fields, so chunk inserts to stay under that ceiling.
-  @insert_chunk_size div(65_535, 6)
+  # inserted below binds 8 fields, so chunk inserts to stay under that ceiling.
+  @insert_chunk_size div(65_535, 8)
 
   def add(key, args) do
     add_many([{key, args}])
   end
 
-  def add_many(entries) do
+  @priorities %{normal: 0, request: 1}
+
+  @doc """
+  Queues `{key, args}` entries, skipping any that are already queued or running.
+
+  The `:priority` option is `:normal` (the default) or `:request`. Jobs of a key
+  are claimed `:request` jobs first, then by the release dates the job module's
+  `release_dates/1` returns, compared in order and newest first with a missing
+  date as the oldest, then oldest queued first. Adding a job that is already
+  queued at a lower priority raises its priority.
+  """
+  def add_many(entries, opts \\ []) do
+    priority = Map.fetch!(@priorities, Keyword.get(opts, :priority, :normal))
     now = DateTime.utc_now()
 
     rows =
@@ -55,6 +67,8 @@ defmodule Bob.Queue do
           args: candidate.args,
           args_digest: candidate.args_digest,
           state: "queued",
+          priority: priority,
+          release_order: release_order(candidate.module_key, candidate.args),
           inserted_at: now,
           updated_at: now
         }
@@ -64,13 +78,41 @@ defmodule Bob.Queue do
     |> Enum.chunk_every(@insert_chunk_size)
     |> Enum.each(fn chunk ->
       Repo.insert_all(Job, chunk,
-        on_conflict: :nothing,
+        on_conflict: on_conflict(priority),
         conflict_target: @dedup_conflict_target
       )
     end)
 
     broadcast()
     :ok
+  end
+
+  # release_dates/1 gets the same arguments as the job's run, which takes the
+  # key's argument first. The dates are stored as Unix seconds, with 0 for a
+  # missing date, so Postgres compares them element by element.
+  defp release_order(key, args) do
+    {module, run_args} =
+      case key do
+        {module, arg} -> {module, [arg | args]}
+        module -> {module, args}
+      end
+
+    if Code.ensure_loaded?(module) and function_exported?(module, :release_dates, 1) do
+      Enum.map(module.release_dates(run_args), fn
+        nil -> 0
+        datetime -> DateTime.to_unix(datetime)
+      end)
+    else
+      []
+    end
+  end
+
+  defp on_conflict(0), do: :nothing
+
+  defp on_conflict(_priority) do
+    from(j in Job,
+      update: [set: [priority: fragment("GREATEST(?, EXCLUDED.priority)", j.priority)]]
+    )
   end
 
   def start(key) do
@@ -83,7 +125,7 @@ defmodule Bob.Queue do
         WITH candidate AS (
           SELECT id FROM jobs
           WHERE state = 'queued' AND module_key = $1
-          ORDER BY inserted_at, id
+          ORDER BY priority DESC, release_order DESC, inserted_at, id
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
@@ -165,8 +207,9 @@ defmodule Bob.Queue do
   Puts a running job back in the queue, e.g. when its node shuts down mid-run.
 
   Unlike `failure/1` this records no backoff — the job was interrupted, not
-  broken. The row keeps its `inserted_at`, so it returns to the front of the
-  FIFO and is picked up as soon as a runner polls.
+  broken. The row keeps its `inserted_at`, `priority` and `release_order`, so
+  it returns to its place in the queue and is picked up as soon as a runner
+  polls.
   """
   def requeue(id) do
     now = DateTime.utc_now()
@@ -208,12 +251,12 @@ defmodule Bob.Queue do
     )
   end
 
-  @doc "Lists queued jobs as `{module_key, args}`, oldest first, for inspection."
+  @doc "Lists queued jobs as `{module_key, args}` in claim order, for inspection."
   def queued() do
     Repo.all(
       from(j in Job,
         where: j.state == "queued",
-        order_by: [j.inserted_at, j.id],
+        order_by: [desc: j.priority, desc: j.release_order, asc: j.inserted_at, asc: j.id],
         select: {j.module_key, j.args}
       )
     )
@@ -233,7 +276,7 @@ defmodule Bob.Queue do
     Repo.all(
       from(j in Job,
         where: j.state == "queued",
-        order_by: [j.inserted_at, j.id],
+        order_by: [desc: j.priority, desc: j.release_order, asc: j.inserted_at, asc: j.id],
         limit: ^limit,
         offset: ^offset
       )

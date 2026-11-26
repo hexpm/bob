@@ -355,6 +355,44 @@ defmodule Bob.Job.DockerChecker do
     :gt
   end
 
+  @doc "When the GitHub release of this OTP version was published, or nil."
+  def erlang_released_at(erlang) do
+    Map.get(release_dates("erlang/otp", "OTP-"), erlang)
+  end
+
+  @doc "When the GitHub release of this Elixir version was published, or nil."
+  def elixir_released_at(elixir) do
+    Map.get(release_dates("elixir-lang/elixir", "v"), elixir)
+  end
+
+  @doc "When Bob first saw this base image tag, or nil."
+  def base_image_released_at(os, os_version) do
+    dates =
+      Bob.Cache.fetch({__MODULE__, :base_image_dates}, @github_cache_ttl, fn ->
+        Bob.Artifacts.base_image_first_seen()
+      end)
+
+    Map.get(dates, {os, os_version})
+  end
+
+  defp release_dates(repo, prefix) do
+    cached_github({:release_dates, repo}, fn ->
+      {:repo_releases, repo}
+      |> cached_github(fn -> github().fetch_repo_releases(repo) end)
+      |> Enum.flat_map(fn release ->
+        with %{"tag_name" => tag_name, "published_at" => published_at} <- release,
+             true <- is_binary(tag_name) and String.starts_with?(tag_name, prefix),
+             true <- is_binary(published_at),
+             {:ok, datetime, _offset} <- DateTime.from_iso8601(published_at) do
+          [{String.replace_prefix(tag_name, prefix, ""), DateTime.truncate(datetime, :second)}]
+        else
+          _other -> []
+        end
+      end)
+      |> Map.new()
+    end)
+  end
+
   defp to_matchable(string) do
     destructure [version, pre], String.split(string, "-", parts: 2)
 
@@ -535,7 +573,7 @@ defmodule Bob.Job.DockerChecker do
               Bob.BuildRequests.expire(request)
 
             true ->
-              Bob.Queue.add_many(jobs)
+              Bob.Queue.add_many(jobs, priority: :request)
           end
       end
     end)
